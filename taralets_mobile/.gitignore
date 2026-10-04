@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+# Python cache
+__pycache__/
+*.cpython-*.pyc
+*.py[cod]
+
+# Python Virtual Environment
+venv/
+.venv/
+env/
+taralets_backend/venv/
+taralets_backend/.venv/
