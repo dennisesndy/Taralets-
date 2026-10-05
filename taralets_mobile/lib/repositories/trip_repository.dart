@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:math';
+
+import '../core/utils/formatters.dart';
+import '../features/trip/data/models/trip_models.dart';
 
 // ---------------------------------------------------------------------------
 // Model
@@ -112,6 +116,25 @@ abstract class TripRepository {
 
   /// Trips the current user belongs to (Trips tab, Home active-trip card).
   Future<List<Trip>> getMyTrips();
+
+  /// Create Trip wizard, final step ("Create Trip 🎉").
+  Future<Trip> createTrip(CreateTripDto dto);
+
+  /// Preferences saved for a trip (Group Preferences screen).
+  Future<GroupPreferences?> getGroupPreferences(String tripId);
+
+  Future<void> updateGroupPreferences(String tripId, GroupPreferences prefs);
+}
+
+/// Room codes look like Figma's `TARA-88`: four letters, a dash, two digits.
+String generateRoomCode([Random? random]) {
+  final rnd = random ?? Random();
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I / O
+  final head = String.fromCharCodes(
+    List.generate(4, (_) => letters.codeUnitAt(rnd.nextInt(letters.length))),
+  );
+  final digits = (10 + rnd.nextInt(90)).toString();
+  return '$head-$digits';
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +234,8 @@ class MockTripRepository implements TripRepository {
 
     final c = code.trim().toUpperCase();
     if (c == 'OLD-01') throw const TripCodeExpiredException();
-    if (c == _dayOut.code) return _dayOut;
+    final known = _trips.where((t) => t.code == c);
+    if (known.isNotEmpty) return known.first;
     throw const InvalidTripCodeException();
   }
 
@@ -225,5 +249,41 @@ class MockTripRepository implements TripRepository {
   Future<List<Trip>> getMyTrips() async {
     await Future<void>.delayed(latency ~/ 2);
     return List.unmodifiable(_trips);
+  }
+
+  final Map<String, GroupPreferences> _prefs = {};
+
+  @override
+  Future<Trip> createTrip(CreateTripDto dto) async {
+    await Future<void>.delayed(latency);
+    final trip = Trip(
+      id: 'trip_${DateTime.now().millisecondsSinceEpoch}',
+      code: dto.code,
+      title: dto.title,
+      status: TripStatus.upcoming,
+      dateLabel: formatShortDate(dto.date),
+      longDate: formatLongDate(dto.date),
+      meetup: dto.meetupName.split(',').first.trim(),
+      meetupFull: dto.meetupName,
+      arrivalTarget: formatTimeOfDay(dto.meetupTime),
+      memberNames: dto.memberNames,
+      leader: dto.memberNames.first,
+    );
+    _trips.insert(0, trip);
+    _prefs[trip.id] = dto.preferences;
+    return trip;
+  }
+
+  @override
+  Future<GroupPreferences?> getGroupPreferences(String tripId) async =>
+      _prefs[tripId];
+
+  @override
+  Future<void> updateGroupPreferences(
+    String tripId,
+    GroupPreferences prefs,
+  ) async {
+    await Future<void>.delayed(latency);
+    _prefs[tripId] = prefs;
   }
 }

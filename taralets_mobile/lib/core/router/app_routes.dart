@@ -1,4 +1,3 @@
-/// Route paths for the four bottom-navigation tabs.
 class AppRoutes {
   AppRoutes._();
 
@@ -10,4 +9,6 @@ class AppRoutes {
 
   static const String joinTrip = '/join-trip';
   static const String createTrip = '/create-trip';
+  static const String tripCreated = '/trip-created';
+  static const String groupPrefs = '/group-prefs';
 }

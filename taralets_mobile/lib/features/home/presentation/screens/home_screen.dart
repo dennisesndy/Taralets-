@@ -16,6 +16,7 @@ import '../../../../shared/widgets/taralets_card.dart';
 import '../../../../shared/widgets/taralets_chip.dart';
 import '../../../discover/presentation/screens/place_detail_sheet.dart';
 
+/// Home screen for the Taralets app.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -46,17 +47,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .watch(myTripsProvider)
         .maybeWhen(data: (t) => t, orElse: () => const <Trip>[]);
 
-    final active = null; 
+    // Keep the actual active-trip logic.
+    final active = trips
+        .where((t) => t.status == TripStatus.active)
+        .firstOrNull;
 
-    final displayFirstName = (user?.firstName == 'Dennise' || user?.firstName == null) 
-        ? 'Ana' 
-        : user!.firstName;
-
+    // Filter recommended places based on the selected category.
     final filteredPlaces = _category == 'All'
         ? manilaPlaces
-        : manilaPlaces.where((p) {
-            return p.category == _category; 
-          }).toList();
+        : manilaPlaces.where((p) => p.category == _category).toList();
 
     return ColoredBox(
       color: AppColors.bg,
@@ -64,6 +63,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // -----------------------------------------------------------------
+            // Header
+            // -----------------------------------------------------------------
             Container(
               color: AppColors.navy,
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
@@ -85,7 +87,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                             ),
                             Text(
-                              '$displayFirstName! 👋',
+                              '${user?.firstName ?? 'Dennise'}! 👋',
                               style: AppText.ui(
                                 20,
                                 FontWeight.w800,
@@ -107,7 +109,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       GestureDetector(
                         onTap: () => context.go(AppRoutes.profile),
                         child: Avatar(
-                          name: displayFirstName,
+                          name: user?.firstName ?? 'Dennise',
                           size: 42,
                         ),
                       ),
@@ -143,11 +145,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
 
+            // -----------------------------------------------------------------
+            // Body
+            // -----------------------------------------------------------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Active trip / empty trip state
                   if (active != null) ...[
                     _ActiveTripCard(trip: active),
                     const SizedBox(height: 20),
@@ -156,6 +162,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     const SizedBox(height: 20),
                   ],
 
+                  // Create / Join Trip actions
                   Row(
                     children: [
                       Expanded(
@@ -168,7 +175,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                           title: 'Create Trip',
                           subtitle: 'Plan with group',
-                          onTap: () => context.push(AppRoutes.createTrip), 
+                          onTap: () => context.push(AppRoutes.createTrip),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -187,6 +194,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                   const SizedBox(height: 20),
 
+                  // Explore Manila
                   Text(
                     'Explore Manila',
                     style: AppText.ui(
@@ -207,7 +215,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           TaraletsChip(
                             label: c,
                             selected: _category == c,
-                            onTap: () => setState(() => _category = c),
+                            onTap: () => setState(() {
+                              _category = c;
+                            }),
                           ),
                           if (c != _cats.last) const SizedBox(width: 8),
                         ],
@@ -217,6 +227,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                   const SizedBox(height: 20),
 
+                  // Recommended Places
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -244,6 +255,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                   const SizedBox(height: 12),
 
+                  // Use the filtered list so category chips actually work.
                   for (final p in filteredPlaces.take(4)) ...[
                     _PlaceRow(
                       place: p,
@@ -267,6 +279,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 }
+
+// =============================================================================
+// Empty Trip Card
+// =============================================================================
 
 class _EmptyTripCard extends StatelessWidget {
   const _EmptyTripCard();
@@ -299,12 +315,20 @@ class _EmptyTripCard extends StatelessWidget {
                 children: [
                   Text(
                     'No active trips',
-                    style: AppText.ui(15, FontWeight.w800, color: AppColors.navy),
+                    style: AppText.ui(
+                      15,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     'Create a trip now and plan your gala!',
-                    style: AppText.ui(12, FontWeight.w400, color: AppColors.navy.withValues(alpha: 0.7)),
+                    style: AppText.ui(
+                      12,
+                      FontWeight.w400,
+                      color: AppColors.navy.withValues(alpha: 0.7),
+                    ),
                   ),
                 ],
               ),
@@ -316,6 +340,10 @@ class _EmptyTripCard extends StatelessWidget {
     );
   }
 }
+
+// =============================================================================
+// Active Trip Card
+// =============================================================================
 
 class _ActiveTripCard extends StatelessWidget {
   const _ActiveTripCard({required this.trip});
@@ -439,6 +467,10 @@ class _ActiveTripCard extends StatelessWidget {
   }
 }
 
+// =============================================================================
+// Action Tile
+// =============================================================================
+
 class _ActionTile extends StatelessWidget {
   const _ActionTile({
     required this.color,
@@ -511,7 +543,10 @@ class _ActionTile extends StatelessWidget {
   }
 }
 
-// PINALITAN NG ConsumerWidget PARA MAKUHA ANG TOTOONG LOCATION
+// =============================================================================
+// Place Row
+// =============================================================================
+
 class _PlaceRow extends ConsumerWidget {
   const _PlaceRow({
     required this.place,
@@ -529,16 +564,18 @@ class _PlaceRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final p = place;
 
-    // Kunin ang live location mula sa provider natin
+    // Get the user's live location and calculate the distance
+    // to the recommended place.
     final locationAsync = ref.watch(userLocationProvider);
-    String dynamicDistanceLabel = p.distanceLabel; // Default fallback
 
-    locationAsync.whenData((pos) {
-      final dist = calculateDistanceKm(pos, p.lat, p.lng);
-      if (dist != null) {
-        dynamicDistanceLabel = '${dist.toStringAsFixed(1)} km';
-      }
-    });
+    final dynamicDistanceLabel = locationAsync.maybeWhen(
+      data: (pos) {
+        final dist = calculateDistanceKm(pos, p.lat, p.lng);
+
+        return dist != null ? '${dist.toStringAsFixed(1)} km' : p.distanceLabel;
+      },
+      orElse: () => p.distanceLabel,
+    );
 
     return TaraletsCard(
       clip: true,
@@ -587,6 +624,7 @@ class _PlaceRow extends ConsumerWidget {
                         ),
                       ],
                     ),
+
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
@@ -599,6 +637,8 @@ class _PlaceRow extends ConsumerWidget {
                         ),
                       ),
                     ),
+
+                    // Opening hours from the revised version.
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
@@ -612,7 +652,9 @@ class _PlaceRow extends ConsumerWidget {
                         ),
                       ),
                     ),
+
                     const Spacer(),
+
                     Row(
                       children: [
                         AppIcons.star(),
@@ -632,7 +674,7 @@ class _PlaceRow extends ConsumerWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          dynamicDistanceLabel, // Totoong distance na nag-uupdate
+                          dynamicDistanceLabel,
                           style: AppText.ui(
                             12,
                             FontWeight.w400,

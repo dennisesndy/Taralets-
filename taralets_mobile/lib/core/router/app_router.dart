@@ -6,8 +6,12 @@ import '../../features/discover/presentation/screens/discover_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/itinerary/presentation/screens/itinerary_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/trip/presentation/screens/create_trip_screen.dart';
+import '../../features/trip/presentation/screens/group_prefs_screen.dart';
 import '../../features/trip/presentation/screens/join_trip_screen.dart';
 import '../../features/trip/presentation/screens/my_trips_screen.dart';
+import '../../features/trip/presentation/screens/trip_created_screen.dart';
+import '../../repositories/trip_repository.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
 
@@ -69,6 +73,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.joinTrip,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const JoinTripScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.createTrip,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const CreateTripScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.tripCreated,
+        parentNavigatorKey: _rootNavigatorKey,
+        // If the app was restarted on this route there is no trip to show.
+        redirect: (context, state) =>
+            state.extra is Trip ? null : AppRoutes.home,
+        builder: (context, state) =>
+            TripCreatedScreen(trip: state.extra! as Trip),
+      ),
+      GoRoute(
+        path: AppRoutes.groupPrefs,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const GroupPrefsScreen(),
       ),
     ],
   );

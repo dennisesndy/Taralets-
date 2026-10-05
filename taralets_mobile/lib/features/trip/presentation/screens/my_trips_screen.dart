@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
@@ -62,9 +64,7 @@ class MyTripsScreen extends ConsumerWidget {
               ],
               TaraletsButton.orange(
                 label: '+ Create New Trip',
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Create Trip is coming next.')),
-                ),
+                onPressed: () => context.push(AppRoutes.createTrip),
               ),
             ],
           );
