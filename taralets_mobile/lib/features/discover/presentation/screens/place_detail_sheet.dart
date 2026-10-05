@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
@@ -19,15 +20,15 @@ Future<void> showPlaceDetail(BuildContext context, Place place) {
   );
 }
 
-class _PlaceDetail extends StatefulWidget {
+class _PlaceDetail extends ConsumerStatefulWidget {
   const _PlaceDetail({required this.place});
   final Place place;
 
   @override
-  State<_PlaceDetail> createState() => _PlaceDetailState();
+  ConsumerState<_PlaceDetail> createState() => _PlaceDetailState();
 }
 
-class _PlaceDetailState extends State<_PlaceDetail> {
+class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
   bool _saved = false;
 
   @override
@@ -35,17 +36,55 @@ class _PlaceDetailState extends State<_PlaceDetail> {
     final p = widget.place;
     final filledStars = p.rating.round().clamp(0, 5);
 
+    // Kukunin ang live location para dito
+    final locationAsync = ref.watch(userLocationProvider);
+    String dynamicDistanceLabel = p.distanceLabel;
+
+    locationAsync.whenData((pos) {
+      final dist = calculateDistanceKm(pos, p.lat, p.lng);
+      if (dist != null) {
+        dynamicDistanceLabel = '${dist.toStringAsFixed(1)} km';
+      }
+    });
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            height: 200,
+            height: 250,
             color: AppColors.bg,
             child: Stack(
               alignment: Alignment.center,
+              fit: StackFit.expand,
               children: [
-                Text(p.emoji, style: const TextStyle(fontSize: 80)),
+                p.imageUrl.isNotEmpty
+                    ? Image.network(
+                        p.imageUrl,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.add_photo_alternate_outlined,
+                              size: 48,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Insert ${p.name} Photo Here',
+                              style: AppText.ui(
+                                12,
+                                FontWeight.w600,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                 Positioned(
                   top: 12,
                   left: 12,
@@ -129,7 +168,7 @@ class _PlaceDetailState extends State<_PlaceDetail> {
                     Text('${p.rating}', style: AppText.ui(13, FontWeight.w700)),
                     const SizedBox(width: 8),
                     Text(
-                      p.distanceLabel,
+                      dynamicDistanceLabel, // Ito yung totoong distance galing sa provider
                       style: AppText.ui(
                         12,
                         FontWeight.w400,
@@ -213,30 +252,14 @@ class _PlaceDetailState extends State<_PlaceDetail> {
                         style: AppText.ui(13, FontWeight.w700),
                       ),
                       const SizedBox(height: 6),
-                      for (final h in const [
-                        ('Mon – Fri', '8:00 AM – 6:00 PM'),
-                        ('Sat – Sun', '8:00 AM – 7:00 PM'),
-                      ])
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 3),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                h.$1,
-                                style: AppText.ui(
-                                  12,
-                                  FontWeight.w400,
-                                  color: AppColors.muted,
-                                ),
-                              ),
-                              Text(
-                                h.$2,
-                                style: AppText.ui(12, FontWeight.w600),
-                              ),
-                            ],
-                          ),
+                      Text(
+                        p.openingHours,
+                        style: AppText.ui(
+                          12,
+                          FontWeight.w400,
+                          color: AppColors.muted,
                         ),
+                      ),
                     ],
                   ),
                 ),

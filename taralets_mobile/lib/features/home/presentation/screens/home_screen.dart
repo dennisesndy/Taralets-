@@ -46,9 +46,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .watch(myTripsProvider)
         .maybeWhen(data: (t) => t, orElse: () => const <Trip>[]);
 
-    final active = trips
-        .where((t) => t.status == TripStatus.active)
-        .firstOrNull;
+    final active = null; 
+
+    final displayFirstName = (user?.firstName == 'Dennise' || user?.firstName == null) 
+        ? 'Ana' 
+        : user!.firstName;
+
+    final filteredPlaces = _category == 'All'
+        ? manilaPlaces
+        : manilaPlaces.where((p) {
+            return p.category == _category; 
+          }).toList();
 
     return ColoredBox(
       color: AppColors.bg,
@@ -56,7 +64,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ---- Header --------------------------------------------------
             Container(
               color: AppColors.navy,
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
@@ -78,7 +85,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                             ),
                             Text(
-                              '${user?.firstName ?? 'Dennise'}! 👋',
+                              '$displayFirstName! 👋',
                               style: AppText.ui(
                                 20,
                                 FontWeight.w800,
@@ -100,7 +107,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       GestureDetector(
                         onTap: () => context.go(AppRoutes.profile),
                         child: Avatar(
-                          name: user?.firstName ?? 'Dennise',
+                          name: displayFirstName,
                           size: 42,
                         ),
                       ),
@@ -136,7 +143,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
 
-            // ---- Body ----------------------------------------------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: Column(
@@ -144,6 +150,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 children: [
                   if (active != null) ...[
                     _ActiveTripCard(trip: active),
+                    const SizedBox(height: 20),
+                  ] else ...[
+                    const _EmptyTripCard(),
                     const SizedBox(height: 20),
                   ],
 
@@ -159,12 +168,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                           title: 'Create Trip',
                           subtitle: 'Plan with group',
-                          onTap: () =>
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Create Trip is coming next.'),
-                                ),
-                              ),
+                          onTap: () => context.push(AppRoutes.createTrip), 
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -240,7 +244,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                   const SizedBox(height: 12),
 
-                  for (final p in manilaPlaces.take(4)) ...[
+                  for (final p in filteredPlaces.take(4)) ...[
                     _PlaceRow(
                       place: p,
                       saved: _saved.contains(p.id),
@@ -251,12 +255,61 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       }),
                       onTap: () => showPlaceDetail(context, p),
                     ),
-                    if (p.id != manilaPlaces.take(4).last.id)
+                    if (p.id != filteredPlaces.take(4).last.id)
                       const SizedBox(height: 12),
                   ],
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyTripCard extends StatelessWidget {
+  const _EmptyTripCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.push(AppRoutes.createTrip),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.orangeSoft,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: const BoxDecoration(
+                color: AppColors.orange,
+                shape: BoxShape.circle,
+              ),
+              child: AppIcons.plus(color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No active trips',
+                    style: AppText.ui(15, FontWeight.w800, color: AppColors.navy),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Create a trip now and plan your gala!',
+                    style: AppText.ui(12, FontWeight.w400, color: AppColors.navy.withValues(alpha: 0.7)),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.orange),
           ],
         ),
       ),
@@ -458,7 +511,8 @@ class _ActionTile extends StatelessWidget {
   }
 }
 
-class _PlaceRow extends StatelessWidget {
+// PINALITAN NG ConsumerWidget PARA MAKUHA ANG TOTOONG LOCATION
+class _PlaceRow extends ConsumerWidget {
   const _PlaceRow({
     required this.place,
     required this.saved,
@@ -472,8 +526,19 @@ class _PlaceRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final p = place;
+
+    // Kunin ang live location mula sa provider natin
+    final locationAsync = ref.watch(userLocationProvider);
+    String dynamicDistanceLabel = p.distanceLabel; // Default fallback
+
+    locationAsync.whenData((pos) {
+      final dist = calculateDistanceKm(pos, p.lat, p.lng);
+      if (dist != null) {
+        dynamicDistanceLabel = '${dist.toStringAsFixed(1)} km';
+      }
+    });
 
     return TaraletsCard(
       clip: true,
@@ -534,6 +599,19 @@ class _PlaceRow extends StatelessWidget {
                         ),
                       ),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        '🕒 ${p.openingHours}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.ui(
+                          11,
+                          FontWeight.w500,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ),
                     const Spacer(),
                     Row(
                       children: [
@@ -554,14 +632,14 @@ class _PlaceRow extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          p.distanceLabel,
+                          dynamicDistanceLabel, // Totoong distance na nag-uupdate
                           style: AppText.ui(
                             12,
                             FontWeight.w400,
                             color: AppColors.muted,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 6,

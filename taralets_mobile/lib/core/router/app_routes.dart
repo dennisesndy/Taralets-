@@ -9,4 +9,5 @@ class AppRoutes {
   static const String profile = '/profile';
 
   static const String joinTrip = '/join-trip';
+  static const String createTrip = '/create-trip';
 }
