@@ -11,4 +11,5 @@ class AppRoutes {
   static const String createTrip = '/create-trip';
   static const String tripCreated = '/trip-created';
   static const String groupPrefs = '/group-prefs';
+  
 }

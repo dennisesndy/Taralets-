@@ -1,29 +1,18 @@
 import re
 import uuid
 from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-_USERNAME_RE = re.compile(r"^[a-z0-9_]{3,30}$")
-
+from pydantic import BaseModel, ConfigDict, Field, field_validator, EmailStr
 
 class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=100)
-    username: str
+    email: EmailStr
+    phone_number: str | None = None
     password: str = Field(min_length=8, max_length=72)
 
     @field_validator("full_name")
     @classmethod
     def clean_name(cls, v: str) -> str:
         return " ".join(v.split())
-
-    @field_validator("username")
-    @classmethod
-    def clean_username(cls, v: str) -> str:
-        v = v.strip().lower()
-        if not _USERNAME_RE.match(v):
-            raise ValueError("Username must be 3-30 characters: letters, numbers, underscore only.")
-        return v
 
     @field_validator("password")
     @classmethod
@@ -34,31 +23,29 @@ class RegisterRequest(BaseModel):
             raise ValueError("Password must contain at least one letter and one number.")
         return v
 
+class OTPVerifyRequest(BaseModel):
+    email: EmailStr
+    otp_code: str = Field(min_length=6, max_length=6)
 
 class LoginRequest(BaseModel):
-    username: str
+    email: EmailStr
     password: str
 
-    @field_validator("username")
+    @field_validator("email")
     @classmethod
     def normalize(cls, v: str) -> str:
         return v.strip().lower()
 
-
 class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     full_name: str
-    username: str
+    email: str
+    is_verified: bool
     created_at: datetime
 
-
 class RegisterResponse(BaseModel):
-    user: UserPublic
-    recovery_key: str
     message: str
-
 
 class TokenResponse(BaseModel):
     access_token: str
