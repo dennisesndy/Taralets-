@@ -1,0 +1,18 @@
+name,category,tags,address,lat,lng,opening_hours,avg_visit_minutes,entrance_fee,is_dot_accredited
+Intramuros,historical,history|walkable|heritage,Intramuros Manila,14.59194,120.974508,"Mo-Fr 09:00-19:30; Sa,Su 09:00-20:30",120,,FALSE
+Fort Santiago,historical,history|heritage|photography,Intramuros Manila,14.594505,120.970337,Mo-Su 08:00-23:00,90,75,FALSE
+Rizal Park,park,nature|free|family|walkable,Roxas Blvd Ermita Manila,14.582935,120.978678,Mo-Su 05:00-22:00,90,,FALSE
+National Museum of Fine Arts,museum,art|culture|indoor,Padre Burgos Ave Ermita Manila,14.587239,120.980993,Mo-Su 09:00-18:00,90,,FALSE
+National Museum of Anthropology,museum,culture|history|indoor,"P. Burgos Drive, Rizal Park, Ermita, Manila",14.585574,120.980944,Mo-Su 09:00-18:00,90,,FALSE
+Manila Cathedral,religious,church|heritage|photography,Cabildo St Intramuros Manila,14.592013,120.973422,Tu-Sa 08:00-16:30; Su 08:00-11:30,45,,FALSE
+San Agustin Church,religious,church|heritage|history,General Luna St Intramuros Manila,14.589366,120.975405,Tu-Su 08:00-17:00,45,,FALSE
+Casa Manila,museum,history|heritage|indoor,Plaza San Luis Intramuros Manila,14.589914,120.975226,Tu-Su 09:00-18:00,60,75,FALSE
+Manila Zoo,entertainment,family|nature|outdoor,M. Adriatico St Malate Manila,14.56503,120.988348,Mo 11:00-20:00; Tu-Su 09:00-20:00,150,300,FALSE
+Binondo Church,religious,church|chinatown|heritage,"Plaza Lorenzo Ruiz, Binondo, Manila",14.600442,120.974497,"Tu-Su 08:00-12:00,13:30-17:30",30,,FALSE
+Quiapo Church,religious,church|culture|crowded,Plaza Miranda Quiapo Manila,14.599135,120.983724,"Mo-Th,Sa 08:00-11:45,13:00-16:45; Fr,Su 07:00-18:45",45,,FALSE
+Manila Baywalk,park,sunset|free|walkable|outdoor,Roxas Blvd Manila,14.567764,120.983253,,60,,FALSE
+Manila Ocean Park,entertainment,family|indoor|aquarium,Behind Quirino Grandstand Manila,14.579647,120.972469,"Mo-Fr 10:00-18:00; Sa,Su 09:00-18:00",180,,FALSE
+Chinese Garden (Rizal Park),park,nature|quiet|photography,Rizal Park Ermita Manila,14.583242,120.977733,24/7,45,,FALSE
+Eng Bee Tin Chinese Deli (Ongpin),food,food|chinatown|snacks|budget,"Ongpin St, Binondo, Manila",14.600379,120.975147,Mo-Su 07:00-22:00,30,,FALSE
+Lucky Chinatown Mall,shopping,shopping|indoor|chinatown|air-conditioned,"Reina Regente St, Binondo, Manila",14.603285,120.973417,Mo-Th 11:00-21:00; Fr-Su 10:00-21:00,90,,FALSE
+Manila City Hall,other,architecture|photography|clock-tower|free,"Padre Burgos Ave, Ermita, Manila",14.589763,120.981558,Mo-Fr 07:00-16:00,30,,FALSE
