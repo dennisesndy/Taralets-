@@ -43,8 +43,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       });
 
       if (mounted) {
-        context.go(AppRoutes.login);
-        ScaffoldMessenger.of(context).showSnackBar(
+          context.go(AppRoutes.preferences, extra: widget.email);        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Email verified! You can now log in.',
                 style: TextStyle(color: Colors.white)),

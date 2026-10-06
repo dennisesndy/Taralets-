@@ -16,4 +16,5 @@ class AppRoutes {
   static const String register = '/register';
   static const String otp = '/otp';
   static const splash = '/splash';
+  static const String preferences = '/preferences'; // Idinagdag
 }

@@ -11,6 +11,7 @@ import '../../features/discover/presentation/screens/discover_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/itinerary/presentation/screens/itinerary_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/profile/presentation/screens/preference_screen.dart'; // Idagdag sa itaas
 import '../../features/trip/presentation/screens/create_trip_screen.dart';
 import '../../features/trip/presentation/screens/group_prefs_screen.dart';
 import '../../features/trip/presentation/screens/join_trip_screen.dart';
@@ -56,6 +57,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         pageBuilder: (context, state) =>
             _fadeSlide(state, const SplashScreen()),
+      ),
+      
+      GoRoute(
+        path: AppRoutes.preferences,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final email = state.extra as String? ?? "";
+          return PreferenceScreen(email: email);
+        },
       ),
 
       // Main app: bottom navigation (Home, Discover, Trips, Itinerary, Profile).
