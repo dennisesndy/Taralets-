@@ -1,7 +1,11 @@
 from fastapi import APIRouter
-
-from app.api.v1 import login_view, registration_view
+from app.api.v1.endpoints import itinerary
 
 api_router = APIRouter(prefix="/api/v1")
-api_router.include_router(registration_view.router)
-api_router.include_router(login_view.router)
+
+# Include Itinerary Endpoints
+api_router.include_router(
+    itinerary.router,
+    prefix="/itinerary",
+    tags=["Itinerary Generator"]
+)

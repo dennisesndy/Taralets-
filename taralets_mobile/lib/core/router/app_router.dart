@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/otp_screen.dart';
@@ -13,12 +14,14 @@ import '../../features/itinerary/presentation/screens/itinerary_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/trip/presentation/screens/create_trip_screen.dart';
 import '../../features/trip/presentation/screens/group_prefs_screen.dart';
+import '../../features/trip/presentation/screens/group_recommendations_screen.dart';
 import '../../features/trip/presentation/screens/join_trip_screen.dart';
 import '../../features/trip/presentation/screens/my_trips_screen.dart';
 import '../../features/trip/presentation/screens/trip_created_screen.dart';
 import '../../repositories/trip_repository.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
+
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -152,6 +155,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.groupPrefs,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const GroupPrefsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.recommendations,
+        builder: (context, state) => const GroupRecommendationsScreen(),
       ),
     ],
   );

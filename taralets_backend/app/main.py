@@ -1,11 +1,11 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-from fastapi.middleware.cors import CORSMiddleware  # <--- 1. I-IMPORT ITO
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import models  # noqa: F401  (para ma-register ang lahat ng tables)
+from app import models  # noqa: F401
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import Base, engine, get_db
@@ -21,9 +21,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
-# <--- 2. IDAGDAG ANG CORS CONFIGURATION NA ITO --->
-app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
-
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,6 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Central API Router
 app.include_router(api_router)
 
 

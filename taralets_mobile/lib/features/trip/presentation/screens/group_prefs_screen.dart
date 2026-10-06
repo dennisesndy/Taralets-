@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/router/app_routes.dart';
 import '../../../../core/constants/app_text.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/taralets_button.dart';
@@ -49,17 +49,17 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
   ];
 
   BoxDecoration _card({Border? border}) => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(14),
-    border: border,
-    boxShadow: [
-      BoxShadow(
-        color: Colors.black.withValues(alpha: 0.05),
-        blurRadius: 6,
-        offset: const Offset(0, 1),
-      ),
-    ],
-  );
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: border,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      );
 
   Widget _pill(
     String t,
@@ -69,60 +69,61 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
     FontWeight w = FontWeight.w600,
     EdgeInsets? pad,
     bool mono = false,
-  }) => Container(
-    padding: pad ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-    decoration: BoxDecoration(
-      color: bg,
-      borderRadius: BorderRadius.circular(99),
-    ),
-    child: Text(
-      t,
-      style: mono
-          ? AppText.mono(size, w, color: fg)
-          : AppText.ui(size, w, color: fg),
-    ),
-  );
+  }) =>
+      Container(
+        padding: pad ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: Text(
+          t,
+          style: mono
+              ? AppText.mono(size, w, color: fg)
+              : AppText.ui(size, w, color: fg),
+        ),
+      );
 
   Widget _statusPill(bool ok, String done, String wait) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-    decoration: BoxDecoration(
-      color: ok ? AppColors.greenSoft : AppColors.amberSoft,
-      borderRadius: BorderRadius.circular(99),
-    ),
-    child: Text(
-      ok ? done : wait,
-      style: AppText.ui(
-        11,
-        FontWeight.w700,
-        color: ok ? AppColors.greenText : AppColors.amberText,
-      ),
-    ),
-  );
-
-  Widget _consensusBox(String label, List<Widget> children) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-    decoration: BoxDecoration(
-      color: AppColors.bg,
-      borderRadius: BorderRadius.circular(10),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: ok ? AppColors.greenSoft : AppColors.amberSoft,
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: Text(
+          ok ? done : wait,
           style: AppText.ui(
-            10,
+            11,
             FontWeight.w700,
-            color: AppColors.muted,
-            letterSpacing: 0.4,
+            color: ok ? AppColors.greenText : AppColors.amberText,
           ),
         ),
-        const SizedBox(height: 4),
-        ...children,
-      ],
-    ),
-  );
+      );
+
+  Widget _consensusBox(String label, List<Widget> children) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: AppText.ui(
+                10,
+                FontWeight.w700,
+                color: AppColors.muted,
+                letterSpacing: 0.4,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...children,
+          ],
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -573,13 +574,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                       : 'Waiting for members...',
                   onPressed: () {
                     if (_allConfirmed) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Group recommendations are coming next.',
-                          ),
-                        ),
-                      );
+                      context.push(AppRoutes.recommendations);
                     }
                   },
                 ),
