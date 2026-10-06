@@ -8,6 +8,15 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     phone_number: str | None = None
     password: str = Field(min_length=8, max_length=72)
+    phone_number: str | None = Field(default=None, max_length=20)
+
+    @field_validator("phone_number")
+    @classmethod
+    def clean_phone(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
     @field_validator("full_name")
     @classmethod

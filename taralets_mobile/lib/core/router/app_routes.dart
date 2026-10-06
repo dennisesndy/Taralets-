@@ -11,5 +11,9 @@ class AppRoutes {
   static const String createTrip = '/create-trip';
   static const String tripCreated = '/trip-created';
   static const String groupPrefs = '/group-prefs';
-  
+  // Auth Routes
+  static const String login = '/login';
+  static const String register = '/register';
+  static const String otp = '/otp';
+  static const splash = '/splash';
 }
