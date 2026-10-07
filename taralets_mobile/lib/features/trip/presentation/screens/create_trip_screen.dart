@@ -15,13 +15,12 @@ import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/error_note.dart';
 import '../../../../shared/widgets/map_background.dart';
-import '../../../../shared/widgets/pref_card.dart';
 import '../../../../shared/widgets/step_bar.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/taralets_field.dart';
+import '../../../profile/providers/preferences_provider.dart';
 import '../../data/models/trip_models.dart';
 
-/// 5-step Create Trip wizard, matching Figma Create1 .. Create5.
 class CreateTripScreen extends ConsumerStatefulWidget {
   const CreateTripScreen({super.key});
 
@@ -45,7 +44,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     'Review Trip',
   ];
 
-  /// Manila-only meetup presets (Figma `options`) with coordinates.
   static const _presets = <(String, double, double)>[
     ('Plaza Roma, Intramuros', 14.5896, 120.9753),
     ('Luneta Park / Rizal Park', 14.5831, 120.9794),
@@ -55,25 +53,52 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     ('Use my current location', GeoBoundary.defaultLat, GeoBoundary.defaultLng),
   ];
 
-  static const _prefOptions = <(String, String)>[
-    ('🏛', 'Heritage & Culture'),
-    ('🍜', 'Food & Street Food'),
-    ('☕', 'Cafés'),
-    ('🌿', 'Parks & Outdoors'),
-    ('🛍', 'Shopping'),
-    ('📸', 'Photo Spots'),
-    ('🎨', 'Arts & Museums'),
-    ('🌅', 'Scenic / Sunset'),
-    ('🚶', 'Walking-friendly'),
-    ('💰', 'Budget-friendly'),
+  // Options mapped identically to Preference Screen to ensure proper loading
+  final List<String> _activityOptions = [
+    'Cultural',
+    'Historical',
+    'Food',
+    'Cafe',
+    'Nature',
+    'Nightlife',
+  ];
+  final List<String> _dietaryOptions = [
+    'None',
+    'Halal',
+    'Vegan',
+    'Budget-Friendly',
+  ];
+  final List<String> _paceOptions = [
+    'Light Walking',
+    'Moderate',
+    'Walking Trip',
+  ];
+  final List<String> _accessibilityOptions = [
+    'Pet Friendly',
+    'Wheelchair Accessible',
+    'Available Parking',
   ];
 
-  static const _shortLabel = {
-    'Heritage & Culture': 'Heritage',
-    'Food & Street Food': 'Food',
-    'Arts & Museums': 'Museums',
-    'Parks & Outdoors': 'Parks',
-    'Scenic / Sunset': 'Scenic',
+  static const Map<String, String> _activityEmoji = {
+    'Cultural': '🎭',
+    'Historical': '🏛️',
+    'Food': '🍜',
+    'Cafe': '☕',
+    'Nature': '🌿',
+    'Nightlife': '🌃',
+  };
+
+  static const Map<String, String> _dietaryEmoji = {
+    'None': '🍽️',
+    'Halal': '🥙',
+    'Vegan': '🥗',
+    'Budget-Friendly': '💸',
+  };
+
+  static const Map<String, String> _paceEmoji = {
+    'Light Walking': '🚶',
+    'Moderate': '👟',
+    'Walking Trip': '🎒',
   };
 
   int _step = 1;
@@ -102,14 +127,24 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   ];
   bool _simulated = false;
 
-  // Step 4
-  List<String> _cats = [
-    'Heritage & Culture',
-    'Food & Street Food',
-    'Budget-friendly',
-  ];
-  String _budget = '₱₱';
-  String _walking = 'Moderate';
+  // Step 4: Trip-specific Preferences
+  late List<String> _cats;
+  late List<String> _dietary;
+
+  // These start null so there are no default selections if not explicitly chosen
+  double? _budget;
+  String? _pace;
+  final List<String> _accessibility = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Pull the exact default array from global preferences.
+    // If empty in defaults, it remains empty here.
+    final prefs = ref.read(userPreferencesProvider);
+    _cats = List.of(prefs.activityTags);
+    _dietary = List.of(prefs.dietary);
+  }
 
   @override
   void dispose() {
@@ -143,6 +178,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     if (_submitting) return;
     setState(() => _submitting = true);
     final p = _presets.firstWhere((p) => p.$1 == _selected);
+
     final dto = CreateTripDto(
       code: _code,
       title: _name.text.trim().isEmpty
@@ -157,9 +193,9 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       longitude: p.$3,
       memberNames: _members.map((m) => m.name).toList(),
       preferences: GroupPreferences(
-        categories: _cats,
-        budget: _budget,
-        walking: _walking,
+        categories: [..._cats, ..._dietary, ..._accessibility],
+        budget: _budget != null ? '₱${_budget!.toInt()}' : 'Not specified',
+        walking: _pace ?? 'Not specified',
       ),
     );
     try {
@@ -277,10 +313,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ),
     );
   }
-
-  // -------------------------------------------------------------------------
-  // Step 1: details
-  // -------------------------------------------------------------------------
 
   Widget _timeBox(
     String label,
@@ -441,10 +473,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ),
     ];
   }
-
-  // -------------------------------------------------------------------------
-  // Step 2: meetup (Manila presets only)
-  // -------------------------------------------------------------------------
 
   List<Widget> _step2() {
     final q = _query.text.toLowerCase().trim();
@@ -649,10 +677,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         ),
     ];
   }
-
-  // -------------------------------------------------------------------------
-  // Step 3: invite
-  // -------------------------------------------------------------------------
 
   BoxDecoration get _cardDeco => BoxDecoration(
     color: Colors.white,
@@ -920,120 +944,158 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     ];
   }
 
-  // -------------------------------------------------------------------------
-  // Step 4: preferences
-  // -------------------------------------------------------------------------
-
   List<Widget> _step4() {
-    void toggle(String l) => setState(() {
-      _cats = _cats.contains(l) ? (List.of(_cats)..remove(l)) : [..._cats, l];
-    });
-
-    final rows = <Widget>[];
-    for (var i = 0; i < _prefOptions.length; i += 2) {
-      final pair = _prefOptions.skip(i).take(2).toList();
-      rows.add(
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var j = 0; j < pair.length; j++) ...[
-                if (j > 0) const SizedBox(width: 10),
-                Expanded(
-                  child: PrefCard(
-                    icon: pair[j].$1,
-                    label: pair[j].$2,
-                    selected: _cats.contains(pair[j].$2),
-                    onTap: () => toggle(pair[j].$2),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-      if (i + 2 < _prefOptions.length) rows.add(const SizedBox(height: 10));
-    }
-
-    Widget optionRow(
-      List<String> opts,
-      String value,
-      ValueChanged<String> set,
-      double font,
-    ) => Row(
-      children: [
-        for (var i = 0; i < opts.length; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
-          Expanded(
-            child: OptionButton(
-              label: opts[i],
-              selected: value == opts[i],
-              fontSize: font,
-              onTap: () => setState(() => set(opts[i])),
-            ),
-          ),
-        ],
-      ],
-    );
-
     return [
       Text('What do you want to do?', style: AppText.ui(15, FontWeight.w700)),
       const SizedBox(height: 4),
       Text(
-        "Choose what you'd enjoy most. We'll find places that work for everyone.",
+        "Modify your choices for this specific trip without altering your profile defaults.",
         style: AppText.ui(13, FontWeight.w400, color: AppColors.muted),
       ),
       const SizedBox(height: 14),
-      ...rows,
-      const SizedBox(height: 16),
-      Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: _cardDeco,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              "What's your preferred budget?",
-              style: AppText.ui(13, FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            optionRow(
-              const ['₱', '₱₱', '₱₱₱'],
-              _budget,
-              (v) => _budget = v,
-              14,
-            ),
-          ],
+
+      // Activities
+      _SectionCard(
+        emoji: '🎯',
+        title: 'What do you enjoy?',
+        subtitle: 'Select interests for this specific trip.',
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _activityOptions
+              .map(
+                (tag) => _SelectChip(
+                  emoji: _activityEmoji[tag],
+                  label: tag,
+                  selected: _cats.contains(tag),
+                  onTap: () => setState(() {
+                    if (_cats.contains(tag)) {
+                      _cats.remove(tag);
+                    } else {
+                      _cats.add(tag);
+                    }
+                  }),
+                ),
+              )
+              .toList(),
         ),
       ),
-      Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: _cardDeco,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'How much walking is okay?',
-              style: AppText.ui(13, FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            optionRow(
-              const ['Low', 'Moderate', 'A lot'],
-              _walking,
-              (v) => _walking = v,
-              13,
-            ),
-          ],
+      const SizedBox(height: 16),
+
+      // Dietary
+      _SectionCard(
+        emoji: '🍽️',
+        title: 'Dietary & dining',
+        subtitle: 'Set dining restrictions for this trip.',
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _dietaryOptions
+              .map(
+                (d) => _SelectChip(
+                  emoji: _dietaryEmoji[d],
+                  label: d,
+                  selected: _dietary.contains(d),
+                  onTap: () => setState(() {
+                    if (_dietary.contains(d)) {
+                      _dietary.remove(d);
+                    } else if (d == 'None') {
+                      _dietary.clear();
+                      _dietary.add('None');
+                    } else {
+                      _dietary.remove('None');
+                      _dietary.add(d);
+                    }
+                  }),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      // Budget (Trip-specific)
+      _SectionCard(
+        emoji: '💰',
+        title: 'Spending budget',
+        subtitle: 'Your preferred budget for this trip.',
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [500.0, 1000.0, 2500.0, 5000.0, 10000.0]
+              .map(
+                (b) => _SelectChip(
+                  label: '₱${b.toInt()}',
+                  selected: _budget == b,
+                  onTap: () => setState(() {
+                    if (_budget == b) {
+                      _budget = null; // Unselect option
+                    } else {
+                      _budget = b;
+                    }
+                  }),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      // Pace (Trip-specific)
+      _SectionCard(
+        emoji: '🚶',
+        title: 'Trip Pace',
+        subtitle: 'How much walking is okay for the group?',
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _paceOptions
+              .map(
+                (p) => _SelectChip(
+                  emoji: _paceEmoji[p],
+                  label: p,
+                  selected: _pace == p,
+                  onTap: () => setState(() {
+                    if (_pace == p) {
+                      _pace = null; // Unselect option
+                    } else {
+                      _pace = p;
+                    }
+                  }),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      // Accessibility (Trip-specific)
+      _SectionCard(
+        emoji: '♿',
+        title: 'Accessibility',
+        subtitle: 'Any specific accessibility needs?',
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _accessibilityOptions
+              .map(
+                (a) => _SelectChip(
+                  label: a,
+                  selected: _accessibility.contains(a),
+                  onTap: () => setState(() {
+                    if (_accessibility.contains(a)) {
+                      _accessibility.remove(a);
+                    } else {
+                      _accessibility.add(a);
+                    }
+                  }),
+                ),
+              )
+              .toList(),
         ),
       ),
     ];
   }
-
-  // -------------------------------------------------------------------------
-  // Step 5: review
-  // -------------------------------------------------------------------------
 
   List<Widget> _step5() {
     final title = _name.text.trim().isEmpty
@@ -1043,6 +1105,14 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ('📍', 'Meetup', _selected),
       ('⏰', 'Target Arrival', formatTimeOfDay(_meetupTime)),
       ('👥', 'Members', '${_members.length} people'),
+    ];
+
+    final combinedPrefs = [
+      ..._cats,
+      ..._dietary,
+      if (_budget != null) '₱${_budget!.toInt()}',
+      if (_pace != null) _pace!,
+      ..._accessibility,
     ];
 
     return [
@@ -1123,31 +1193,41 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final t in _cats)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.orangeSoft,
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                          child: Text(
-                            _shortLabel[t] ?? t,
-                            style: AppText.ui(
-                              12,
-                              FontWeight.w600,
-                              color: AppColors.orange,
+                  if (combinedPrefs.isEmpty)
+                    Text(
+                      'No specific preferences selected.',
+                      style: AppText.ui(
+                        12,
+                        FontWeight.w400,
+                        color: AppColors.muted,
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final t in combinedPrefs)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.orangeSoft,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: Text(
+                              t,
+                              style: AppText.ui(
+                                12,
+                                FontWeight.w600,
+                                color: AppColors.orange,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
+                      ],
+                    ),
                   const SizedBox(height: 14),
                   Wrap(
                     spacing: 8,
@@ -1180,42 +1260,193 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   }
 }
 
-class OptionButton extends StatelessWidget {
-  const OptionButton({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.fontSize = 13,
-  });
+// =============================================================================
+// Reusable Component Helpers (Mirrored from Preference Screen)
+// =============================================================================
 
-  final String label;
-  final bool selected;
+class _Pressable extends StatefulWidget {
+  const _Pressable({required this.onTap, required this.child});
+
   final VoidCallback onTap;
-  final double fontSize;
+  final Widget child;
+
+  @override
+  State<_Pressable> createState() => _PressableState();
+}
+
+class _PressableState extends State<_Pressable> {
+  bool _down = false;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _down = true),
+      onTapUp: (_) => setState(() => _down = false),
+      onTapCancel: () => setState(() => _down = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.95 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.emoji,
+    required this.title,
+    required this.subtitle,
+    required this.child,
+    this.trailing,
+  });
+
+  final String emoji;
+  final String title;
+  final String subtitle;
+  final Widget child;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 28,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.orangeSoft,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(emoji, style: const TextStyle(fontSize: 22)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: AppText.ui(
+                        16,
+                        FontWeight.w900,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: AppText.ui(
+                        12,
+                        FontWeight.w400,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+            ],
+          ),
+          const SizedBox(height: 18),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _SelectChip extends StatelessWidget {
+  const _SelectChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.emoji,
+  });
+
+  final String label;
+  final String? emoji;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Pressable(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? AppColors.orangeSoft : AppColors.bg,
-          borderRadius: BorderRadius.circular(10),
+          color: selected ? AppColors.orange : AppColors.bg,
+          borderRadius: BorderRadius.circular(30),
           border: Border.all(
             color: selected ? AppColors.orange : AppColors.border,
             width: 1.5,
           ),
+          boxShadow: selected
+              ? const [
+                  BoxShadow(
+                    color: AppColors.orangeSoft,
+                    blurRadius: 10,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : const [],
         ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: AppText.ui(
-            fontSize,
-            FontWeight.w700,
-            color: selected ? AppColors.orange : AppColors.text,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (emoji != null) ...[
+              Text(emoji!, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 6),
+            ],
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 220),
+              style: AppText.ui(
+                13,
+                FontWeight.w700,
+                color: selected ? Colors.white : AppColors.navy,
+              ),
+              child: Text(label),
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              child: selected
+                  ? const Padding(
+                      padding: EdgeInsets.only(left: 6),
+                      child: Icon(
+                        Icons.check_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
         ),
       ),
     );

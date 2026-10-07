@@ -34,6 +34,25 @@ class Place {
     required this.imageUrl,
   });
 
+  factory Place.fromJson(Map<String, dynamic> json) {
+    return Place(
+      id: json['id'] ?? 0,
+      emoji: '📍', // Default emoji muna
+      name: json['name'] ?? 'Unknown Place',
+      sub: json['address'] ?? 'City of Manila',
+      rating: 4.5, // Default rating muna dahil wala pa sa DB
+      price: json['entrance_fee'] == 0.0 ? 'Free' : '₱₱', 
+      distanceLabel: 'Calculating...', 
+      distanceKm: 0.0,
+      lat: (json['lat'] ?? 0.0).toDouble(),
+      lng: (json['lng'] ?? 0.0).toDouble(),
+      category: json['category'] ?? 'General',
+      openingHours: json['opening_hours'] ?? 'Not specified',
+      description: 'Isang magandang lugar na pwedeng pasyalan sa Manila.', // Default description
+      imageUrl: '', // Default muna dahil wala pang image sa DB
+    );
+  }
+  
   // REAL-TIME CHECKER: Automatic na kinakalkula kung Open o Closed ngayon
   bool get isOpen {
     // Kung 24/7 o Open 24/7 ang nakalagay

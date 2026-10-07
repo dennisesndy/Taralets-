@@ -170,4 +170,5 @@ class AppIcons {
     color,
     size,
   );
+  static const IconData edit = Icons.edit_outlined; // o Icons.edit
 }

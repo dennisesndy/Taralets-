@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
-import '../../../../data/manila_places.dart';
+import '../../../../data/manila_places.dart'; // Siguraduhing tama ang import path na ito sa Place model mo
 import '../../../../shared/widgets/app_icons.dart';
 import '../../../../shared/widgets/error_note.dart';
 import '../../../../shared/widgets/taralets_card.dart';
@@ -17,6 +21,10 @@ class DiscoverScreen extends StatefulWidget {
 }
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
+  // Idinagdag ang state variables para sa API data
+  List<Place> _apiPlaces = [];
+  bool _isLoading = true;
+
   static const _cats = [
     'All',
     'Heritage',
@@ -25,8 +33,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     'Leisure',
   ];
 
-  /// Searches that name somewhere outside the City of Manila trigger the
-  /// "Outside City of Manila" error (same keyword list as Figma).
   static const _outside = [
     'makati',
     'quezon',
@@ -49,6 +55,34 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _near = false;
   bool _open = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _fetchPlacesList(); // I-fetch agad pagka-load ng screen
+  }
+
+  // Function para kunin ang lahat ng places para sa List View
+  Future<void> _fetchPlacesList() async {
+    final url = Uri.parse('http://10.0.2.2:8000/api/v1/places'); 
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final List data = json.decode(response.body);
+        if (mounted) {
+          setState(() {
+            _apiPlaces = data.map((json) => Place.fromJson(json)).toList();
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint("Error fetching places list: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   bool _catMatch(String c) =>
       _filter == 'All' ||
       (_filter == 'Heritage' && c.contains('Heritage')) ||
@@ -61,11 +95,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Widget build(BuildContext context) {
     final q = _query.toLowerCase();
     final outside = _outside.any(q.contains);
-    final results = manilaPlaces.where((p) {
+    
+    // Gagamitin na ang _apiPlaces imbes na hardcoded na manilaPlaces
+    final results = _apiPlaces.where((p) {
       return _catMatch(p.category) &&
           (!_budget || p.price.length <= 1) &&
           (!_near || p.distanceKm <= 0.5) &&
-          (!_open || p.isOpen) &&
+          // Kung walang isOpen na property sa API model mo, tanggalin ang condition na ito
+          // (!_open || p.isOpen) && 
           (q.trim().isEmpty ||
               outside ||
               '${p.name} ${p.sub} ${p.category}'.toLowerCase().contains(q));
@@ -92,40 +129,42 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           Expanded(
             child: _mapView
                 ? const _MapView()
-                : ListView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                    children: [
-                      if (outside)
-                        const ErrorNote(
-                          title: 'Outside City of Manila',
-                          message:
-                              'Discovery is limited to the City of Manila. Try Intramuros, Binondo, Ermita or Malate.',
+                : _isLoading 
+                    ? const Center(child: CircularProgressIndicator()) // Loading indicator
+                    : ListView(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 16,
                         ),
-                      if (!outside && results.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Text(
-                            'No places match these filters.',
-                            textAlign: TextAlign.center,
-                            style: AppText.ui(
-                              13,
-                              FontWeight.w400,
-                              color: AppColors.muted,
+                        children: [
+                          if (outside)
+                            const ErrorNote(
+                              title: 'Outside City of Manila',
+                              message:
+                                  'Discovery is limited to the City of Manila. Try Intramuros, Binondo, Ermita or Malate.',
                             ),
-                          ),
-                        ),
-                      if (!outside)
-                        for (final p in results) ...[
-                          _PlaceCard(place: p),
-                          const SizedBox(height: 12),
+                          if (!outside && results.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Text(
+                                'No places match these filters.',
+                                textAlign: TextAlign.center,
+                                style: AppText.ui(
+                                  13,
+                                  FontWeight.w400,
+                                  color: AppColors.muted,
+                                ),
+                              ),
+                            ),
+                          if (!outside)
+                            for (final p in results) ...[
+                              _PlaceCard(place: p),
+                              const SizedBox(height: 12),
+                            ],
+                          if (!outside && results.isNotEmpty)
+                            const _NearbyClusters(),
                         ],
-                      if (!outside && results.isNotEmpty)
-                        const _NearbyClusters(),
-                    ],
-                  ),
+                      ),
           ),
         ],
       ),
@@ -331,21 +370,15 @@ class _ViewToggle extends StatelessWidget {
   }
 }
 
-class _PlaceCard extends StatefulWidget {
+class _PlaceCard extends StatelessWidget {
   const _PlaceCard({required this.place});
   final Place place;
 
   @override
-  State<_PlaceCard> createState() => _PlaceCardState();
-}
-
-class _PlaceCardState extends State<_PlaceCard> {
-  @override
   Widget build(BuildContext context) {
-    final p = widget.place;
     return TaraletsCard(
       clip: true,
-      onTap: () => showPlaceDetail(context, p),
+      onTap: () => showPlaceDetail(context, place),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -353,7 +386,7 @@ class _PlaceCardState extends State<_PlaceCard> {
             height: 100,
             color: AppColors.bg,
             alignment: Alignment.center,
-            child: Text(p.emoji, style: const TextStyle(fontSize: 48)),
+            child: Text(place.emoji, style: const TextStyle(fontSize: 48)),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -368,10 +401,10 @@ class _PlaceCardState extends State<_PlaceCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(p.name, style: AppText.ui(15, FontWeight.w700)),
+                          Text(place.name, style: AppText.ui(15, FontWeight.w700)),
                           const SizedBox(height: 1),
                           Text(
-                            p.sub,
+                            place.sub,
                             style: AppText.ui(
                               12,
                               FontWeight.w400,
@@ -391,7 +424,7 @@ class _PlaceCardState extends State<_PlaceCard> {
                         borderRadius: BorderRadius.circular(99),
                       ),
                       child: Text(
-                        p.category,
+                        place.category,
                         style: AppText.ui(
                           10,
                           FontWeight.w700,
@@ -406,10 +439,10 @@ class _PlaceCardState extends State<_PlaceCard> {
                   children: [
                     AppIcons.star(),
                     const SizedBox(width: 3),
-                    Text('${p.rating}', style: AppText.ui(12, FontWeight.w700)),
+                    Text('${place.rating}', style: AppText.ui(12, FontWeight.w700)),
                     const SizedBox(width: 8),
                     Text(
-                      p.price,
+                      place.price,
                       style: AppText.ui(
                         12,
                         FontWeight.w400,
@@ -418,22 +451,23 @@ class _PlaceCardState extends State<_PlaceCard> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '${p.distanceLabel} away',
+                      '${place.distanceLabel} away',
                       style: AppText.ui(
                         12,
                         FontWeight.w400,
                         color: AppColors.muted,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      p.isOpen ? '● Open' : '● Closed',
-                      style: AppText.ui(
-                        11,
-                        FontWeight.w600,
-                        color: p.isOpen ? AppColors.green : AppColors.red,
-                      ),
-                    ),
+                    // Kung walang isOpen na property sa API model mo, pwede mo muna itong i-comment:
+                    // const SizedBox(width: 8),
+                    // Text(
+                    //   place.isOpen ? '● Open' : '● Closed',
+                    //   style: AppText.ui(
+                    //     11,
+                    //     FontWeight.w600,
+                    //     color: place.isOpen ? AppColors.green : AppColors.red,
+                    //   ),
+                    // ),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -570,151 +604,113 @@ class _NearbyClusters extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Map view: stylised map (grid + roads + Manila Bay) with the four Manila
-// clusters from the Figma file.
-// ---------------------------------------------------------------------------
-
-class _MapView extends StatelessWidget {
+class _MapView extends StatefulWidget {
   const _MapView();
 
-  static const _clusters = [
-    (
-      x: 0.38,
-      y: 0.42,
-      label: 'Intramuros Heritage',
-      count: 12,
-      color: AppColors.orange,
-    ),
-    (
-      x: 0.62,
-      y: 0.24,
-      label: 'Binondo Food Belt',
-      count: 18,
-      color: AppColors.navy,
-    ),
-    (
-      x: 0.50,
-      y: 0.60,
-      label: 'Ermita–Malate',
-      count: 15,
-      color: AppColors.purple,
-    ),
-    (x: 0.24, y: 0.60, label: 'Manila Bay', count: 9, color: AppColors.green),
-  ];
+  @override
+  State<_MapView> createState() => _MapViewState();
+}
+
+class _MapViewState extends State<_MapView> {
+  List<Marker> _markers = [];
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        return Stack(
-          children: [
-            Positioned.fill(child: CustomPaint(painter: _MapPainter())),
-            for (final cl in _clusters)
-              Positioned(
-                left: cl.x * c.maxWidth,
-                top: cl.y * c.maxHeight,
-                child: FractionalTranslation(
-                  translation: const Offset(-0.5, -0.5),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: cl.color,
-                      borderRadius: BorderRadius.circular(99),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      '${cl.label} · ${cl.count}',
-                      style: AppText.ui(
-                        10,
-                        FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
+  void initState() {
+    super.initState();
+    _fetchClusters();
+  }
+
+  Future<void> _fetchClusters() async {
+    final url = Uri.parse('http://10.0.2.2:8000/api/v1/places/clusters');
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List clusters = data['clusters'];
+
+        List<Marker> newMarkers = [];
+        
+        final List<Color> clusterColors = [
+          AppColors.orange,
+          AppColors.navy,
+          AppColors.purple,
+          AppColors.green,
+          Colors.teal,
+          Colors.amber,
+        ];
+
+        for (var cluster in clusters) {
+          int clusterId = cluster['cluster_id'];
+          List places = cluster['places'];
+
+          Color markerColor = cluster['is_outlier'] 
+              ? Colors.grey 
+              : clusterColors[clusterId % clusterColors.length];
+
+          for (var place in places) {
+            newMarkers.add(
+              Marker(
+                point: LatLng(place['lat'], place['lng']),
+                width: 40,
+                height: 40,
+                child: GestureDetector(
+                  onTap: () async {
+                    // Fetch full details gamit ang Place Detail endpoint
+                    final detailUrl = Uri.parse('http://10.0.2.2:8000/api/v1/places/${place['id']}');
+                    
+                    try {
+                      final detailRes = await http.get(detailUrl);
+                      if (detailRes.statusCode == 200) {
+                        final placeData = json.decode(detailRes.body);
+                        final fullPlace = Place.fromJson(placeData);
+                        
+                        if (mounted) {
+                          showPlaceDetail(context, fullPlace);
+                        }
+                      }
+                    } catch (e) {
+                      debugPrint("Error fetching place details: $e");
+                    }
+                  },
+                  child: Icon(
+                    Icons.location_on,
+                    color: markerColor,
+                    size: 32,
                   ),
                 ),
               ),
-          ],
-        );
-      },
-    );
-  }
-}
+            );
+          }
+        }
 
-class _MapPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = AppColors.mapBg);
-
-    void grid(double step, Color color) {
-      final p = Paint()
-        ..color = color
-        ..strokeWidth = 1;
-      for (double x = 0; x <= size.width; x += step) {
-        canvas.drawLine(Offset(x, 0), Offset(x, size.height), p);
+        if (mounted) {
+          setState(() {
+            _markers = newMarkers;
+          });
+        }
       }
-      for (double y = 0; y <= size.height; y += step) {
-        canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
-      }
+    } catch (e) {
+      debugPrint("Error fetching clusters: $e");
     }
-
-    grid(18, const Color(0x40B4C8D7));
-    grid(72, const Color(0x8CFFFFFF));
-
-    final road = Paint()..color = const Color(0xD9FFFFFF);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, size.height * 0.40, size.width, 7),
-        const Radius.circular(4),
-      ),
-      road,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, size.height * 0.65, size.width, 7),
-        const Radius.circular(4),
-      ),
-      road,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.35, 0, 7, size.height),
-        const Radius.circular(4),
-      ),
-      road,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.68, 0, 7, size.height),
-        const Radius.circular(4),
-      ),
-      road,
-    );
-
-    // Manila Bay
-    final water = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width * 0.16, 0)
-      ..quadraticBezierTo(
-        size.width * 0.24,
-        size.height * 0.5,
-        size.width * 0.16,
-        size.height,
-      )
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(water, Paint()..color = AppColors.water);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget build(BuildContext context) {
+    return FlutterMap(
+      options: const MapOptions(
+        initialCenter: LatLng(14.5829, 120.9786), // Rizal Park
+        initialZoom: 13.5,
+      ),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.taralets.app',
+        ),
+        MarkerLayer(
+          markers: _markers,
+        ),
+      ],
+    );
+  }
 }

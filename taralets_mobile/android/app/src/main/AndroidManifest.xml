@@ -7,6 +7,8 @@
         android:label="taralets_mobile"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <meta-data android:name="com.google.android.geo.API_KEY"
+           android:value="YONG_API_KEY_DITO"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"
