@@ -27,10 +27,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
   bool _isLoading = false;
 
   Future<void> _register() async {
+    // Stop here if the two passwords differ. Nothing is sent to the API.
+    if (_passCtrl.text != _confirmPasswordController.text) {
+      _showError('Passwords do not match.');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -49,18 +56,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       }
     } on DioException catch (e) {
       final errorMsg = e.response?.data['detail'] ?? 'Registration failed';
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMsg.toString(), style: const TextStyle(color: Colors.white)),
-            backgroundColor: Colors.red.shade600,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      _showError(errorMsg.toString());
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message, style: const TextStyle(color: Colors.white)),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   @override
@@ -70,7 +82,46 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
     _passCtrl.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  /// Live "match / don't match" hint shown under the confirm field.
+  Widget _matchHint() {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_passCtrl, _confirmPasswordController]),
+      builder: (context, _) {
+        final confirm = _confirmPasswordController.text;
+        final show = confirm.isNotEmpty;
+        final match = confirm == _passCtrl.text;
+        final color = match ? Colors.green.shade600 : Colors.red.shade600;
+
+        return AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          alignment: Alignment.topLeft,
+          child: show
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 8, left: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        match ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+                        size: 15,
+                        color: color,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        match ? 'Passwords match' : "Passwords don't match yet",
+                        style: AppText.ui(12, FontWeight.w600, color: color),
+                      ),
+                    ],
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        );
+      },
+    );
   }
 
   @override
@@ -178,8 +229,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               helper: 'At least 8 characters, with a letter and a number.',
                               icon: Icons.lock_outline_rounded,
                               isPassword: true,
+                              textInputAction: TextInputAction.next,
+                            ),
+                            const SizedBox(height: 18),
+                            TaraletsTextField(
+                              label: 'Confirm Password',
+                              controller: _confirmPasswordController,
+                              hint: 'Re-type your password',
+                              icon: Icons.lock_outline_rounded,
+                              isPassword: true,
                               textInputAction: TextInputAction.done,
                             ),
+                            _matchHint(),
                             const SizedBox(height: 26),
                             TaraletsButton.orange(
                               label: 'Sign Up',
