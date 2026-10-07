@@ -76,7 +76,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   final List<String> _accessibilityOptions = [
     'Pet Friendly',
     'Wheelchair Accessible',
-    'Available Parking',
   ];
 
   static const Map<String, String> _activityEmoji = {
@@ -131,8 +130,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   late List<String> _cats;
   late List<String> _dietary;
 
-  // These start null so there are no default selections if not explicitly chosen
-  double? _budget;
+  double _budget = 2500.0;
   String? _pace;
   final List<String> _accessibility = [];
 
@@ -194,7 +192,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       memberNames: _members.map((m) => m.name).toList(),
       preferences: GroupPreferences(
         categories: [..._cats, ..._dietary, ..._accessibility],
-        budget: _budget != null ? '₱${_budget!.toInt()}' : 'Not specified',
+        budget: '₱${_budget.toInt()}',
         walking: _pace ?? 'Not specified',
       ),
     );
@@ -1014,29 +1012,52 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ),
       const SizedBox(height: 16),
 
-      // Budget (Trip-specific)
+      // Budget (Trip-specific Slider)
       _SectionCard(
         emoji: '💰',
         title: 'Spending budget',
         subtitle: 'Your preferred budget for this trip.',
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [500.0, 1000.0, 2500.0, 5000.0, 10000.0]
-              .map(
-                (b) => _SelectChip(
-                  label: '₱${b.toInt()}',
-                  selected: _budget == b,
-                  onTap: () => setState(() {
-                    if (_budget == b) {
-                      _budget = null; // Unselect option
-                    } else {
-                      _budget = b;
-                    }
-                  }),
+        child: Column(
+          children: [
+            Text(
+              '₱${_budget.toInt()}',
+              style: AppText.ui(24, FontWeight.w800, color: AppColors.orange),
+            ),
+            const SizedBox(height: 8),
+            Slider(
+              value: _budget,
+              min: 1,
+              max: 10000,
+              activeColor: AppColors.orange,
+              inactiveColor: AppColors.orangeSoft,
+              onChanged: (val) {
+                setState(() {
+                  _budget = val;
+                });
+              },
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '₱1',
+                  style: AppText.ui(
+                    12,
+                    FontWeight.w500,
+                    color: AppColors.muted,
+                  ),
                 ),
-              )
-              .toList(),
+                Text(
+                  '₱10,000',
+                  style: AppText.ui(
+                    12,
+                    FontWeight.w500,
+                    color: AppColors.muted,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
       const SizedBox(height: 16),
@@ -1110,8 +1131,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     final combinedPrefs = [
       ..._cats,
       ..._dietary,
-      if (_budget != null) '₱${_budget!.toInt()}',
-      if (_pace != null) _pace!,
+      '₱${_budget.toInt()}',
+      ?_pace,
       ..._accessibility,
     ];
 
@@ -1301,14 +1322,12 @@ class _SectionCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.child,
-    this.trailing,
   });
 
   final String emoji;
   final String title;
   final String subtitle;
   final Widget child;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1367,7 +1386,6 @@ class _SectionCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (trailing != null) ...[const SizedBox(width: 8), trailing!],
             ],
           ),
           const SizedBox(height: 18),

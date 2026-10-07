@@ -25,41 +25,41 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
     (
       name: 'Dennise',
       budget: '₱₱',
-      activities: ['Heritage', 'Photography'],
+      activities: ['Historical', 'Cultural'],
       dietary: 'None',
     ),
     (
       name: 'Ana',
       budget: '₱₱',
-      activities: ['Food', 'Heritage'],
+      activities: ['Food', 'Historical'],
       dietary: 'Halal',
     ),
     (
       name: 'Paola',
       budget: '₱',
-      activities: ['Cafés', 'Heritage'],
-      dietary: 'Vegetarian',
+      activities: ['Cafe', 'Cultural'],
+      dietary: 'Vegan',
     ),
     (
       name: 'Jewelle',
       budget: '₱₱',
-      activities: ['Heritage', 'Shopping'],
+      activities: ['Cultural', 'Nightlife'],
       dietary: 'None',
     ),
   ];
 
   BoxDecoration _card({Border? border}) => BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: border,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      );
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(14),
+    border: border,
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.05),
+        blurRadius: 6,
+        offset: const Offset(0, 1),
+      ),
+    ],
+  );
 
   Widget _pill(
     String t,
@@ -69,61 +69,60 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
     FontWeight w = FontWeight.w600,
     EdgeInsets? pad,
     bool mono = false,
-  }) =>
-      Container(
-        padding: pad ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(99),
-        ),
-        child: Text(
-          t,
-          style: mono
-              ? AppText.mono(size, w, color: fg)
-              : AppText.ui(size, w, color: fg),
-        ),
-      );
+  }) => Container(
+    padding: pad ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(99),
+    ),
+    child: Text(
+      t,
+      style: mono
+          ? AppText.mono(size, w, color: fg)
+          : AppText.ui(size, w, color: fg),
+    ),
+  );
 
   Widget _statusPill(bool ok, String done, String wait) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-        decoration: BoxDecoration(
-          color: ok ? AppColors.greenSoft : AppColors.amberSoft,
-          borderRadius: BorderRadius.circular(99),
-        ),
-        child: Text(
-          ok ? done : wait,
-          style: AppText.ui(
-            11,
-            FontWeight.w700,
-            color: ok ? AppColors.greenText : AppColors.amberText,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+    decoration: BoxDecoration(
+      color: ok ? AppColors.greenSoft : AppColors.amberSoft,
+      borderRadius: BorderRadius.circular(99),
+    ),
+    child: Text(
+      ok ? done : wait,
+      style: AppText.ui(
+        11,
+        FontWeight.w700,
+        color: ok ? AppColors.greenText : AppColors.amberText,
+      ),
+    ),
+  );
 
   Widget _consensusBox(String label, List<Widget> children) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: AppColors.bg,
-          borderRadius: BorderRadius.circular(10),
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+    decoration: BoxDecoration(
+      color: AppColors.bg,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: AppText.ui(
+            10,
+            FontWeight.w700,
+            color: AppColors.muted,
+            letterSpacing: 0.4,
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: AppText.ui(
-                10,
-                FontWeight.w700,
-                color: AppColors.muted,
-                letterSpacing: 0.4,
-              ),
-            ),
-            const SizedBox(height: 4),
-            ...children,
-          ],
-        ),
-      );
+        const SizedBox(height: 4),
+        ...children,
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -203,7 +202,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                     const SizedBox(height: 12),
                     _consensusBox('BUDGET CONSENSUS', [
                       Text(
-                        '₱400 – ₱750 / person',
+                        '₱₱ (Moderate Budget)',
                         style: AppText.ui(
                           12,
                           FontWeight.w700,
@@ -226,10 +225,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                         spacing: 6,
                         runSpacing: 4,
                         children: [
-                          for (final d in [
-                            'Halal',
-                            'Vegetarian option included',
-                          ])
+                          for (final d in ['Halal', 'Vegan option included'])
                             _pill(
                               '✓ $d',
                               const Color(0xFFDCFCE7),
@@ -245,16 +241,12 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                         runSpacing: 4,
                         children: [
                           _pill(
-                            'Heritage & Cultural Sightseeing',
+                            'Historical & Cultural',
                             AppColors.navy,
                             Colors.white,
                             w: FontWeight.w700,
                           ),
-                          _pill(
-                            'Cozy Cafe',
-                            AppColors.orangeSoft,
-                            AppColors.orange,
-                          ),
+                          _pill('Cafe', AppColors.orangeSoft, AppColors.orange),
                         ],
                       ),
                       const SizedBox(height: 3),
@@ -492,7 +484,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                                   Padding(
                                     padding: const EdgeInsets.only(top: 2),
                                     child: Text(
-                                      'Heritage • Food • ₱₱',
+                                      'Historical • Food • ₱₱',
                                       style: AppText.ui(
                                         11,
                                         FontWeight.w400,

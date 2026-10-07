@@ -25,7 +25,7 @@ class _GroupRecommendationsScreenState
     (
       id: 'p1',
       name: 'Intramuros Heritage Walking Tour',
-      category: 'Heritage',
+      category: 'Historical',
       rating: '4.9 ★',
       matchScore: '98%',
       price: '₱450 / person',
@@ -35,37 +35,37 @@ class _GroupRecommendationsScreenState
     (
       id: 'p2',
       name: 'Barbara\'s Heritage Restaurant',
-      category: 'Halal Food',
+      category: 'Food',
       rating: '4.7 ★',
       matchScore: '96%',
       price: '₱500 – ₱700 / person',
-      dietaryNote: 'Halal Certified & Vegetarian options',
+      dietaryNote: 'Halal Certified & Vegan options',
       bgColor: Color(0xFFFEF3C7),
     ),
     (
       id: 'p3',
       name: 'Escolta Heritage Cafe',
-      category: 'Cafés',
+      category: 'Cafe',
       rating: '4.8 ★',
       matchScore: '93%',
       price: '₱200 – ₱350 / person',
-      dietaryNote: 'Vegetarian snacks & specialty coffee',
+      dietaryNote: 'Vegan snacks & specialty coffee',
       bgColor: Color(0xFFFFEDD5),
     ),
   ];
 
   BoxDecoration _card({Border? border}) => BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: border,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      );
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(14),
+    border: border,
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.05),
+        blurRadius: 6,
+        offset: const Offset(0, 1),
+      ),
+    ],
+  );
 
   Widget _pill(
     String t,
@@ -74,18 +74,14 @@ class _GroupRecommendationsScreenState
     double size = 11,
     FontWeight w = FontWeight.w600,
     EdgeInsets? pad,
-  }) =>
-      Container(
-        padding: pad ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(99),
-        ),
-        child: Text(
-          t,
-          style: AppText.ui(size, w, color: fg),
-        ),
-      );
+  }) => Container(
+    padding: pad ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(99),
+    ),
+    child: Text(t, style: AppText.ui(size, w, color: fg)),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -106,9 +102,7 @@ class _GroupRecommendationsScreenState
                   children: [
                     Row(
                       children: [
-                        BackButtonTile(
-                          onTap: () => context.pop(),
-                        ),
+                        BackButtonTile(onTap: () => context.pop()),
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,38 +133,44 @@ class _GroupRecommendationsScreenState
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: ['All', 'Heritage', 'Halal Food', 'Cafés']
-                            .map((cat) {
-                          final isSelected = _selectedCategory == cat;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: FilterChip(
-                              label: Text(cat),
-                              selected: isSelected,
-                              onSelected: (_) {
-                                setState(() => _selectedCategory = cat);
-                              },
-                              selectedColor: AppColors.orangeSoft,
-                              checkmarkColor: AppColors.orange,
-                              labelStyle: AppText.ui(
-                                12,
-                                FontWeight.w700,
-                                color: isSelected
-                                    ? AppColors.orange
-                                    : AppColors.navy,
-                              ),
-                              backgroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                side: BorderSide(
-                                  color: isSelected
-                                      ? AppColors.orange
-                                      : AppColors.border,
+                        children:
+                            [
+                              'All',
+                              'Historical',
+                              'Cultural',
+                              'Food',
+                              'Cafe',
+                            ].map((cat) {
+                              final isSelected = _selectedCategory == cat;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: FilterChip(
+                                  label: Text(cat),
+                                  selected: isSelected,
+                                  onSelected: (_) {
+                                    setState(() => _selectedCategory = cat);
+                                  },
+                                  selectedColor: AppColors.orangeSoft,
+                                  checkmarkColor: AppColors.orange,
+                                  labelStyle: AppText.ui(
+                                    12,
+                                    FontWeight.w700,
+                                    color: isSelected
+                                        ? AppColors.orange
+                                        : AppColors.navy,
+                                  ),
+                                  backgroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                    side: BorderSide(
+                                      color: isSelected
+                                          ? AppColors.orange
+                                          : AppColors.border,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
+                              );
+                            }).toList(),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -254,10 +254,12 @@ class _GroupRecommendationsScreenState
                                       GestureDetector(
                                         onTap: () {
                                           setState(() {
-                                            if (_selectedPlaceIds
-                                                .contains(place.id)) {
-                                              _selectedPlaceIds
-                                                  .remove(place.id);
+                                            if (_selectedPlaceIds.contains(
+                                              place.id,
+                                            )) {
+                                              _selectedPlaceIds.remove(
+                                                place.id,
+                                              );
                                             } else {
                                               _selectedPlaceIds.add(place.id);
                                             }
@@ -269,15 +271,20 @@ class _GroupRecommendationsScreenState
                                             vertical: 6,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: _selectedPlaceIds
-                                                    .contains(place.id)
+                                            color:
+                                                _selectedPlaceIds.contains(
+                                                  place.id,
+                                                )
                                                 ? AppColors.greenSoft
                                                 : AppColors.bg,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                             border: Border.all(
-                                              color: _selectedPlaceIds
-                                                      .contains(place.id)
+                                              color:
+                                                  _selectedPlaceIds.contains(
+                                                    place.id,
+                                                  )
                                                   ? AppColors.greenText
                                                   : AppColors.border,
                                             ),
@@ -289,8 +296,10 @@ class _GroupRecommendationsScreenState
                                             style: AppText.ui(
                                               11,
                                               FontWeight.w700,
-                                              color: _selectedPlaceIds
-                                                      .contains(place.id)
+                                              color:
+                                                  _selectedPlaceIds.contains(
+                                                    place.id,
+                                                  )
                                                   ? AppColors.greenText
                                                   : AppColors.navy,
                                             ),
