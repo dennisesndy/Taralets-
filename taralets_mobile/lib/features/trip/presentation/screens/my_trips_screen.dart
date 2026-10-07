@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/router/app_routes.dart';
 import '../../../../core/constants/app_text.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/app_icons.dart';
@@ -31,10 +31,11 @@ class MyTripsScreen extends ConsumerWidget {
         ),
         data: (items) {
           Iterable<Trip> of(TripStatus s) => items.where((t) => t.status == s);
+          // `lobby` trips show as "Upcoming". Cancelled trips are hidden.
           final sections = [
             ('Active', of(TripStatus.active).toList()),
-            ('Upcoming', of(TripStatus.upcoming).toList()),
-            ('Completed', of(TripStatus.done).toList()),
+            ('Upcoming', of(TripStatus.lobby).toList()),
+            ('Completed', of(TripStatus.completed).toList()),
           ].where((s) => s.$2.isNotEmpty);
 
           return ListView(
@@ -78,6 +79,19 @@ class _TripCard extends StatelessWidget {
   const _TripCard({required this.trip});
   final Trip trip;
 
+  /// Lobby trips open the Group Lobby, active trips open the Active Trip.
+  void _open(BuildContext context) {
+    switch (trip.status) {
+      case TripStatus.lobby:
+        context.push(AppRoutes.tripLobby, extra: trip);
+      case TripStatus.active:
+        context.push(AppRoutes.activeTrip, extra: trip);
+      case TripStatus.completed:
+      case TripStatus.cancelled:
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final (accent, pillBg, pillFg, pillLabel) = switch (trip.status) {
@@ -87,114 +101,124 @@ class _TripCard extends StatelessWidget {
         AppColors.orange,
         'Active',
       ),
-      TripStatus.upcoming => (
+      TripStatus.lobby => (
         AppColors.navy,
         AppColors.blueSoft,
         AppColors.navy,
         'Upcoming',
       ),
-      TripStatus.done => (
+      TripStatus.completed => (
         AppColors.green,
         AppColors.greenSoft,
         AppColors.green,
         '✓ Done',
       ),
+      TripStatus.cancelled => (
+        AppColors.red,
+        AppColors.redSoft,
+        AppColors.red,
+        'Cancelled',
+      ),
     };
     final meta = AppText.ui(12, FontWeight.w400, color: AppColors.muted);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(width: 4, color: accent), // borderLeft: 4px solid
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            trip.title,
-                            style: AppText.ui(14, FontWeight.w700),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: pillBg,
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                          child: Text(
-                            pillLabel,
-                            style: AppText.ui(
-                              10,
-                              FontWeight.w700,
-                              color: pillFg,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            AppIcons.clock(),
-                            const SizedBox(width: 4),
-                            Text(trip.dateLabel, style: meta),
-                          ],
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            AppIcons.users(size: 12),
-                            const SizedBox(width: 4),
-                            Text('${trip.memberCount} members', style: meta),
-                          ],
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            AppIcons.pin(color: AppColors.muted, size: 16),
-                            const SizedBox(width: 4),
-                            Text(trip.meetup, style: meta),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _open(context),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 1),
             ),
           ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 4, color: accent), // borderLeft: 4px solid
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              trip.title,
+                              style: AppText.ui(14, FontWeight.w700),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: pillBg,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: Text(
+                              pillLabel,
+                              style: AppText.ui(
+                                10,
+                                FontWeight.w700,
+                                color: pillFg,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AppIcons.clock(),
+                              const SizedBox(width: 4),
+                              Text(trip.dateLabel, style: meta),
+                            ],
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AppIcons.users(size: 12),
+                              const SizedBox(width: 4),
+                              Text('${trip.memberCount} members', style: meta),
+                            ],
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AppIcons.pin(color: AppColors.muted, size: 16),
+                              const SizedBox(width: 4),
+                              Text(trip.meetup, style: meta),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

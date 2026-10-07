@@ -63,3 +63,27 @@ String formatTimeOfDay(TimeOfDay t) {
   final hr = t.hour > 12 ? t.hour - 12 : (t.hour == 0 ? 12 : t.hour);
   return '$hr:${t.minute.toString().padLeft(2, '0')} $ap';
 }
+
+TimeOfDay parseTimeOfDay(String timeString, {TimeOfDay? fallback}) {
+  final cleaned = timeString.trim();
+  final parts = cleaned.split(':');
+  if (parts.length >= 2) {
+    int hour = int.tryParse(parts[0]) ?? 0;
+    int minute = int.tryParse(parts[1].split(' ')[0]) ?? 0;
+    if (cleaned.toUpperCase().contains('PM') && hour < 12) {
+      hour += 12;
+    } else if (cleaned.toUpperCase().contains('AM') && hour == 12) {
+      hour = 0;
+    }
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+  return fallback ?? const TimeOfDay(hour: 0, minute: 0);
+}
+
+String formatMinutes(int minutes) {
+  if (minutes < 60) return '${minutes}m';
+  final hours = minutes ~/ 60;
+  final remainingMinutes = minutes % 60;
+  if (remainingMinutes == 0) return '${hours}h';
+  return '${hours}h ${remainingMinutes}m';
+}
