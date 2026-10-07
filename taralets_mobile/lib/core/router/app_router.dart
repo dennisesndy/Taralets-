@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/otp_screen.dart';
@@ -19,10 +18,12 @@ import '../../features/trip/presentation/screens/group_recommendations_screen.da
 import '../../features/trip/presentation/screens/join_trip_screen.dart';
 import '../../features/trip/presentation/screens/my_trips_screen.dart';
 import '../../features/trip/presentation/screens/trip_created_screen.dart';
+import '../../features/trip/presentation/screens/trip_lobby_screen.dart';
+import '../../features/trip/presentation/screens/active_trip_screen.dart';
+import '../../features/trip/presentation/screens/edit_trip_screen.dart';
 import '../../repositories/trip_repository.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
-
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -61,7 +62,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) =>
             _fadeSlide(state, const SplashScreen()),
       ),
-      
+
       GoRoute(
         path: AppRoutes.preferences,
         parentNavigatorKey: _rootNavigatorKey,
@@ -122,8 +123,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.login,
         parentNavigatorKey: _rootNavigatorKey,
-        pageBuilder: (context, state) =>
-            _fadeSlide(state, const LoginScreen()),
+        pageBuilder: (context, state) => _fadeSlide(state, const LoginScreen()),
       ),
       GoRoute(
         path: AppRoutes.register,
@@ -160,6 +160,34 @@ final routerProvider = Provider<GoRouter>((ref) {
             state.extra is Trip ? null : AppRoutes.home,
         builder: (context, state) =>
             TripCreatedScreen(trip: state.extra! as Trip),
+      ),
+      // Group Lobby: Full screen bago umalis ang grupo
+      GoRoute(
+        path: AppRoutes.tripLobby,
+        parentNavigatorKey: _rootNavigatorKey,
+        redirect: (context, state) =>
+            state.extra is Trip ? null : AppRoutes.trips,
+        builder: (context, state) =>
+            TripLobbyScreen(trip: state.extra! as Trip),
+      ),
+
+      // Edit Trip: Leader-only form (pops with updated Trip)
+      GoRoute(
+        path: AppRoutes.editTrip,
+        parentNavigatorKey: _rootNavigatorKey,
+        redirect: (context, state) =>
+            state.extra is Trip ? null : AppRoutes.trips,
+        builder: (context, state) => EditTripScreen(trip: state.extra! as Trip),
+      ),
+
+      // Active Trip: Live on-the-way group tracker & schedule
+      GoRoute(
+        path: AppRoutes.activeTrip,
+        parentNavigatorKey: _rootNavigatorKey,
+        redirect: (context, state) =>
+            state.extra is Trip ? null : AppRoutes.trips,
+        builder: (context, state) =>
+            ActiveTripScreen(trip: state.extra! as Trip),
       ),
       GoRoute(
         path: AppRoutes.groupPrefs,
