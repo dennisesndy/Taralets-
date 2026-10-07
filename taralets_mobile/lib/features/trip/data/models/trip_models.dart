@@ -3,13 +3,9 @@ import 'package:flutter/material.dart';
 /// Group preferences chosen in Create Trip step 4 (Figma "Group Preferences").
 class GroupPreferences {
   const GroupPreferences({
-    this.categories = const [
-      'Heritage & Culture',
-      'Food & Street Food',
-      'Budget-friendly',
-    ],
-    this.budget = '₱₱', // ₱ / ₱₱ / ₱₱₱
-    this.walking = 'Moderate', // Low / Moderate / A lot
+    this.categories = const ['Historical', 'Cultural', 'Food'],
+    this.budget = '₱₱', // ₱ / ₱₱ / ₱₱₱ (for consensus mock)
+    this.walking = 'Moderate', // Light Walking / Moderate / Walking Trip
   });
 
   final List<String> categories;
