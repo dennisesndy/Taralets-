@@ -17,6 +17,8 @@ class AppRoutes {
   // Auth Routes
   static const String login = '/login';
   static const String register = '/register';
+  static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
   static const String otp = '/otp';
   static const splash = '/splash';
   static const String preferences = '/preferences'; // Idinagdag

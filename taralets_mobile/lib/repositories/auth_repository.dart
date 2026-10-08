@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 
 // ---------------------------------------------------------------------------
 // Models
@@ -78,6 +79,9 @@ abstract class AuthRepository {
     required String password,
   });
 
+  Future<void> forgotPassword(String email);
+  Future<void> resetPassword(String email, String otp, String newPassword);
+
   /// GET /api/v1/auth/me
   Future<AuthUser> me();
 }
@@ -143,5 +147,47 @@ class MockAuthRepository implements AuthRepository {
     final user = _currentUser;
     if (user == null) throw const AuthException('You are not signed in.');
     return user;
+  }
+
+ @override
+  Future<void> forgotPassword(String email) async {
+    if (email.trim().isEmpty) {
+      throw const AuthException('Please enter a valid email address.');
+    }
+    try {
+      final dio = Dio();
+      // Binago papuntang 127.0.0.1 dahil Chrome/Web ang gamit mo
+      await dio.post(
+        'http://127.0.0.1:8000/api/v1/auth/forgot-password',
+        data: {'email': email.trim()},
+      );
+    } on DioException catch (e) {
+      throw AuthException(e.response?.data['detail'] ?? e.message ?? 'Failed to send OTP.');
+    } catch (e) {
+      throw AuthException('System error: $e');
+    }
+  }
+
+  @override
+  Future<void> resetPassword(String email, String otp, String newPassword) async {
+    if (otp.length != 6) throw const AuthException('OTP must be 6 digits.');
+    if (newPassword.length < 8) throw const AuthException('Password must be at least 8 characters.');
+
+    try {
+      final dio = Dio();
+      // Binago papuntang 127.0.0.1 dahil Chrome/Web ang gamit mo
+      await dio.post(
+        'http://127.0.0.1:8000/api/v1/auth/reset-password',
+        data: {
+          'email': email.trim(),
+          'otp_code': otp,
+          'new_password': newPassword
+        },
+      );
+    } on DioException catch (e) {
+      throw AuthException(e.response?.data['detail'] ?? e.message ?? 'Failed to reset password.');
+    } catch (e) {
+      throw AuthException('System error: $e');
+    }
   }
 }

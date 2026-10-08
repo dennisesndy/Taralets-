@@ -171,6 +171,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               textInputAction: TextInputAction.done,
                             ),
                             const SizedBox(height: 26),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: GestureDetector(
+                                onTap: () => context.push(AppRoutes.forgotPassword),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 12, bottom: 24),
+                                  child: Text(
+                                    'Forgot Password?',
+                                    style: AppText.ui(13, FontWeight.w700, color: AppColors.orange),
+                                  ),
+                                ),
+                              ),
+                            ),
                             TaraletsButton.orange(
                               label: 'Log In',
                               isLoading: _isLoading,

@@ -21,9 +21,12 @@ import '../../features/trip/presentation/screens/trip_created_screen.dart';
 import '../../features/trip/presentation/screens/trip_lobby_screen.dart';
 import '../../features/trip/presentation/screens/active_trip_screen.dart';
 import '../../features/trip/presentation/screens/edit_trip_screen.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../repositories/trip_repository.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
+
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -146,6 +149,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.joinTrip,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const JoinTripScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      // Idinagdag: Reset Password
+      GoRoute(
+        path: AppRoutes.resetPassword,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final email = state.extra as String? ?? '';
+          return ResetPasswordScreen(email: email);
+        },
       ),
       GoRoute(
         path: AppRoutes.createTrip,
