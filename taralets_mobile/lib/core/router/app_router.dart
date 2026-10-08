@@ -11,7 +11,8 @@ import '../../features/discover/presentation/screens/discover_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/itinerary/presentation/screens/itinerary_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
-import '../../features/profile/presentation/screens/preference_screen.dart'; // Idagdag sa itaas
+import '../../features/profile/presentation/screens/preference_screen.dart';
+import '../../features/profile/presentation/screens/member_trip_preferences_screen.dart';
 import '../../features/trip/presentation/screens/create_trip_screen.dart';
 import '../../features/trip/presentation/screens/group_prefs_screen.dart';
 import '../../features/trip/presentation/screens/group_recommendations_screen.dart';
@@ -26,7 +27,6 @@ import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../repositories/trip_repository.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
-
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -69,12 +69,26 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.preferences,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) {
-          final email = state.extra as String? ?? "";
-          return PreferenceScreen(email: email);
-        },
+        builder: (context, state) => const PreferenceScreen(),
       ),
 
+      GoRoute(
+        path: AppRoutes.tripPreferences,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final extra = state.extra;
+
+          if (extra is Map<String, dynamic>) {
+            return MemberTripPreferencesScreen(
+              tripId: extra['tripId'] as String?,
+              returnRoute: extra['returnRoute'] as String?,
+              returnExtra: extra['returnExtra'],
+            );
+          }
+
+          return const MemberTripPreferencesScreen();
+        },
+      ),
       // Main app: bottom navigation (Home, Discover, Trips, Itinerary, Profile).
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(navigationShell: shell),

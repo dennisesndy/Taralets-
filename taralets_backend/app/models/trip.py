@@ -9,7 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -43,6 +43,12 @@ class Trip(Base):
     spots_open = Column(Integer, default=0)
     on_way_count = Column(Integer, default=0)
 
+    group_preferences = Column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+
     # User.id is UUID, so this must also be UUID
     leader_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
 
@@ -71,3 +77,10 @@ class TripMember(Base):
     # Relationships
     trip = relationship("Trip", back_populates="members")
     user = relationship("User")
+
+    preferences = relationship(
+        "TripMemberPreference",
+        back_populates="trip_member",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )

@@ -21,6 +21,7 @@ class AppRoutes {
   static const String resetPassword = '/reset-password';
   static const String otp = '/otp';
   static const splash = '/splash';
-  static const String preferences = '/preferences'; // Idinagdag
+  static const String preferences = '/preferences';
+  static const String tripPreferences = '/trip-preferences';
   static const recommendations = '/group-recommendations';
 }

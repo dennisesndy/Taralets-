@@ -715,7 +715,23 @@ class _FoundStep extends ConsumerWidget {
           TaraletsButton.orange(
             label: 'Join This Trip →',
             isLoading: state.isLoading,
-            onPressed: ctrl.confirmJoin,
+            onPressed: () async {
+              await ctrl.confirmJoin();
+
+              if (!context.mounted) return;
+
+              final currentState = ref.read(joinTripControllerProvider);
+
+              if (currentState.phase == JoinPhase.joined) {
+                context.go(
+                  AppRoutes.tripPreferences,
+                  extra: {
+                    'tripId': currentState.trip!.id,
+                    'returnRoute': AppRoutes.trips,
+                  },
+                );
+              }
+            },
           ),
           const SizedBox(height: 10),
           TaraletsButton.ghost(label: 'Cancel', onPressed: ctrl.backToEnter),

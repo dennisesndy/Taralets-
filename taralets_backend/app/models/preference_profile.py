@@ -14,3 +14,4 @@ class PreferenceProfile(Base):
     max_budget: Mapped[float] = mapped_column(Float)
     preferred_pace: Mapped[str] = mapped_column(String(50))
     passenger_type: Mapped[str] = mapped_column(String(50))
+    accessibility_preferences: Mapped[list[str]] = mapped_column(ARRAY(String))

@@ -16,17 +16,25 @@ import '../../../../shared/widgets/taralets_button.dart';
 import '../../providers/preferences_provider.dart';
 import '../../data/profile_preferences_repository.dart';
 
-class PreferenceScreen extends ConsumerStatefulWidget {
+class MemberTripPreferencesScreen extends ConsumerStatefulWidget {
   final String? returnRoute;
   final Object? returnExtra;
+  final String? tripId;
 
-  const PreferenceScreen({super.key, this.returnRoute, this.returnExtra});
+  const MemberTripPreferencesScreen({
+    super.key,
+    this.tripId,
+    this.returnRoute,
+    this.returnExtra,
+  });
 
   @override
-  ConsumerState<PreferenceScreen> createState() => _PreferenceScreenState();
+  ConsumerState<MemberTripPreferencesScreen> createState() =>
+      _MemberTripPreferenceScreenState();
 }
 
-class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
+class _MemberTripPreferenceScreenState
+    extends ConsumerState<MemberTripPreferencesScreen>
     with SingleTickerProviderStateMixin {
   final List<String> _activityOptions = [
     "Accommodation",
@@ -49,6 +57,20 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
     'Vegan',
     'Budget-Friendly',
   ];
+
+  final List<String> _paceOptions = ['Fast', 'Moderate', 'Leisure'];
+
+  final List<String> _accessibilityOptions = [
+    'Good for children',
+    'Pet friendly',
+    'Wheelchair accessible',
+  ];
+
+  static const Map<String, String> _paceEmoji = {
+    'Fast': '🏃',
+    'Moderate': '👟',
+    'Leisure': '🚶',
+  };
 
   static const Map<String, String> _activityEmoji = {
     "Accommodation": '🏨',
@@ -74,6 +96,10 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
 
   final List<String> _selectedActivities = [];
   final List<String> _selectedDietary = [];
+  final List<String> _selectedAccessibility = [];
+
+  double _budget = 2500.0;
+  String? _pace;
 
   bool _isLoading = false;
   bool _tagError = false;
@@ -116,11 +142,20 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
           : _selectedDietary;
 
       // Gamit na ang bagong ProfilePreferencesRepository
+      if (widget.tripId == null) {
+        _toast('Trip information is missing');
+        return;
+      }
+
       await ref
           .read(profilePreferencesRepoProvider)
-          .savePreferences(
+          .saveTripPreferences(
+            tripId: widget.tripId!,
             activityTags: _selectedActivities,
             dietaryPreferences: dietaryToSave,
+            maxBudget: _budget,
+            preferredPace: _pace ?? 'Moderate',
+            accessibilityPreferences: _selectedAccessibility,
           );
 
       ref
@@ -286,6 +321,21 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
                     FadeSlideIn(
                       delay: const Duration(milliseconds: 450),
                       child: _dietarySection(),
+                    ),
+                    const SizedBox(height: 16),
+                    FadeSlideIn(
+                      delay: const Duration(milliseconds: 550),
+                      child: _budgetSection(),
+                    ),
+                    const SizedBox(height: 16),
+                    FadeSlideIn(
+                      delay: const Duration(milliseconds: 650),
+                      child: _paceSection(),
+                    ),
+                    const SizedBox(height: 16),
+                    FadeSlideIn(
+                      delay: const Duration(milliseconds: 750),
+                      child: _accessibilitySection(),
                     ),
                   ],
                 ),
@@ -460,6 +510,88 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
               ),
             )
             .toList(),
+      ),
+    );
+  }
+
+  Widget _budgetSection() {
+    return _SectionCard(
+      emoji: '💰',
+      title: 'Spending budget',
+      subtitle: 'How much are you willing to spend on this trip?',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '₱${_budget.toInt()}',
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          Slider(
+            value: _budget,
+            min: 1,
+            max: 10000,
+            divisions: 9999,
+            label: '₱${_budget.toInt()}',
+            onChanged: (value) {
+              setState(() => _budget = value);
+            },
+          ),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [Text('₱1'), Text('₱10,000')],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _paceSection() {
+    return _SectionCard(
+      emoji: '🚶',
+      title: 'Trip Pace',
+      subtitle: 'Choose your preferred pace for exploring.',
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: _paceOptions.map((pace) {
+          return _SelectChip(
+            label: pace,
+            emoji: _paceEmoji[pace] ?? '',
+            selected: _pace == pace,
+            onTap: () {
+              setState(() {
+                _pace = _pace == pace ? null : pace;
+              });
+            },
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _accessibilitySection() {
+    return _SectionCard(
+      emoji: '♿',
+      title: 'Accessibility',
+      subtitle: 'Select any features that matter to you.',
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: _accessibilityOptions.map((option) {
+          return _SelectChip(
+            label: option,
+            selected: _selectedAccessibility.contains(option),
+            onTap: () {
+              setState(() {
+                if (_selectedAccessibility.contains(option)) {
+                  _selectedAccessibility.remove(option);
+                } else {
+                  _selectedAccessibility.add(option);
+                }
+              });
+            },
+          );
+        }).toList(),
       ),
     );
   }

@@ -5,15 +5,23 @@ class GroupPreferences {
   const GroupPreferences({
     this.categories = const [],
     this.budget = '₱2500',
-    this.walking = 'Moderate', // Fast / Moderate / Leisure
-    this.accessibility =
-        const [], // Good for children / Pet friendly / Wheelchair accessible
+    this.walking = 'Moderate',
+    this.accessibility = const [],
   });
 
   final List<String> categories;
   final String budget;
   final String walking;
   final List<String> accessibility;
+
+  factory GroupPreferences.fromJson(Map<String, dynamic> json) {
+    return GroupPreferences(
+      categories: List<String>.from(json['categories'] ?? []),
+      budget: json['budget']?.toString() ?? '₱2500',
+      walking: json['walking']?.toString() ?? 'Moderate',
+      accessibility: List<String>.from(json['accessibility'] ?? []),
+    );
+  }
 
   GroupPreferences copyWith({
     List<String>? categories,

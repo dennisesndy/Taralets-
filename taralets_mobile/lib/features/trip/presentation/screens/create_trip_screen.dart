@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -114,6 +115,9 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   int _step = 1;
   bool _submitting = false;
   late final String _code = generateRoomCode();
+  String? _createdTripId;
+  Trip? _createdTrip;
+  Timer? _membersPollTimer;
 
   final _name = TextEditingController(text: '');
   final _desc = TextEditingController();
@@ -126,7 +130,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   bool _pinMoved = false;
 
   final _username = TextEditingController();
-  // Starts empty, no more simulated members
   final List<_Member> _members = [];
 
   late List<String> _cats;
@@ -142,7 +145,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     _cats = List.of(prefs.activityTags);
     _dietary = List.of(prefs.dietary);
 
-    // Automatically add the creator as the first member
     final user = ref
         .read(currentUserProvider)
         .maybeWhen(data: (u) => u, orElse: () => null);
@@ -153,11 +155,41 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
   @override
   void dispose() {
+    _membersPollTimer?.cancel();
     _name.dispose();
     _desc.dispose();
     _query.dispose();
     _username.dispose();
     super.dispose();
+  }
+
+  void _startPollingMembers() {
+    _membersPollTimer?.cancel();
+    _membersPollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (_createdTripId == null || !mounted || _step != 3) return;
+
+      try {
+        final updatedTrip = await ref
+            .read(tripRepositoryProvider)
+            .getTrip(_createdTripId!);
+
+        if (mounted && updatedTrip.members.isNotEmpty) {
+          setState(() {
+            _members.clear();
+            for (final m in updatedTrip.members) {
+              final displayName = m.name.isNotEmpty ? m.name : m.username;
+              _members.add(
+                _Member(
+                  displayName.isNotEmpty ? displayName : 'Member',
+                  m.isLeader ? 'Leader' : 'Member',
+                  true,
+                ),
+              );
+            }
+          });
+        }
+      } catch (_) {}
+    });
   }
 
   bool get _outOfBoundary {
@@ -170,48 +202,101 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     if (_step == 1) {
       context.canPop() ? context.pop() : context.go(AppRoutes.home);
     } else {
+      if (_step == 4) {
+        _startPollingMembers();
+      }
       setState(() => _step--);
     }
   }
 
-  void _next() {
+  Future<void> _next() async {
     if (_step == 2 && _outOfBoundary) return;
+
+    if (_step == 2 && _createdTrip == null) {
+      setState(() => _submitting = true);
+
+      try {
+        final p = _presets.firstWhere((p) => p.$1 == _selected);
+        final dto = CreateTripDto(
+          code: _code,
+          title: _name.text.trim().isEmpty
+              ? 'New Taralets Trip'
+              : _name.text.trim(),
+          description: _desc.text.trim(),
+          date: _date ?? DateTime.now(),
+          meetupTime: _meetupTime,
+          wrapUpTime: _wrapTime,
+          meetupName: _selected,
+          latitude: p.$2,
+          longitude: p.$3,
+          memberNames: _members.map((m) => m.name).toList(),
+          preferences: const GroupPreferences(
+            categories: [],
+            budget: '₱0',
+            walking: 'Not specified',
+          ),
+        );
+
+        final trip = await ref.read(tripRepositoryProvider).createTrip(dto);
+        _createdTrip = trip;
+        _createdTripId = trip.id;
+        ref.invalidate(myTripsProvider);
+        _startPollingMembers();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "Couldn't initialize room code. Try again. Error: $e",
+              ),
+            ),
+          );
+        }
+        setState(() => _submitting = false);
+        return;
+      }
+      setState(() => _submitting = false);
+    }
+
+    if (_step == 3) {
+      _membersPollTimer?.cancel();
+    }
+
     setState(() => _step++);
   }
 
   Future<void> _submit() async {
-    if (_submitting) return;
+    if (_submitting || _createdTripId == null) return;
     setState(() => _submitting = true);
-    final p = _presets.firstWhere((p) => p.$1 == _selected);
 
-    final dto = CreateTripDto(
-      code: _code,
-      title: _name.text.trim().isEmpty
-          ? 'New Taralets Trip'
-          : _name.text.trim(),
-      description: _desc.text.trim(),
-      date: _date ?? DateTime.now(),
-      meetupTime: _meetupTime,
-      wrapUpTime: _wrapTime,
-      meetupName: _selected,
-      latitude: p.$2,
-      longitude: p.$3,
-      memberNames: _members.map((m) => m.name).toList(),
-      preferences: GroupPreferences(
+    try {
+      final preferences = GroupPreferences(
         categories: [..._cats, ..._dietary, ..._accessibility],
         budget: '₱${_budget.toInt()}',
         walking: _pace ?? 'Not specified',
-      ),
-    );
-    try {
-      final trip = await ref.read(tripRepositoryProvider).createTrip(dto);
-      ref.invalidate(myTripsProvider);
-      if (mounted) context.go(AppRoutes.tripCreated, extra: trip);
-    } catch (_) {
+      );
+
+      await ref
+          .read(tripRepositoryProvider)
+          .updateGroupPreferences(_createdTripId!, preferences);
+
+      if (mounted) {
+        final trip = await ref
+            .read(tripRepositoryProvider)
+            .getTrip(_createdTripId!);
+
+        ref.invalidate(myTripsProvider);
+        if (mounted) {
+          context.go(AppRoutes.tripCreated, extra: trip);
+        }
+      }
+    } catch (e) {
       if (mounted) {
         setState(() => _submitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Couldn't create the trip. Try again.")),
+          const SnackBar(
+            content: Text("Couldn't save final preferences. Try again."),
+          ),
         );
       }
     }
@@ -266,6 +351,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ),
       3 => TaraletsButton.orange(
         label: 'Continue to Preferences →',
+        isLoading: _submitting,
         onPressed: _next,
       ),
       4 => TaraletsButton.orange(
@@ -787,19 +873,50 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             ),
             const SizedBox(width: 8),
             GestureDetector(
-              onTap: () {
+              onTap: () async {
                 final n = _username.text.trim();
+
                 if (n.isEmpty) return;
-                setState(() {
-                  _members.add(
-                    _Member(
-                      n[0].toUpperCase() + n.substring(1),
-                      'Member',
-                      false,
+
+                if (_createdTripId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Create the trip first before adding members.',
+                      ),
                     ),
                   );
-                  _username.clear();
-                });
+                  return;
+                }
+
+                try {
+                  await ref
+                      .read(tripRepositoryProvider)
+                      .inviteMember(_createdTripId!, n);
+
+                  if (!mounted) return;
+
+                  setState(() {
+                    _members.add(
+                      _Member(
+                        n[0].toUpperCase() + n.substring(1),
+                        'Member',
+                        false,
+                      ),
+                    );
+                    _username.clear();
+                  });
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('$n was added to the trip.')),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Unable to add $n.')));
+                }
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -910,7 +1027,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ),
       const SizedBox(height: 14),
 
-      // Activities
       _SectionCard(
         emoji: '🎯',
         title: 'What do you enjoy?',
@@ -938,7 +1054,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ),
       const SizedBox(height: 16),
 
-      // Dietary
       _SectionCard(
         emoji: '🍽️',
         title: 'Dietary & dining',
@@ -970,7 +1085,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ),
       const SizedBox(height: 16),
 
-      // Budget (Trip-specific Slider)
       _SectionCard(
         emoji: '💰',
         title: 'Spending budget',
@@ -1020,7 +1134,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ),
       const SizedBox(height: 16),
 
-      // Pace (Trip-specific)
       _SectionCard(
         emoji: '🚶',
         title: 'Trip Pace',
@@ -1036,7 +1149,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                   selected: _pace == p,
                   onTap: () => setState(() {
                     if (_pace == p) {
-                      _pace = null; // Unselect option
+                      _pace = null;
                     } else {
                       _pace = p;
                     }
@@ -1048,7 +1161,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ),
       const SizedBox(height: 16),
 
-      // Accessibility (Trip-specific)
       _SectionCard(
         emoji: '♿',
         title: 'Accessibility',

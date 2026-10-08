@@ -13,6 +13,8 @@ import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/taralets_text_field.dart';
 import '../../../../repositories/auth_repository.dart';
 import '../../../../repositories/repository_providers.dart';
+import '../../../profile/data/profile_preferences_repository.dart';
+import '../../../profile/providers/preferences_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -26,7 +28,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passCtrl = TextEditingController();
   bool _isLoading = false;
 
-  // Palitan ang laman ng _login() function sa file mo:
   Future<void> _login() async {
     final email = _emailCtrl.text.trim().toLowerCase();
     final password = _passCtrl.text;
@@ -44,9 +45,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           .read(authRepositoryProvider)
           .login(email: email, password: password);
 
-      // I-invalidate ang providers para ma-fetch ang bagong data pagpunta ng Home/Profile
       ref.invalidate(currentUserProvider);
       ref.invalidate(myTripsProvider);
+
+      // Load preferences agad pagka-login
+      try {
+        final prefs = await ref
+            .read(profilePreferencesRepoProvider)
+            .getPreferences();
+        if (prefs != null) {
+          ref
+              .read(userPreferencesProvider.notifier)
+              .setPreferences(
+                activityTags: List<String>.from(prefs['activity_tags'] ?? []),
+                dietary: List<String>.from(prefs['dietary_preferences'] ?? []),
+              );
+        }
+      } catch (e) {
+        debugPrint('Failed to load preferences: $e');
+      }
 
       if (mounted) context.go(AppRoutes.home);
     } on AuthException catch (e) {

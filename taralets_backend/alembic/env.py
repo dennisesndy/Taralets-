@@ -11,7 +11,9 @@ from alembic import context
 # 1. Idagdag ang mga imports na ito mula sa iyong app
 from app.core.config import settings
 from app.core.database import Base
-import app.models  # I-load ang mga tables na ginawa natin
+import app.models
+import app.models.preference_profile
+import app.models.trip_member_preference  # I-load ang mga tables na ginawa natin
 import sys
 import asyncio
 

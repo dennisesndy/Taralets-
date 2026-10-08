@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field
 from typing import List, Literal
 
 # Enforce exact matches for frontend consistency
@@ -14,9 +14,12 @@ PaceTag = Literal['Fast', 'Moderate', 'Leisure']
 AccessibilityTag = Literal['Good for children', 'Pet friendly', 'Wheelchair accessible']
 
 class PreferenceSetupRequest(BaseModel):
-    email: EmailStr
-    activity_tags: List[ActivityTag] = Field(min_length=2, description="Minimum of 2 tags required")
+    activity_tags: List[ActivityTag] = Field(
+        min_length=2,
+        description="Minimum of 2 tags required"
+    )
     dietary_preferences: List[DietaryTag]
     max_budget: float
     preferred_pace: PaceTag
     passenger_type: str
+    accessibility_preferences: List[AccessibilityTag] = []

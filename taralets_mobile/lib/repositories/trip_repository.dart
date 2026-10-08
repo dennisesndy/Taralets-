@@ -114,8 +114,8 @@ class Trip {
     code: json['code'] as String,
     title: json['title'] as String,
     status: TripStatus.values.byName(json['status'] as String),
-    dateLabel: json['date_label'] as String,
-    longDate: json['long_date'] as String,
+    dateLabel: json['date_label'] as String? ?? '',
+    longDate: json['long_date'] as String? ?? '',
     meetup: json['meetup'] as String,
     meetupFull: json['meetup_full'] as String,
     arrivalTarget: json['arrival_target'] as String,
@@ -296,40 +296,26 @@ class ApiTripRepository implements TripRepository {
 
   @override
   Future<GroupPreferences?> getGroupPreferences(String tripId) async {
-    try {
-      final res = await _dio.get(
-        '${ApiEndpoints.apiPrefix}/trips/$tripId/preferences',
-      );
-      return GroupPreferences(
-        categories: List<String>.from(res.data['categories']),
-        budget: res.data['budget'],
-        walking: res.data['walking'],
-      );
-    } on DioException {
-      return null;
-    }
+    final response = await _dio.get(
+      '${ApiEndpoints.apiPrefix}/trips/$tripId/preferences',
+    );
+
+    return GroupPreferences.fromJson(response.data);
   }
 
   @override
   Future<void> updateGroupPreferences(
     String tripId,
-    GroupPreferences prefs,
+    GroupPreferences preferences,
   ) async {
-    try {
-      await _dio.put(
-        '${ApiEndpoints.apiPrefix}/trips/$tripId/preferences',
-        data: {
-          'categories': prefs.categories,
-          'budget': prefs.budget,
-          'walking': prefs.walking,
-        },
-      );
-    } on DioException catch (e) {
-      throw TripException(
-        'UPDATE FAILED',
-        _handleError(e, 'Could not update preferences'),
-      );
-    }
+    await _dio.put(
+      '${ApiEndpoints.apiPrefix}/trips/$tripId/preferences',
+      data: {
+        'categories': preferences.categories,
+        'budget': preferences.budget,
+        'walking': preferences.walking,
+      },
+    );
   }
 
   @override
