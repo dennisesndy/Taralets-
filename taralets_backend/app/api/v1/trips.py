@@ -410,11 +410,104 @@ async def update_group_preferences(
             detail="You are not a member of this trip"
         )
 
+    # Keep the existing trip-level group preferences
     trip.group_preferences = {
         "categories": payload.categories,
         "budget": payload.budget,
         "walking": payload.walking,
     }
+
+    # Same preference options used in Create Trip
+    activity_options = {
+        "Accommodation",
+        "Cafe",
+        "Restaurant / Eatery",
+        "Museum",
+        "Church / Religious Site",
+        "Park / Plaza",
+        "Historical / Tourist Site",
+        "Shop / Retail",
+        "Health & Wellness",
+        "Entertainment",
+        "Recreation & Arts",
+        "Community & Events",
+    }
+
+    dietary_options = {
+        "None",
+        "Halal",
+        "Vegan",
+        "Budget-Friendly",
+    }
+
+    accessibility_options = {
+        "Good for children",
+        "Pet friendly",
+        "Wheelchair accessible",
+    }
+
+    # Separate the combined categories from Create Trip
+    activity_tags = [
+        tag for tag in payload.categories
+        if tag in activity_options
+    ]
+
+    dietary_preferences = [
+        tag for tag in payload.categories
+        if tag in dietary_options
+    ]
+
+    accessibility_preferences = [
+        tag for tag in payload.categories
+        if tag in accessibility_options
+    ]
+
+    if not dietary_preferences:
+        dietary_preferences = ["None"]
+
+    # Convert budget such as "₱2,500" into 2500.0
+    budget_text = (
+        str(payload.budget)
+        .replace("₱", "")
+        .replace(",", "")
+        .strip()
+    )
+
+    try:
+        max_budget = float(budget_text)
+    except ValueError:
+        max_budget = 2500.0
+
+    # Keep only the valid pace values
+    preferred_pace = payload.walking
+
+    if preferred_pace not in {"Fast", "Moderate", "Leisure"}:
+        preferred_pace = "Moderate"
+
+    # Check if the leader already has preferences for this trip
+    existing_preferences = await db.scalar(
+        select(TripMemberPreference).where(
+            TripMemberPreference.trip_member_id == member.id
+        )
+    )
+
+    if existing_preferences:
+        existing_preferences.activity_tags = activity_tags
+        existing_preferences.dietary_preferences = dietary_preferences
+        existing_preferences.max_budget = max_budget
+        existing_preferences.preferred_pace = preferred_pace
+        existing_preferences.accessibility_preferences = accessibility_preferences
+    else:
+        leader_preferences = TripMemberPreference(
+            trip_member_id=member.id,
+            activity_tags=activity_tags,
+            dietary_preferences=dietary_preferences,
+            max_budget=max_budget,
+            preferred_pace=preferred_pace,
+            accessibility_preferences=accessibility_preferences,
+        )
+
+        db.add(leader_preferences)
 
     await db.commit()
     await db.refresh(trip)

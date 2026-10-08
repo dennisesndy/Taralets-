@@ -98,25 +98,88 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
   );
 
   // Helper to dynamically calculate most popular preferences
-  Map<String, int> _summarizePreferences() {
-    Map<String, int> counts = {};
-    for (var member in widget.trip.members) {
-      for (var pref in member.preferences) {
-        counts[pref] = (counts[pref] ?? 0) + 1;
+  Map<String, Map<String, int>> _summarizePreferences() {
+    const activityOptions = {
+      'Accommodation',
+      'Cafe',
+      'Restaurant / Eatery',
+      'Museum',
+      'Church / Religious Site',
+      'Park / Plaza',
+      'Historical / Tourist Site',
+      'Shop / Retail',
+      'Health & Wellness',
+      'Entertainment',
+      'Recreation & Arts',
+      'Community & Events',
+    };
+
+    const dietaryOptions = {'None', 'Halal', 'Vegan', 'Budget-Friendly'};
+
+    const accessibilityOptions = {
+      'Good for children',
+      'Pet friendly',
+      'Wheelchair accessible',
+    };
+
+    const paceOptions = {'Fast', 'Moderate', 'Leisure'};
+
+    final activities = <String, int>{};
+    final dietary = <String, int>{};
+    final accessibility = <String, int>{};
+    final pace = <String, int>{};
+    final budget = <String, int>{};
+
+    for (final member in widget.trip.members) {
+      for (final pref in member.preferences) {
+        if (activityOptions.contains(pref)) {
+          activities[pref] = (activities[pref] ?? 0) + 1;
+        } else if (dietaryOptions.contains(pref)) {
+          dietary[pref] = (dietary[pref] ?? 0) + 1;
+        } else if (accessibilityOptions.contains(pref)) {
+          accessibility[pref] = (accessibility[pref] ?? 0) + 1;
+        } else if (paceOptions.contains(pref)) {
+          pace[pref] = (pace[pref] ?? 0) + 1;
+        } else if (pref.startsWith('₱')) {
+          budget[pref] = (budget[pref] ?? 0) + 1;
+        }
       }
     }
-    var entries = counts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return Map.fromEntries(entries);
+
+    void sortCounts(Map<String, int> map) {
+      final sorted = map.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+      map
+        ..clear()
+        ..addEntries(sorted);
+    }
+
+    sortCounts(activities);
+    sortCounts(dietary);
+    sortCounts(accessibility);
+    sortCounts(pace);
+    sortCounts(budget);
+
+    return {
+      'activities': activities,
+      'dietary': dietary,
+      'accessibility': accessibility,
+      'pace': pace,
+      'budget': budget,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
     final bool allConfirmed = widget.trip.everyoneReady;
-    final prefCounts = _summarizePreferences();
+    final prefSummary = _summarizePreferences();
 
-    // Grab top 3 tags safely
-    final topTags = prefCounts.keys.take(3).toList();
+    final activities = prefSummary['activities']!;
+    final dietary = prefSummary['dietary']!;
+    final accessibility = prefSummary['accessibility']!;
+    final pace = prefSummary['pace']!;
+    final budget = prefSummary['budget']!;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -178,10 +241,11 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                     ),
                     const SizedBox(height: 12),
 
+                    // Activities
                     _consensusBox('ACTIVITY & INTEREST FOCUS', [
-                      if (topTags.isEmpty)
+                      if (activities.isEmpty)
                         Text(
-                          "No preferences added yet",
+                          'No activity preferences added yet',
                           style: AppText.ui(
                             11,
                             FontWeight.w400,
@@ -193,12 +257,18 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                           spacing: 6,
                           runSpacing: 4,
                           children: [
-                            for (int i = 0; i < topTags.length; i++)
+                            for (final entry in activities.entries.take(3))
                               _pill(
-                                '${topTags[i]} (${prefCounts[topTags[i]]})',
-                                i == 0 ? AppColors.navy : AppColors.orangeSoft,
-                                i == 0 ? Colors.white : AppColors.orange,
-                                w: i == 0 ? FontWeight.w700 : FontWeight.w600,
+                                '${entry.key} (${entry.value})',
+                                entry == activities.entries.first
+                                    ? AppColors.navy
+                                    : AppColors.orangeSoft,
+                                entry == activities.entries.first
+                                    ? Colors.white
+                                    : AppColors.orange,
+                                w: entry == activities.entries.first
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
                               ),
                           ],
                         ),
@@ -214,6 +284,124 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                     ]),
 
                     const SizedBox(height: 10),
+
+                    // Dietary
+                    _consensusBox('DIETARY PREFERENCES', [
+                      if (dietary.isEmpty)
+                        Text(
+                          'No dietary preferences added yet',
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w400,
+                            color: AppColors.muted,
+                          ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (final entry in dietary.entries)
+                              _pill(
+                                '${entry.key} (${entry.value})',
+                                AppColors.orangeSoft,
+                                AppColors.orange,
+                                size: 10,
+                              ),
+                          ],
+                        ),
+                    ]),
+
+                    const SizedBox(height: 10),
+
+                    // Accessibility
+                    _consensusBox('ACCESSIBILITY', [
+                      if (accessibility.isEmpty)
+                        Text(
+                          'No accessibility preferences added yet',
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w400,
+                            color: AppColors.muted,
+                          ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (final entry in accessibility.entries)
+                              _pill(
+                                '${entry.key} (${entry.value})',
+                                AppColors.orangeSoft,
+                                AppColors.orange,
+                                size: 10,
+                              ),
+                          ],
+                        ),
+                    ]),
+
+                    const SizedBox(height: 10),
+
+                    // Pace
+                    _consensusBox('PREFERRED PACE', [
+                      if (pace.isEmpty)
+                        Text(
+                          'No pace preference added yet',
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w400,
+                            color: AppColors.muted,
+                          ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (final entry in pace.entries)
+                              _pill(
+                                '${entry.key} (${entry.value})',
+                                AppColors.orangeSoft,
+                                AppColors.orange,
+                                size: 10,
+                              ),
+                          ],
+                        ),
+                    ]),
+
+                    const SizedBox(height: 10),
+
+                    // Budget
+                    _consensusBox('BUDGET', [
+                      if (budget.isEmpty)
+                        Text(
+                          'No budget preferences added yet',
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w400,
+                            color: AppColors.muted,
+                          ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (final entry in budget.entries)
+                              _pill(
+                                '${entry.key} (${entry.value})',
+                                AppColors.orangeSoft,
+                                AppColors.orange,
+                                size: 10,
+                                mono: true,
+                              ),
+                          ],
+                        ),
+                    ]),
+
+                    const SizedBox(height: 10),
+
                     GestureDetector(
                       onTap: () =>
                           setState(() => _showBreakdown = !_showBreakdown),
@@ -248,6 +436,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                         ),
                       ),
                     ),
+
                     if (_showBreakdown) ...[
                       const SizedBox(height: 10),
                       for (final m in widget.trip.members) ...[
@@ -280,7 +469,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                                     const SizedBox(height: 3),
                                     if (m.preferences.isEmpty)
                                       Text(
-                                        "No preferences set",
+                                        'No preferences set',
                                         style: AppText.ui(
                                           10,
                                           FontWeight.w400,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,12 +33,51 @@ class TripLobbyScreen extends ConsumerStatefulWidget {
 
 class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   late Trip _trip = widget.trip;
+
+  Timer? _refreshTimer;
+  bool _refreshing = false;
   bool _toggling = false;
   bool _starting = false;
   String? _errorTitle;
   String? _errorMessage;
 
   TripRepository get _repo => ref.read(tripRepositoryProvider);
+
+  @override
+  void initState() {
+    super.initState();
+
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _refreshTrip(),
+    );
+  }
+
+  Future<void> _refreshTrip() async {
+    if (!mounted || _refreshing || _toggling || _starting) return;
+
+    _refreshing = true;
+
+    try {
+      final latestTrip = await _repo.getTrip(_trip.id);
+
+      if (!mounted) return;
+
+      setState(() {
+        _trip = latestTrip;
+      });
+    } on TripException {
+      // Keep the current trip data if a refresh temporarily fails.
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   void _snack(String text) {
     ScaffoldMessenger.of(context)
@@ -171,35 +211,42 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                       ),
                       const SizedBox(height: 12),
                     ],
+
                     if (isLeader) ...[
                       TaraletsButton.ghost(
                         label: 'Invite Member',
                         onPressed: me == null ? null : () => _invite(me),
                       ),
                       const SizedBox(height: 10),
-                      Opacity(
-                        opacity: _trip.everyoneReady ? 1 : 0.7,
-                        child: TaraletsButton.orange(
-                          label: _trip.everyoneReady
-                              ? 'Start Trip →'
-                              : 'Waiting... ${_trip.readyCount}/${_trip.memberCount} ready',
-                          isLoading: _starting,
-                          onPressed: _trip.everyoneReady ? _start : null,
-                        ),
+                    ],
+                    if (_trip.everyoneReady) ...[
+                      TaraletsButton.orange(
+                        label: 'Find Places →',
+                        onPressed: () {
+                          context.push(AppRoutes.recommendations);
+                        },
                       ),
-                    ] else if (myMember != null && me != null)
-                      myMember.isReady
-                          ? TaraletsButton.ghost(
-                              label: 'Mark as Not Ready',
-                              onPressed: _toggling
-                                  ? null
-                                  : () => _toggleReady(me),
-                            )
-                          : TaraletsButton.orange(
-                              label: "I'm Ready ✓",
-                              isLoading: _toggling,
-                              onPressed: () => _toggleReady(me),
-                            ),
+                    ] else ...[
+                      TaraletsButton.orange(
+                        label:
+                            'Waiting... ${_trip.readyCount}/${_trip.memberCount} ready',
+                        onPressed: null,
+                      ),
+                    ],
+                    if (!isLeader && myMember != null && me != null) ...[
+                      const SizedBox(height: 10),
+                      if (myMember.isReady)
+                        TaraletsButton.ghost(
+                          label: 'Mark as Not Ready',
+                          onPressed: _toggling ? null : () => _toggleReady(me),
+                        )
+                      else
+                        TaraletsButton.orange(
+                          label: "I'm Ready ✓",
+                          isLoading: _toggling,
+                          onPressed: _toggling ? null : () => _toggleReady(me),
+                        ),
+                    ],
                   ],
                 ),
               ),
