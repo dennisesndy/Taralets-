@@ -52,10 +52,24 @@ class JoinTripController extends Notifier<JoinTripState> {
     state = JoinTripState(phase: JoinPhase.found, trip: trip, isLoading: true);
     try {
       await ref.read(tripRepositoryProvider).joinTrip(trip);
+      // Ensure the home page trip list updates dynamically
       ref.invalidate(myTripsProvider);
       state = JoinTripState(phase: JoinPhase.joined, trip: trip);
+    } on TripException catch (e) {
+      // Masalo ang errors mula sa API tulad ng "Already a member"
+      state = JoinTripState(
+        phase: JoinPhase.found,
+        trip: trip,
+        errorTitle: e.title,
+        errorMessage: e.message,
+      );
     } catch (_) {
-      state = JoinTripState(phase: JoinPhase.found, trip: trip);
+      state = JoinTripState(
+        phase: JoinPhase.found,
+        trip: trip,
+        errorTitle: 'Join Failed',
+        errorMessage: 'Unable to join the trip. Please try again.',
+      );
     }
   }
 

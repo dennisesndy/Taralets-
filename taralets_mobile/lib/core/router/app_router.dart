@@ -209,7 +209,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.groupPrefs,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const GroupPrefsScreen(),
+        redirect: (context, state) =>
+            state.extra is Trip ? null : AppRoutes.trips,
+        builder: (context, state) =>
+            GroupPrefsScreen(trip: state.extra! as Trip),
       ),
       GoRoute(
         path: AppRoutes.recommendations,

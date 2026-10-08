@@ -4,26 +4,35 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
+import '../../../../core/services/secure_storage_service.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
-  late final AnimationController _intro =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..forward();
-  late final AnimationController _loop =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..repeat();
-  late final Animation<double> _logoScale =
-      CurvedAnimation(parent: _intro, curve: Curves.elasticOut);
+class _SplashScreenState extends ConsumerState<SplashScreen>
+    with TickerProviderStateMixin {
+  late final AnimationController _intro = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..forward();
+  late final AnimationController _loop = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  )..repeat();
+  late final Animation<double> _logoScale = CurvedAnimation(
+    parent: _intro,
+    curve: Curves.elasticOut,
+  );
   Timer? _timer;
 
   @override
@@ -32,10 +41,20 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     _timer = Timer(const Duration(milliseconds: 2800), _goNext);
   }
 
-  void _goNext() {
+  Future<void> _goNext() async {
     if (!mounted) return;
-    // TODO: kapag may saved token na, i-redirect sa AppRoutes.home.
-    context.go(AppRoutes.login);
+
+    // I-check kung may saved na token
+    final storage = ref.read(secureStorageProvider);
+    final token = await storage.getToken();
+
+    if (!mounted) return;
+
+    if (token != null && token.isNotEmpty) {
+      context.go(AppRoutes.home);
+    } else {
+      context.go(AppRoutes.login);
+    }
   }
 
   @override
@@ -104,7 +123,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                                 ),
                               ],
                             ),
-                            child: const Text('✈️', style: TextStyle(fontSize: 56)),
+                            child: const Text(
+                              '✈️',
+                              style: TextStyle(fontSize: 56),
+                            ),
                           ),
                         ),
                       ],
@@ -115,7 +137,11 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                     delay: const Duration(milliseconds: 500),
                     child: Text(
                       'Taralets',
-                      style: AppText.ui(40, FontWeight.w900, color: Colors.white),
+                      style: AppText.ui(
+                        40,
+                        FontWeight.w900,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -123,7 +149,11 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                     delay: const Duration(milliseconds: 750),
                     child: Text(
                       'Plan trips. Travel together.',
-                      style: AppText.ui(14, FontWeight.w500, color: Colors.white70),
+                      style: AppText.ui(
+                        14,
+                        FontWeight.w500,
+                        color: Colors.white70,
+                      ),
                     ),
                   ),
                 ],

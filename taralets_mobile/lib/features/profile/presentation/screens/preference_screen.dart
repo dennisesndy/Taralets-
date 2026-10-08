@@ -28,13 +28,20 @@ class PreferenceScreen extends ConsumerStatefulWidget {
 class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
     with SingleTickerProviderStateMixin {
   final List<String> _activityOptions = [
-    'Cultural',
-    'Historical',
-    'Food',
-    'Cafe',
-    'Nature',
-    'Nightlife',
+    "Accommodation",
+    "Cafe",
+    "Restaurant / Eatery",
+    "Museum",
+    "Church / Religious Site",
+    "Park / Plaza",
+    "Historical / Tourist Site",
+    "Shop / Retail",
+    "Health & Wellness",
+    "Entertainment",
+    "Recreation & Arts",
+    "Community & Events",
   ];
+
   final List<String> _dietaryOptions = [
     'None',
     'Halal',
@@ -43,13 +50,20 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
   ];
 
   static const Map<String, String> _activityEmoji = {
-    'Cultural': '🎭',
-    'Historical': '🏛️',
-    'Food': '🍜',
-    'Cafe': '☕',
-    'Nature': '🌿',
-    'Nightlife': '🌃',
+    "Accommodation": '🏨',
+    "Cafe": '☕',
+    "Restaurant / Eatery": '🍽️',
+    "Museum": '🏛️',
+    "Church / Religious Site": '⛪',
+    "Park / Plaza": '🌳',
+    "Historical / Tourist Site": '🗺️',
+    "Shop / Retail": '🛍️',
+    "Health & Wellness": '💆',
+    "Entertainment": '🎭',
+    "Recreation & Arts": '🎨',
+    "Community & Events": '🎪',
   };
+
   static const Map<String, String> _dietaryEmoji = {
     'None': '🍽️',
     'Halal': '🥙',
@@ -113,7 +127,6 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
         },
       );
 
-      // Save defaults to global provider for Create Trip screen
       ref
           .read(userPreferencesProvider.notifier)
           .setPreferences(

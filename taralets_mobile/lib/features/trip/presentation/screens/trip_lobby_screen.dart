@@ -159,7 +159,10 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                     const SizedBox(height: 14),
                     _MembersCard(trip: _trip, meId: me?.id),
                     const SizedBox(height: 14),
-                    _PrefsLink(onTap: () => context.push(AppRoutes.groupPrefs)),
+                    _PrefsLink(
+                      onTap: () =>
+                          context.push(AppRoutes.groupPrefs, extra: _trip),
+                    ),
                     const SizedBox(height: 16),
                     if (_errorTitle != null) ...[
                       ErrorNote(

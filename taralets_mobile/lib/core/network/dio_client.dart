@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api_endpoints.dart';
+import '../services/secure_storage_service.dart';
 
-/// Shared Dio instance. Real repositories will read this provider.
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
@@ -17,8 +17,13 @@ final dioProvider = Provider<Dio>((ref) {
 
   dio.interceptors.add(
     InterceptorsWrapper(
-      onRequest: (options, handler) {
-        // TODO: attach `Authorization: Bearer <token>` once login is wired up.
+      onRequest: (options, handler) async {
+        final storage = ref.read(secureStorageProvider);
+        final token = await storage.getToken();
+
+        if (token != null && token.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
         handler.next(options);
       },
     ),

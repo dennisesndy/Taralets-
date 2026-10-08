@@ -53,38 +53,49 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     ('Use my current location', GeoBoundary.defaultLat, GeoBoundary.defaultLng),
   ];
 
-  // Options mapped identically to Preference Screen to ensure proper loading
   final List<String> _activityOptions = [
-    'Cultural',
-    'Historical',
-    'Food',
-    'Cafe',
-    'Nature',
-    'Nightlife',
+    "Accommodation",
+    "Cafe",
+    "Restaurant / Eatery",
+    "Museum",
+    "Church / Religious Site",
+    "Park / Plaza",
+    "Historical / Tourist Site",
+    "Shop / Retail",
+    "Health & Wellness",
+    "Entertainment",
+    "Recreation & Arts",
+    "Community & Events",
   ];
+
   final List<String> _dietaryOptions = [
     'None',
     'Halal',
     'Vegan',
     'Budget-Friendly',
   ];
-  final List<String> _paceOptions = [
-    'Light Walking',
-    'Moderate',
-    'Walking Trip',
-  ];
+
+  final List<String> _paceOptions = ['Fast', 'Moderate', 'Leisure'];
+
   final List<String> _accessibilityOptions = [
-    'Pet Friendly',
-    'Wheelchair Accessible',
+    'Good for children',
+    'Pet friendly',
+    'Wheelchair accessible',
   ];
 
   static const Map<String, String> _activityEmoji = {
-    'Cultural': '🎭',
-    'Historical': '🏛️',
-    'Food': '🍜',
-    'Cafe': '☕',
-    'Nature': '🌿',
-    'Nightlife': '🌃',
+    "Accommodation": '🏨',
+    "Cafe": '☕',
+    "Restaurant / Eatery": '🍽️',
+    "Museum": '🏛️',
+    "Church / Religious Site": '⛪',
+    "Park / Plaza": '🌳',
+    "Historical / Tourist Site": '🗺️',
+    "Shop / Retail": '🛍️',
+    "Health & Wellness": '💆',
+    "Entertainment": '🎭',
+    "Recreation & Arts": '🎨',
+    "Community & Events": '🎪',
   };
 
   static const Map<String, String> _dietaryEmoji = {
@@ -95,41 +106,31 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   };
 
   static const Map<String, String> _paceEmoji = {
-    'Light Walking': '🚶',
+    'Fast': '🏃',
     'Moderate': '👟',
-    'Walking Trip': '🎒',
+    'Leisure': '🚶',
   };
 
   int _step = 1;
   bool _submitting = false;
   late final String _code = generateRoomCode();
 
-  // Step 1
-  final _name = TextEditingController(text: 'Intramuros & Binondo Day Out');
+  final _name = TextEditingController(text: '');
   final _desc = TextEditingController();
   DateTime? _date;
   TimeOfDay _meetupTime = const TimeOfDay(hour: 14, minute: 30);
   TimeOfDay _wrapTime = const TimeOfDay(hour: 20, minute: 0);
 
-  // Step 2
   String _selected = 'Plaza Roma, Intramuros';
   final _query = TextEditingController();
   bool _pinMoved = false;
 
-  // Step 3
   final _username = TextEditingController();
-  final List<_Member> _members = [
-    _Member('Dennise', 'Leader', true),
-    _Member('Ana', 'Member', true),
-    _Member('Paola', 'Member', false),
-    _Member('Jewelle', 'Member', true),
-  ];
-  bool _simulated = false;
+  // Starts empty, no more simulated members
+  final List<_Member> _members = [];
 
-  // Step 4: Trip-specific Preferences
   late List<String> _cats;
   late List<String> _dietary;
-
   double _budget = 2500.0;
   String? _pace;
   final List<String> _accessibility = [];
@@ -137,11 +138,17 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   @override
   void initState() {
     super.initState();
-    // Pull the exact default array from global preferences.
-    // If empty in defaults, it remains empty here.
     final prefs = ref.read(userPreferencesProvider);
     _cats = List.of(prefs.activityTags);
     _dietary = List.of(prefs.dietary);
+
+    // Automatically add the creator as the first member
+    final user = ref
+        .read(currentUserProvider)
+        .maybeWhen(data: (u) => u, orElse: () => null);
+    if (user != null) {
+      _members.add(_Member(user.firstName, 'Leader', true));
+    }
   }
 
   @override
@@ -180,7 +187,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     final dto = CreateTripDto(
       code: _code,
       title: _name.text.trim().isEmpty
-          ? 'Intramuros & Binondo Day Out'
+          ? 'New Taralets Trip'
           : _name.text.trim(),
       description: _desc.text.trim(),
       date: _date ?? DateTime.now(),
@@ -380,7 +387,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             const SizedBox(height: 16),
             TaraletsField(
               label: 'Trip Name',
-              hint: 'Intramuros & Binondo Day Out',
+              hint: 'My Gala',
               controller: _name,
             ),
             const SizedBox(height: 16),
@@ -403,9 +410,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                       border: Border.all(color: AppColors.border, width: 1.5),
                     ),
                     child: Text(
-                      _date == null
-                          ? 'August 29, 2026'
-                          : formatInputDate(_date!),
+                      _date == null ? 'Select Date' : formatInputDate(_date!),
                       style: AppText.ui(
                         14,
                         FontWeight.w400,
@@ -462,7 +467,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             const SizedBox(height: 16),
             TaraletsField(
               label: 'Description (optional)',
-              hint: 'Weekend food and heritage trip with friends.',
+              hint: 'Weekend trip details...',
               controller: _desc,
               height: 70,
             ),
@@ -884,57 +889,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               ),
               if (m != _members.last) const SizedBox(height: 10),
             ],
-            if (!_simulated)
-              GestureDetector(
-                onTap: () => setState(() {
-                  for (final m in _members) {
-                    if (m.name == 'Paola') m.joined = true;
-                  }
-                  _simulated = true;
-                }),
-                child: Container(
-                  margin: const EdgeInsets.only(top: 14),
-                  padding: const EdgeInsets.all(10),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.border, width: 1.5),
-                  ),
-                  child: Text(
-                    '▶ Simulate: Paola joins the trip',
-                    style: AppText.ui(
-                      13,
-                      FontWeight.w600,
-                      color: AppColors.muted,
-                    ),
-                  ),
-                ),
-              )
-            else
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.greenSoft,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    const Text('🎉', style: TextStyle(fontSize: 16)),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Paola joined the trip!',
-                      style: AppText.ui(
-                        12,
-                        FontWeight.w700,
-                        color: AppColors.greenText,
-                      ),
-                    ),
-                  ],
-                ),
+            if (_members.isEmpty)
+              Text(
+                "Share the code to start adding members.",
+                style: AppText.ui(13, FontWeight.w400, color: AppColors.muted),
               ),
           ],
         ),
@@ -1120,7 +1078,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
   List<Widget> _step5() {
     final title = _name.text.trim().isEmpty
-        ? 'Intramuros & Binondo Day Out'
+        ? 'New Taralets Trip'
         : _name.text.trim();
     final rows = [
       ('📍', 'Meetup', _selected),
@@ -1281,13 +1239,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   }
 }
 
-// =============================================================================
-// Reusable Component Helpers (Mirrored from Preference Screen)
-// =============================================================================
-
 class _Pressable extends StatefulWidget {
   const _Pressable({required this.onTap, required this.child});
-
   final VoidCallback onTap;
   final Widget child;
 
@@ -1297,7 +1250,6 @@ class _Pressable extends StatefulWidget {
 
 class _PressableState extends State<_Pressable> {
   bool _down = false;
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(

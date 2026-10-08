@@ -36,7 +36,30 @@ class MyTripsScreen extends ConsumerWidget {
             ('Active', of(TripStatus.active).toList()),
             ('Upcoming', of(TripStatus.lobby).toList()),
             ('Completed', of(TripStatus.completed).toList()),
-          ].where((s) => s.$2.isNotEmpty);
+          ].where((s) => s.$2.isNotEmpty).toList(); // I-cast to list
+
+          if (sections.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'No trips yet.',
+                    style: AppText.ui(
+                      16,
+                      FontWeight.w600,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TaraletsButton.orange(
+                    label: '+ Create New Trip',
+                    onPressed: () => context.push(AppRoutes.createTrip),
+                  ),
+                ],
+              ),
+            );
+          }
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),

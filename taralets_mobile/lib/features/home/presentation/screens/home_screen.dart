@@ -39,9 +39,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Kunin ang tunay na account details mula sa user
     final user = ref
         .watch(currentUserProvider)
         .maybeWhen(data: (u) => u, orElse: () => null);
+
+    // Dynamic fallback para sa pangalan
+    final String displayName =
+        user?.firstName != null && user!.firstName.isNotEmpty
+        ? user.firstName
+        : 'User';
 
     final trips = ref
         .watch(myTripsProvider)
@@ -87,7 +94,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                             ),
                             Text(
-                              '${user?.firstName ?? 'Dennise'}! 👋',
+                              '$displayName! 👋',
                               style: AppText.ui(
                                 20,
                                 FontWeight.w800,
@@ -108,10 +115,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       GestureDetector(
                         onTap: () => context.go(AppRoutes.profile),
-                        child: Avatar(
-                          name: user?.firstName ?? 'Dennise',
-                          size: 42,
-                        ),
+                        child: Avatar(name: displayName, size: 42),
                       ),
                     ],
                   ),

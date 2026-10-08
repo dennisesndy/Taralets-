@@ -4,49 +4,22 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 
-/// Figma `GroupPrefs` ("View Trip" after creating): consensus card and
-/// per-member preference status. Replaces the invented "Trip Lobby" screen.
+/// Dynamic GroupPrefs screen reflecting live user data
 class GroupPrefsScreen extends StatefulWidget {
-  const GroupPrefsScreen({super.key});
+  final Trip trip;
+  const GroupPrefsScreen({super.key, required this.trip});
 
   @override
   State<GroupPrefsScreen> createState() => _GroupPrefsScreenState();
 }
 
 class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
-  bool _allConfirmed = false;
   bool _showBreakdown = false;
-
-  static const _members = [
-    (
-      name: 'Dennise',
-      budget: '₱₱',
-      activities: ['Historical', 'Cultural'],
-      dietary: 'None',
-    ),
-    (
-      name: 'Ana',
-      budget: '₱₱',
-      activities: ['Food', 'Historical'],
-      dietary: 'Halal',
-    ),
-    (
-      name: 'Paola',
-      budget: '₱',
-      activities: ['Cafe', 'Cultural'],
-      dietary: 'Vegan',
-    ),
-    (
-      name: 'Jewelle',
-      budget: '₱₱',
-      activities: ['Cultural', 'Nightlife'],
-      dietary: 'None',
-    ),
-  ];
 
   BoxDecoration _card({Border? border}) => BoxDecoration(
     color: Colors.white,
@@ -124,8 +97,27 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
     ),
   );
 
+  // Helper to dynamically calculate most popular preferences
+  Map<String, int> _summarizePreferences() {
+    Map<String, int> counts = {};
+    for (var member in widget.trip.members) {
+      for (var pref in member.preferences) {
+        counts[pref] = (counts[pref] ?? 0) + 1;
+      }
+    }
+    var entries = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return Map.fromEntries(entries);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool allConfirmed = widget.trip.everyoneReady;
+    final prefCounts = _summarizePreferences();
+
+    // Grab top 3 tags safely
+    final topTags = prefCounts.keys.take(3).toList();
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -136,7 +128,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
             children: [
               Row(
                 children: [
-                  BackButtonTile(onTap: () => context.go(AppRoutes.trips)),
+                  BackButtonTile(onTap: () => context.pop()),
                   const SizedBox(width: 12),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,82 +168,43 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Group Consensus',
-                          style: AppText.ui(
-                            13,
-                            FontWeight.w800,
-                            color: AppColors.navy,
-                          ),
-                        ),
-                        _pill(
-                          '95% Match',
-                          AppColors.greenSoft,
-                          AppColors.greenText,
-                          w: FontWeight.w800,
-                          pad: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 3,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      'Group Consensus',
+                      style: AppText.ui(
+                        13,
+                        FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    _consensusBox('BUDGET CONSENSUS', [
-                      Text(
-                        '₱₱ (Moderate Budget)',
-                        style: AppText.ui(
-                          12,
-                          FontWeight.w700,
-                          color: AppColors.navy,
-                        ),
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        'Resolved across 4 members',
-                        style: AppText.ui(
-                          10,
-                          FontWeight.w400,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                    ]),
-                    const SizedBox(height: 8),
-                    _consensusBox('DIETARY & DINING CONSENSUS', [
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          for (final d in ['Halal', 'Vegan option included'])
-                            _pill(
-                              '✓ $d',
-                              const Color(0xFFDCFCE7),
-                              const Color(0xFF166534),
-                            ),
-                        ],
-                      ),
-                    ]),
-                    const SizedBox(height: 8),
-                    _consensusBox('ACTIVITY FOCUS', [
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          _pill(
-                            'Historical & Cultural',
-                            AppColors.navy,
-                            Colors.white,
-                            w: FontWeight.w700,
+
+                    _consensusBox('ACTIVITY & INTEREST FOCUS', [
+                      if (topTags.isEmpty)
+                        Text(
+                          "No preferences added yet",
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w400,
+                            color: AppColors.muted,
                           ),
-                          _pill('Cafe', AppColors.orangeSoft, AppColors.orange),
-                        ],
-                      ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (int i = 0; i < topTags.length; i++)
+                              _pill(
+                                '${topTags[i]} (${prefCounts[topTags[i]]})',
+                                i == 0 ? AppColors.navy : AppColors.orangeSoft,
+                                i == 0 ? Colors.white : AppColors.orange,
+                                w: i == 0 ? FontWeight.w700 : FontWeight.w600,
+                              ),
+                          ],
+                        ),
                       const SizedBox(height: 3),
                       Text(
-                        'Primary · Secondary',
+                        'Based on member selections',
                         style: AppText.ui(
                           10,
                           FontWeight.w400,
@@ -259,70 +212,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                         ),
                       ),
                     ]),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.blueSoft,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Group Match Score',
-                                style: AppText.ui(
-                                  11,
-                                  FontWeight.w700,
-                                  color: const Color(0xFF1E40AF),
-                                ),
-                              ),
-                              Text(
-                                '95%',
-                                style: AppText.mono(
-                                  13,
-                                  FontWeight.w800,
-                                  color: const Color(0xFF1E40AF),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Container(
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFBFDBFE),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            alignment: Alignment.centerLeft,
-                            child: FractionallySizedBox(
-                              widthFactor: 0.95,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF3B82F6),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "Based on everyone's preferences",
-                            style: AppText.ui(
-                              10,
-                              FontWeight.w400,
-                              color: const Color(0xFF3B82F6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+
                     const SizedBox(height: 10),
                     GestureDetector(
                       onTap: () =>
@@ -360,7 +250,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                     ),
                     if (_showBreakdown) ...[
                       const SizedBox(height: 10),
-                      for (final m in _members) ...[
+                      for (final m in widget.trip.members) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -388,46 +278,33 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 3),
-                                    Wrap(
-                                      spacing: 4,
-                                      runSpacing: 4,
-                                      children: [
-                                        _pill(
-                                          m.budget,
-                                          AppColors.greenSoft,
-                                          AppColors.greenText,
-                                          size: 10,
-                                          w: FontWeight.w700,
-                                          mono: true,
-                                          pad: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 1,
-                                          ),
+                                    if (m.preferences.isEmpty)
+                                      Text(
+                                        "No preferences set",
+                                        style: AppText.ui(
+                                          10,
+                                          FontWeight.w400,
+                                          color: AppColors.muted,
                                         ),
-                                        for (final a in m.activities)
-                                          _pill(
-                                            a,
-                                            AppColors.orangeSoft,
-                                            AppColors.orange,
-                                            size: 10,
-                                            pad: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 1,
+                                      )
+                                    else
+                                      Wrap(
+                                        spacing: 4,
+                                        runSpacing: 4,
+                                        children: [
+                                          for (final a in m.preferences)
+                                            _pill(
+                                              a,
+                                              AppColors.orangeSoft,
+                                              AppColors.orange,
+                                              size: 10,
+                                              pad: const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                                vertical: 1,
+                                              ),
                                             ),
-                                          ),
-                                        if (m.dietary != 'None')
-                                          _pill(
-                                            m.dietary,
-                                            const Color(0xFFDCFCE7),
-                                            const Color(0xFF166534),
-                                            size: 10,
-                                            pad: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 1,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
+                                        ],
+                                      ),
                                   ],
                                 ),
                               ),
@@ -457,7 +334,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                           style: AppText.ui(13, FontWeight.w700),
                         ),
                         Text(
-                          '${_allConfirmed ? '4/4' : '3/4'} members completed',
+                          '${widget.trip.readyCount}/${widget.trip.memberCount} members completed',
                           style: AppText.ui(
                             12,
                             FontWeight.w700,
@@ -467,68 +344,25 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    for (final m in _members) ...[
+                    for (final m in widget.trip.members) ...[
                       Row(
                         children: [
                           Avatar(name: m.name, size: 34),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  m.name,
-                                  style: AppText.ui(14, FontWeight.w700),
-                                ),
-                                if (m.name == 'Ana')
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 2),
-                                    child: Text(
-                                      'Historical • Food • ₱₱',
-                                      style: AppText.ui(
-                                        11,
-                                        FontWeight.w400,
-                                        color: AppColors.muted,
-                                      ),
-                                    ),
-                                  ),
-                              ],
+                            child: Text(
+                              m.name,
+                              style: AppText.ui(14, FontWeight.w700),
                             ),
                           ),
-                          _statusPill(
-                            m.name != 'Jewelle' || _allConfirmed,
-                            '✓ Confirmed',
-                            '⏳ Selecting...',
-                          ),
+                          _statusPill(m.isReady, '✓ Ready', '⏳ Pending'),
                         ],
                       ),
-                      if (m != _members.last) const SizedBox(height: 12),
+                      if (m != widget.trip.members.last)
+                        const SizedBox(height: 12),
                     ],
-                    if (!_allConfirmed)
-                      GestureDetector(
-                        onTap: () => setState(() => _allConfirmed = true),
-                        child: Container(
-                          margin: const EdgeInsets.only(top: 16),
-                          padding: const EdgeInsets.all(10),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: AppColors.border,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Text(
-                            '▶ Simulate: Jewelle confirms',
-                            style: AppText.ui(
-                              13,
-                              FontWeight.w600,
-                              color: AppColors.muted,
-                            ),
-                          ),
-                        ),
-                      )
-                    else
+
+                    if (allConfirmed)
                       Container(
                         margin: const EdgeInsets.only(top: 12),
                         padding: const EdgeInsets.symmetric(
@@ -544,7 +378,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                             const Text('🎉', style: TextStyle(fontSize: 16)),
                             const SizedBox(width: 8),
                             Text(
-                              "Everyone's preferences are ready!",
+                              "Everyone is ready to go!",
                               style: AppText.ui(
                                 12,
                                 FontWeight.w700,
@@ -559,13 +393,13 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
               ),
 
               Opacity(
-                opacity: _allConfirmed ? 1 : 0.7,
+                opacity: allConfirmed ? 1 : 0.7,
                 child: TaraletsButton.orange(
-                  label: _allConfirmed
+                  label: allConfirmed
                       ? 'Find Places →'
                       : 'Waiting for members...',
                   onPressed: () {
-                    if (_allConfirmed) {
+                    if (allConfirmed) {
                       context.push(AppRoutes.recommendations);
                     }
                   },

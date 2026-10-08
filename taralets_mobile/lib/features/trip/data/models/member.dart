@@ -10,6 +10,7 @@ class Member {
     this.avatarUrl,
     this.isLeader = false,
     this.status = MemberStatus.notReady,
+    this.preferences = const [],
   });
 
   /// User id (matches `AuthUser.id` for the signed-in user).
@@ -24,6 +25,9 @@ class Member {
   final bool isLeader;
   final MemberStatus status;
 
+  /// The user's individual activity and dietary tags for calculating group consensus
+  final List<String> preferences;
+
   bool get isReady => status == MemberStatus.ready;
 
   Member copyWith({
@@ -31,6 +35,7 @@ class Member {
     String? avatarUrl,
     bool? isLeader,
     MemberStatus? status,
+    List<String>? preferences,
   }) {
     return Member(
       id: id,
@@ -39,11 +44,10 @@ class Member {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       isLeader: isLeader ?? this.isLeader,
       status: status ?? this.status,
+      preferences: preferences ?? this.preferences,
     );
   }
 
-  /// JSON keys are a guess (snake_case, FastAPI style). Adjust when the real
-  /// API exists.
   factory Member.fromJson(Map<String, dynamic> json) => Member(
     id: json['user_id'].toString(),
     username: json['username'] as String,
@@ -53,6 +57,9 @@ class Member {
     status: (json['status'] as String?) == 'ready'
         ? MemberStatus.ready
         : MemberStatus.notReady,
+    preferences: json['preferences'] != null
+        ? List<String>.from(json['preferences'])
+        : [],
   );
 
   Map<String, dynamic> toJson() => {
@@ -62,5 +69,6 @@ class Member {
     'avatar_url': avatarUrl,
     'is_leader': isLeader,
     'status': status == MemberStatus.ready ? 'ready' : 'not_ready',
+    'preferences': preferences,
   };
 }

@@ -3,24 +3,29 @@ import 'package:flutter/material.dart';
 /// Group preferences chosen in Create Trip step 4 (Figma "Group Preferences").
 class GroupPreferences {
   const GroupPreferences({
-    this.categories = const ['Historical', 'Cultural', 'Food'],
-    this.budget = '₱₱', // ₱ / ₱₱ / ₱₱₱ (for consensus mock)
-    this.walking = 'Moderate', // Light Walking / Moderate / Walking Trip
+    this.categories = const [],
+    this.budget = '₱2500',
+    this.walking = 'Moderate', // Fast / Moderate / Leisure
+    this.accessibility =
+        const [], // Good for children / Pet friendly / Wheelchair accessible
   });
 
   final List<String> categories;
   final String budget;
   final String walking;
+  final List<String> accessibility;
 
   GroupPreferences copyWith({
     List<String>? categories,
     String? budget,
     String? walking,
+    List<String>? accessibility,
   }) {
     return GroupPreferences(
       categories: categories ?? this.categories,
       budget: budget ?? this.budget,
       walking: walking ?? this.walking,
+      accessibility: accessibility ?? this.accessibility,
     );
   }
 }
