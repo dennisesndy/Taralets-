@@ -38,6 +38,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   bool _refreshing = false;
   bool _toggling = false;
   bool _starting = false;
+  bool _cancellingOrLeaving = false; 
   String? _errorTitle;
   String? _errorMessage;
 
@@ -54,7 +55,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   }
 
   Future<void> _refreshTrip() async {
-    if (!mounted || _refreshing || _toggling || _starting) return;
+    if (!mounted || _refreshing || _toggling || _starting || _cancellingOrLeaving) return;
 
     _refreshing = true;
 
@@ -160,6 +161,56 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
     }
   }
 
+  Future<void> _cancelOrLeaveTrip(bool isLeader) async {
+    if (_cancellingOrLeaving) return;
+
+    final title = isLeader ? 'Cancel Trip' : 'Leave Trip';
+    final content = isLeader 
+        ? 'Are you sure you want to cancel this trip? All members will be notified and the trip will be deleted.'
+        : 'Are you sure you want to leave this trip?';
+    final confirmText = isLeader ? 'Yes, Cancel' : 'Yes, Leave';
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(title, style: AppText.ui(18, FontWeight.w800)),
+        content: Text(
+          content,
+          style: AppText.ui(14, FontWeight.w400, color: AppColors.muted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: Text('No', style: AppText.ui(14, FontWeight.w600, color: AppColors.navy)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: Text(confirmText, style: AppText.ui(14, FontWeight.w700, color: AppColors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _cancellingOrLeaving = true);
+    try {
+      if (isLeader) {
+        await _repo.cancelTrip(_trip.id);
+      } else {
+        await _repo.leaveTrip(_trip.id);
+      }
+      ref.invalidate(myTripsProvider);
+      if (!mounted) return;
+      context.go(AppRoutes.trips); 
+    } catch (e) {
+      if (mounted) {
+        _snack('Failed to process request. Please try again.');
+        setState(() => _cancellingOrLeaving = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final me = ref
@@ -246,6 +297,26 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                           isLoading: _toggling,
                           onPressed: _toggling ? null : () => _toggleReady(me),
                         ),
+                    ],
+                    
+                    // BUTTON PARA SA CANCEL/LEAVE DEPENDE KUNG SINO KA
+                    if (isLeader || myMember != null) ...[
+                      const SizedBox(height: 16),
+                      GestureDetector(
+                        onTap: _cancellingOrLeaving ? null : () => _cancelOrLeaveTrip(isLeader),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.redSoft,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.red.withValues(alpha: 0.2)),
+                          ),
+                          child: _cancellingOrLeaving 
+                              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: AppColors.red, strokeWidth: 2))
+                              : Text(isLeader ? 'Cancel Trip' : 'Leave Trip', style: AppText.ui(14, FontWeight.w700, color: AppColors.red)),
+                        ),
+                      ),
                     ],
                   ],
                 ),

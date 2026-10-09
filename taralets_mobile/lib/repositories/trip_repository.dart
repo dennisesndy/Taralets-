@@ -186,6 +186,8 @@ abstract class TripRepository {
   Future<Trip> inviteMember(String tripId, String username);
   Future<Trip> startTrip(String tripId);
   Future<Trip> completeTrip(String tripId);
+  Future<Trip> cancelTrip(String tripId); 
+  Future<Trip> leaveTrip(String tripId); // BAGONG FUNCTION PARA SA LEAVE
 }
 
 String generateRoomCode([Random? random]) {
@@ -429,6 +431,36 @@ class ApiTripRepository implements TripRepository {
       );
     }
   }
+
+  @override
+  Future<Trip> cancelTrip(String tripId) async {
+    try {
+      final res = await _dio.post(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/cancel', 
+      );
+      return Trip.fromJson(res.data);
+    } on DioException catch (e) {
+      throw TripException(
+        'CANCEL FAILED',
+        _handleError(e, 'Could not cancel the trip'),
+      );
+    }
+  }
+
+  @override
+  Future<Trip> leaveTrip(String tripId) async {
+    try {
+      final res = await _dio.post(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/leave', 
+      );
+      return Trip.fromJson(res.data);
+    } on DioException catch (e) {
+      throw TripException(
+        'LEAVE FAILED',
+        _handleError(e, 'Could not leave the trip'),
+      );
+    }
+  }
 }
 
 class MockTripRepository implements TripRepository {
@@ -509,4 +541,25 @@ class MockTripRepository implements TripRepository {
   @override
   Future<Trip> completeTrip(String tripId) async =>
       _trips.firstWhere((t) => t.id == tripId);
+
+  @override
+  Future<Trip> cancelTrip(String tripId) async {
+    final index = _trips.indexWhere((t) => t.id == tripId);
+    if (index != -1) {
+      _trips[index] = _trips[index].copyWith(status: TripStatus.cancelled);
+      return _trips[index];
+    }
+    throw const TripException('ERROR', 'Trip not found');
+  }
+
+  @override
+  Future<Trip> leaveTrip(String tripId) async {
+    final index = _trips.indexWhere((t) => t.id == tripId);
+    if (index != -1) {
+      final updatedMembers = _trips[index].members.where((m) => m.id != currentUserId).toList();
+      _trips[index] = _trips[index].copyWith(members: updatedMembers);
+      return _trips[index];
+    }
+    throw const TripException('ERROR', 'Trip not found');
+  }
 }

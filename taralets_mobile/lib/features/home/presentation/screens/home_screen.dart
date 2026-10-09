@@ -15,6 +15,7 @@ import '../../../../shared/widgets/dashed_border_box.dart';
 import '../../../../shared/widgets/taralets_card.dart';
 import '../../../../shared/widgets/taralets_chip.dart';
 import '../../../discover/presentation/screens/place_detail_sheet.dart';
+import '../../../notifications/presentation/screens/notifications_screen.dart'; // IMPORT PARA SA NOTIFICATIONS
 
 /// Home screen for the Taralets app.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -54,10 +55,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .watch(myTripsProvider)
         .maybeWhen(data: (t) => t, orElse: () => const <Trip>[]);
 
-    // Keep the actual active-trip logic.
-    final active = trips
-        .where((t) => t.status == TripStatus.active)
-        .firstOrNull;
+    // Binago ang logic dito: Ipakita ang unang trip (upcoming man o active)
+    final displayTrip = trips.firstOrNull;
 
     // Filter recommended places based on the selected category.
     final filteredPlaces = _category == 'All'
@@ -113,6 +112,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ],
                         ),
                       ),
+                      // NOTIFICATION BELL ICON
+                      Container(
+                        margin: const EdgeInsets.only(right: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.notifications_none_rounded, color: Colors.white),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                            );
+                          },
+                        ),
+                      ),
+                      // AVATAR
                       GestureDetector(
                         onTap: () => context.go(AppRoutes.profile),
                         child: Avatar(name: displayName, size: 42),
@@ -157,9 +173,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Active trip / empty trip state
-                  if (active != null) ...[
-                    _ActiveTripCard(trip: active),
+                  // Dynamic Trip Card (Ipapakita kung may existing trip)
+                  if (displayTrip != null) ...[
+                    _ActiveTripCard(trip: displayTrip),
                     const SizedBox(height: 20),
                   ] else ...[
                     const _EmptyTripCard(),
@@ -359,6 +375,11 @@ class _ActiveTripCard extends StatelessWidget {
     final soft = Colors.white.withValues(alpha: 0.6);
     final faint = Colors.white.withValues(alpha: 0.5);
 
+    // Gawing dynamic ang mga kulay at text base sa status
+    final isUpcoming = trip.status != TripStatus.active;
+    final badgeColor = isUpcoming ? AppColors.amber : AppColors.green;
+    final badgeText = isUpcoming ? 'UPCOMING TRIP' : 'ACTIVE TRIP';
+
     return GestureDetector(
       onTap: () => context.go(AppRoutes.itinerary),
       child: Container(
@@ -379,17 +400,17 @@ class _ActiveTripCard extends StatelessWidget {
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: AppColors.green,
+                        color: badgeColor,
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'ACTIVE TRIP',
+                      badgeText,
                       style: AppText.ui(
                         10,
                         FontWeight.w700,
-                        color: AppColors.green,
+                        color: badgeColor,
                         letterSpacing: 1,
                       ),
                     ),
@@ -405,7 +426,7 @@ class _ActiveTripCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(99),
                   ),
                   child: Text(
-                    'Today',
+                    isUpcoming ? 'Soon' : 'Today',
                     style: AppText.ui(
                       11,
                       FontWeight.w700,
@@ -449,7 +470,7 @@ class _ActiveTripCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${trip.onWayCount} of ${trip.memberCount} on the way',
+                    '${trip.onWayCount} of ${trip.memberCount} joined',
                     overflow: TextOverflow.ellipsis,
                     style: AppText.ui(12, FontWeight.w400, color: soft),
                   ),

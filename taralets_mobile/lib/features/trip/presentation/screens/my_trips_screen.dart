@@ -98,7 +98,7 @@ class MyTripsScreen extends ConsumerWidget {
   }
 }
 
-class _TripCard extends StatelessWidget {
+class _TripCard extends ConsumerWidget {
   const _TripCard({required this.trip});
   final Trip trip;
 
@@ -116,7 +116,7 @@ class _TripCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final (accent, pillBg, pillFg, pillLabel) = switch (trip.status) {
       TripStatus.active => (
         AppColors.orange,
@@ -145,7 +145,7 @@ class _TripCard extends StatelessWidget {
     };
     final meta = AppText.ui(12, FontWeight.w400, color: AppColors.muted);
 
-    return GestureDetector(
+    final cardUI = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _open(context),
       child: Container(
@@ -245,5 +245,73 @@ class _TripCard extends StatelessWidget {
         ),
       ),
     );
+
+    final me = ref.watch(currentUserProvider).maybeWhen(data: (u) => u, orElse: () => null);
+    final isLeader = trip.isLeader(me?.id);
+
+    if (trip.status == TripStatus.lobby) {
+      final actionText = isLeader ? 'Cancel Trip' : 'Leave Trip';
+      final dialogContent = isLeader 
+          ? 'Are you sure you want to cancel this trip? All members will be notified.' 
+          : 'Are you sure you want to leave this trip?';
+      final confirmText = isLeader ? 'Yes, Cancel' : 'Yes, Leave';
+
+      return Dismissible(
+        key: Key(trip.id),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          decoration: BoxDecoration(
+            color: AppColors.redSoft,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.red.withValues(alpha: 0.2)),
+          ),
+          child: const Icon(Icons.delete_outline, color: AppColors.red),
+        ),
+        confirmDismiss: (direction) async {
+          return await showDialog<bool>(
+            context: context,
+            builder: (c) => AlertDialog(
+              title: Text(actionText, style: AppText.ui(18, FontWeight.w800)),
+              content: Text(
+                dialogContent,
+                style: AppText.ui(14, FontWeight.w400, color: AppColors.muted),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(c, false),
+                  child: Text('No', style: AppText.ui(14, FontWeight.w600, color: AppColors.navy)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(c, true),
+                  child: Text(confirmText, style: AppText.ui(14, FontWeight.w700, color: AppColors.red)),
+                ),
+              ],
+            ),
+          );
+        },
+        onDismissed: (direction) async {
+          try {
+            if (isLeader) {
+              await ref.read(tripRepositoryProvider).cancelTrip(trip.id);
+            } else {
+              await ref.read(tripRepositoryProvider).leaveTrip(trip.id);
+            }
+            ref.invalidate(myTripsProvider);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(isLeader ? 'Trip cancelled successfully.' : 'You have left the trip.')),
+              );
+            }
+          } catch (e) {
+            // Ignored, state refresh will happen anyway
+          }
+        },
+        child: cardUI,
+      );
+    }
+
+    return cardUI;
   }
 }

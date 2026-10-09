@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:async'; // Idinagdag para sa TimeoutException
 import 'package:http/http.dart' as http;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
-import '../../../../data/manila_places.dart'; // Siguraduhing tama ang import path na ito sa Place model mo
+import '../../../../data/manila_places.dart'; 
 import '../../../../shared/widgets/app_icons.dart';
 import '../../../../shared/widgets/error_note.dart';
 import '../../../../shared/widgets/taralets_card.dart';
@@ -21,7 +22,6 @@ class DiscoverScreen extends StatefulWidget {
 }
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
-  // Idinagdag ang state variables para sa API data
   List<Place> _apiPlaces = [];
   bool _isLoading = true;
 
@@ -58,14 +58,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchPlacesList(); // I-fetch agad pagka-load ng screen
+    _fetchPlacesList(); 
   }
 
-  // Function para kunin ang lahat ng places para sa List View
   Future<void> _fetchPlacesList() async {
     final url = Uri.parse('http://10.0.2.2:8000/api/v1/places'); 
     try {
-      final response = await http.get(url);
+      // Nilagyan ng 3 second timeout para hindi mag-hang
+      final response = await http.get(url).timeout(const Duration(seconds: 3));
+      
       if (response.statusCode == 200) {
         final List data = json.decode(response.body);
         if (mounted) {
@@ -75,11 +76,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           });
         }
       } else {
-        if (mounted) setState(() => _isLoading = false);
+        _useFallbackData();
       }
     } catch (e) {
       debugPrint("Error fetching places list: $e");
-      if (mounted) setState(() => _isLoading = false);
+      _useFallbackData(); // Gumamit ng fallback pag may error o nag-timeout
+    }
+  }
+
+  // Fallback function kung down ang server
+  void _useFallbackData() {
+    if (mounted) {
+      setState(() {
+        _apiPlaces = manilaPlaces; // Gamitin ang hardcoded data
+        _isLoading = false;
+      });
     }
   }
 
@@ -96,13 +107,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final q = _query.toLowerCase();
     final outside = _outside.any(q.contains);
     
-    // Gagamitin na ang _apiPlaces imbes na hardcoded na manilaPlaces
     final results = _apiPlaces.where((p) {
       return _catMatch(p.category) &&
           (!_budget || p.price.length <= 1) &&
           (!_near || p.distanceKm <= 0.5) &&
-          // Kung walang isOpen na property sa API model mo, tanggalin ang condition na ito
-          // (!_open || p.isOpen) && 
           (q.trim().isEmpty ||
               outside ||
               '${p.name} ${p.sub} ${p.category}'.toLowerCase().contains(q));
@@ -128,9 +136,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           ),
           Expanded(
             child: _mapView
-                ? const _MapView()
+                ? _MapView(fallbackPlaces: _apiPlaces) // Ipinasa ang listahan para sa map markers
                 : _isLoading 
-                    ? const Center(child: CircularProgressIndicator()) // Loading indicator
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.orange))
                     : ListView(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
@@ -458,16 +466,6 @@ class _PlaceCard extends StatelessWidget {
                         color: AppColors.muted,
                       ),
                     ),
-                    // Kung walang isOpen na property sa API model mo, pwede mo muna itong i-comment:
-                    // const SizedBox(width: 8),
-                    // Text(
-                    //   place.isOpen ? '● Open' : '● Closed',
-                    //   style: AppText.ui(
-                    //     11,
-                    //     FontWeight.w600,
-                    //     color: place.isOpen ? AppColors.green : AppColors.red,
-                    //   ),
-                    // ),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -605,7 +603,9 @@ class _NearbyClusters extends StatelessWidget {
 }
 
 class _MapView extends StatefulWidget {
-  const _MapView();
+  final List<Place> fallbackPlaces;
+  
+  const _MapView({required this.fallbackPlaces});
 
   @override
   State<_MapView> createState() => _MapViewState();
@@ -613,6 +613,7 @@ class _MapView extends StatefulWidget {
 
 class _MapViewState extends State<_MapView> {
   List<Marker> _markers = [];
+  bool _isFetchingMap = true;
 
   @override
   void initState() {
@@ -624,7 +625,8 @@ class _MapViewState extends State<_MapView> {
     final url = Uri.parse('http://10.0.2.2:8000/api/v1/places/clusters');
 
     try {
-      final response = await http.get(url);
+      final response = await http.get(url).timeout(const Duration(seconds: 3));
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List clusters = data['clusters'];
@@ -656,11 +658,10 @@ class _MapViewState extends State<_MapView> {
                 height: 40,
                 child: GestureDetector(
                   onTap: () async {
-                    // Fetch full details gamit ang Place Detail endpoint
                     final detailUrl = Uri.parse('http://10.0.2.2:8000/api/v1/places/${place['id']}');
                     
                     try {
-                      final detailRes = await http.get(detailUrl);
+                      final detailRes = await http.get(detailUrl).timeout(const Duration(seconds: 3));
                       if (detailRes.statusCode == 200) {
                         final placeData = json.decode(detailRes.body);
                         final fullPlace = Place.fromJson(placeData);
@@ -687,29 +688,63 @@ class _MapViewState extends State<_MapView> {
         if (mounted) {
           setState(() {
             _markers = newMarkers;
+            _isFetchingMap = false;
           });
         }
+      } else {
+        _useFallbackMarkers();
       }
     } catch (e) {
       debugPrint("Error fetching clusters: $e");
+      _useFallbackMarkers();
+    }
+  }
+
+  // Fallback function para magpakita ng markers kahit down ang server
+  void _useFallbackMarkers() {
+    if (mounted) {
+      setState(() {
+        _markers = widget.fallbackPlaces.map((p) {
+          return Marker(
+            point: LatLng(p.lat, p.lng),
+            width: 40,
+            height: 40,
+            child: GestureDetector(
+              onTap: () => showPlaceDetail(context, p),
+              child: const Icon(
+                Icons.location_on,
+                color: AppColors.orange,
+                size: 32,
+              ),
+            ),
+          );
+        }).toList();
+        _isFetchingMap = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FlutterMap(
-      options: const MapOptions(
-        initialCenter: LatLng(14.5829, 120.9786), // Rizal Park
-        initialZoom: 13.5,
-      ),
+    return Stack(
       children: [
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.taralets.app',
+        FlutterMap(
+          options: const MapOptions(
+            initialCenter: LatLng(14.5829, 120.9786), // Rizal Park
+            initialZoom: 13.5,
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.taralets.app',
+            ),
+            MarkerLayer(
+              markers: _markers,
+            ),
+          ],
         ),
-        MarkerLayer(
-          markers: _markers,
-        ),
+        if (_isFetchingMap)
+          const Center(child: CircularProgressIndicator(color: AppColors.orange)),
       ],
     );
   }
