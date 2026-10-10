@@ -8,6 +8,8 @@ import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/taralets_button.dart';
+import '../../../../core/utils/activity_category_helper.dart';
+
 
 class GroupPrefsScreen extends StatefulWidget {
   final Trip trip;
@@ -29,9 +31,11 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
     final budgets = <double>[];
 
     for (final member in widget.trip.members) {
-      for (final tag in member.activityTags.toSet()) {
-        activities[tag] = (activities[tag] ?? 0) + 1;
-      }
+      for (final tag in normalizeActivityCategories(
+          member.activityTags,
+        )) {
+          activities[tag] = (activities[tag] ?? 0) + 1;
+        }
 
       for (final pref in member.dietaryPreferences.toSet()) {
         if (pref.toLowerCase() == 'none') continue;

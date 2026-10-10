@@ -156,34 +156,59 @@ def calculate_budget_score(
     )
 
 
-def filter_by_hard_constraints(
-    places,
-    group_prefs: dict,
-):
-    """
-    Filter places using the group's maximum budget.
-    Uses min_cost as the minimum estimated cost needed
-    to visit a place.
-    """
 
+
+def filter_by_hard_constraints(places, group_prefs: dict):
+    """
+    Excludes places whose known estimated maximum cost
+    or entrance fee exceeds the group budget.
+    Places with unknown costs are excluded when a budget is set.
+    """
     budget_max = group_prefs.get("budget_max")
+
+    if budget_max is None:
+        return list(places)
+
+    try:
+        budget = float(budget_max)
+    except (TypeError, ValueError):
+        return list(places)
+
+    if budget < 0:
+        return []
+
     valid_places = []
 
     for place in places:
-        min_cost = getattr(place, "min_cost", 0) or 0
+        min_cost = getattr(place, "min_cost", None)
+        max_cost = getattr(place, "max_cost", None)
+        entrance_fee = getattr(place, "entrance_fee", None)
 
         try:
-            min_cost = float(min_cost)
+            if max_cost is not None:
+                estimated_cost = float(max_cost)
+            elif min_cost is not None:
+                estimated_cost = float(min_cost)
+            else:
+                # Do not treat missing cost data as free.
+                continue
+
+            fee = (
+                float(entrance_fee)
+                if entrance_fee is not None
+                else 0.0
+            )
+
         except (TypeError, ValueError):
-            min_cost = 0.0
+            continue
 
-        if budget_max is not None:
-            try:
-                if min_cost > float(budget_max):
-                    continue
-            except (TypeError, ValueError):
-                pass
+        if estimated_cost < 0 or fee < 0:
+            continue
 
-        valid_places.append(place)
+        required_cost = max(estimated_cost, fee)
+
+        if required_cost <= budget:
+            valid_places.append(place)
 
     return valid_places
+

@@ -57,40 +57,198 @@ def _distance_km(
     )
 
 
+
+ACTIVITY_ALIASES = {
+    "restaurant / eatery": {
+        "restaurant / eatery", "restaurant", "restaurants",
+        "eatery", "eateries", "carinderia", "carinderias",
+        "fast food", "fast foods", "pizza restaurant",
+        "pizza restaurants", "burger restaurant",
+        "burger restaurants", "food stall", "food stalls",
+        "filipino restaurant", "chinese restaurant",
+        "seafood restaurant", "rice meals",
+    },
+    "cafe": {
+        "cafe", "cafes", "coffee shop", "coffee shops",
+        "tea house", "tea houses", "coffee bar",
+    },
+    "park / plaza": {
+        "park / plaza", "park", "parks", "plaza", "plazas",
+        "garden", "gardens",
+    },
+    "museum": {
+        "museum", "museums", "art gallery", "art galleries",
+        "art museum", "cultural center", "cultural centers",
+    },
+    "church / religious site": {
+        "church / religious site", "church", "churches",
+        "temple", "temples", "shrine", "shrines",
+        "religious site", "religious sites", "place of worship",
+        "mosque", "mosques", "buddhist temple",
+    },
+    "historical / tourist site": {
+        "historical / tourist site", "historical",
+        "historical place", "historical landmark",
+        "historical landmarks", "heritage site", "heritage sites",
+        "monument", "monuments", "tourist attraction",
+        "tourist attractions", "tourist spot", "tourist spots",
+    },
+    "shop / retail": {
+        "shop / retail", "shop", "shops", "retail",
+        "shopping center", "shopping centers",
+        "shopping mall", "shopping malls", "mall", "malls",
+        "souvenir shop", "souvenir shops", "department store",
+        "department stores", "market", "markets",
+    },
+    "accommodation": {
+        "accommodation", "hotel", "hotels", "inn", "inns",
+        "lodging", "guest house", "guest houses",
+    },
+}
+
+GENERIC_ACTIVITY_TAGS = {
+    "establishment",
+    "point of interest",
+    "premise",
+    "store",
+    "food",
+    "food store",
+    "service",
+    "association or organization",
+}
+
+
+def _clean_activity(value) -> str:
+    return " ".join(
+        str(value)
+        .strip()
+        .casefold()
+        .replace("_", " ")
+        .split()
+    )
+
+
+def _canonical_activity(value) -> str | None:
+    token = _clean_activity(value)
+
+    if not token or token in GENERIC_ACTIVITY_TAGS:
+        return None
+
+    for canonical, aliases in ACTIVITY_ALIASES.items():
+        normalized_aliases = {
+            _clean_activity(alias)
+            for alias in aliases
+        }
+
+        if token == _clean_activity(canonical):
+            return canonical
+
+        if token in normalized_aliases:
+            return canonical
+
+    return None
+
+
+def _activity_values(values) -> set[str]:
+    if values is None:
+        return set()
+
+    if isinstance(values, str):
+        values = [values]
+
+    if not isinstance(values, (list, tuple, set)):
+        return set()
+
+    result = set()
+
+    for value in values:
+        if not value:
+            continue
+
+        for part in str(value).split(","):
+            token = _clean_activity(part)
+
+            if token and token not in GENERIC_ACTIVITY_TAGS:
+                result.add(token)
+
+    return result
+
+
+def _expand_activity_preferences(member_tags) -> set[str]:
+    selected = set()
+
+    for value in _activity_values(member_tags):
+        canonical = _canonical_activity(value)
+
+        if canonical:
+            selected.add(canonical)
+
+    return selected
+
+
+def _place_activity_values(place) -> set[str]:
+    # Category is the primary classification.
+    category_values = _activity_values(
+        getattr(place, "category", None)
+    )
+
+    category_activities = {
+        canonical
+        for value in category_values
+        if (canonical := _canonical_activity(value))
+    }
+
+    # If the category already identifies the place, do not let
+    # conflicting tags such as "restaurant" reclassify a Cafe.
+    if category_activities:
+        return category_activities
+
+    # Use meaningful activity tags only if the category is
+    # missing or does not identify a supported activity.
+    tag_values = _activity_values(
+        getattr(place, "activity_tags", None)
+    )
+
+    return {
+        canonical
+        for value in tag_values
+        if (canonical := _canonical_activity(value))
+    }
+
+
+def place_matches_activity_preferences(place, member_tags) -> bool:
+    selected = _expand_activity_preferences(member_tags)
+
+    # No activity preference means no activity-based restriction.
+    if not selected:
+        return True
+
+    place_activities = _place_activity_values(place)
+
+    return bool(selected.intersection(place_activities))
+
+
 def calculate_activity_score(
     member_tags: list[str],
     place,
 ) -> float:
+    selected = _expand_activity_preferences(member_tags)
 
-    member = _normalize(member_tags)
-
-    place_features = _normalize(
-        getattr(place, "activity_tags", None)
-    )
-
-    category = getattr(place, "category", None)
-
-    if category:
-        place_features.add(
-            str(category).strip().casefold()
-        )
-
-    if not member:
+    if not selected:
         return 0.50
 
-    if not place_features:
-        return 0.0
-
-    matched = member.intersection(place_features)
+    place_activities = _place_activity_values(place)
+    matched = selected.intersection(place_activities)
 
     if not matched:
         return 0.0
 
     return min(
         1.0,
-        (len(matched) / len(member))
+        len(matched) / len(selected)
         + min(len(matched) * 0.05, 0.15),
     )
+
 
 
 def calculate_member_score(

@@ -9,6 +9,7 @@ from app.services.itinerary.cbf_scoring import (
 
 from app.services.itinerary.group_scoring import (
     aggregate_group_scores,
+    place_matches_activity_preferences,
 )
 
 
@@ -85,10 +86,34 @@ async def get_group_recommendations(
     # "No places found". Let the scoring system rank them
     # instead.
     if not candidates:
-        candidates = all_places
+        return []
+
+    
+    # ---------------------------------------------------------
+    # 4. Filter by selected group activities
+    # ---------------------------------------------------------
+
+    selected_activities = [
+        tag
+        for member in group_profiles
+        for tag in (member.get("activity_tags") or [])
+    ]
+
+    if selected_activities:
+        candidates = [
+            place
+            for place in candidates
+            if place_matches_activity_preferences(
+                place,
+                selected_activities,
+            )
+        ]
+
+    if not candidates:
+        return []
 
     # ---------------------------------------------------------
-    # 4. Group consensus scoring
+    # 5. Group consensus scoring
     # ---------------------------------------------------------
 
     recommendations = aggregate_group_scores(
@@ -97,9 +122,5 @@ async def get_group_recommendations(
         origin_lat=origin_lat,
         origin_lon=origin_lon,
     )
-
-    # ---------------------------------------------------------
-    # 5. Return top recommendations
-    # ---------------------------------------------------------
 
     return recommendations[:30]

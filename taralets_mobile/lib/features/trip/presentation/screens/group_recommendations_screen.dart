@@ -6,6 +6,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
+import '../../../../core/utils/activity_category_helper.dart';
 
 class GroupRecommendationsScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -97,6 +98,8 @@ class _GroupRecommendationsScreenState
     return [];
   }
 
+  
+  
   List<String> get _categories {
     final values = <String>{};
 
@@ -104,49 +107,61 @@ class _GroupRecommendationsScreenState
       final category = (place['category'] ?? '').toString().trim();
 
       if (category.isNotEmpty) {
-        values.add(category);
+        values.add(normalizeActivityCategory(category));
       }
 
-      values.addAll(_stringList(place['activity_tags']));
+      values.addAll(
+        normalizeActivityCategories(
+          _stringList(place['activity_tags']),
+        ),
+      );
     }
 
-    final sorted = values.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final sorted = values
+        .where((value) => value.isNotEmpty)
+        .toList()
+      ..sort(
+        (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+      );
 
     return ['All', ...sorted];
   }
 
+
+
+  
   List<Map<String, dynamic>> get _filteredRecommendations {
     if (_selectedCategory == 'All') {
       return _allRecommendations;
     }
 
-    final target = _selectedCategory.toLowerCase();
+    final target = normalizeActivityCategory(_selectedCategory);
 
     return _allRecommendations.where((place) {
-      final category = (place['category'] ?? '')
-          .toString()
-          .toLowerCase();
+      final category = normalizeActivityCategory(
+        (place['category'] ?? '').toString(),
+      );
 
-      final tags = _stringList(place['activity_tags'])
-          .map((tag) => tag.toLowerCase())
-          .toList();
+      final tags = normalizeActivityCategories(
+        _stringList(place['activity_tags']),
+      );
 
       return category == target || tags.contains(target);
     }).toList();
   }
 
-  String _text(dynamic value, [String fallback = '']) {
-    if (value == null) return fallback;
 
-    final result = value.toString().trim();
+    String _text(dynamic value, [String fallback = '']) {
+      if (value == null) return fallback;
 
-    if (result.isEmpty || result.toLowerCase() == 'nan') {
-      return fallback;
+      final result = value.toString().trim();
+
+      if (result.isEmpty || result.toLowerCase() == 'nan') {
+        return fallback;
+      }
+
+      return result;
     }
-
-    return result;
-  }
 
   Widget _buildImage(Map<String, dynamic> place) {
     final imageUrl = _text(place['image_url']);
@@ -180,12 +195,15 @@ class _GroupRecommendationsScreenState
 
   Widget _buildPlaceCard(Map<String, dynamic> place) {
     final name = _text(place['name'], 'Unnamed place');
-    final category = _text(place['category'], 'Place');
+    final rawCategory = _text(place['category'], 'Place');
+    final category = normalizeActivityCategory(rawCategory);
     final district = _text(place['district']);
     final address = _text(place['address']);
     final description = _text(place['description']);
 
-    final tags = _stringList(place['activity_tags']);
+    final tags = normalizeActivityCategories(
+      _stringList(place['activity_tags']),
+    );
 
     final score =
         (num.tryParse('${place['match_score'] ?? 0}') ?? 0)
