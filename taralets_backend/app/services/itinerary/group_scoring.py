@@ -1,169 +1,410 @@
-from typing import List, Dict, Any
-
-from app.services.itinerary.constraint_satisfaction import (
-    solve_group_consensus,
-    calculate_constraint_penalty,
-)
+from math import radians, sin, cos, sqrt, atan2
+from typing import Any
 
 
-def _normalize_tags(tags: Any) -> set[str]:
-    """Normalize tags for consistent matching."""
-    if not isinstance(tags, (list, tuple, set)):
+def _normalize(values: Any) -> set[str]:
+    if values is None:
+        return set()
+
+    if isinstance(values, str):
+        values = values.split(",")
+
+    if not isinstance(values, (list, tuple, set)):
         return set()
 
     return {
-        tag.strip().casefold()
-        for tag in tags
-        if isinstance(tag, str)
-        and tag.strip()
-        and tag.strip().casefold() not in {"none", "not applicable"}
+        str(value).strip().casefold()
+        for value in values
+        if str(value).strip()
+        and str(value).strip().casefold()
+        not in {"none", "n/a", "not applicable"}
     }
 
 
-def calculate_cbf_score(
-    user_tags: List[str],
-    place_tags: List[str],
-) -> float:
-    """Calculate Jaccard similarity between preferences and POI tags."""
-    user_set = _normalize_tags(user_tags)
-    place_set = _normalize_tags(place_tags)
+def _distance_km(
+    lat1: float | None,
+    lon1: float | None,
+    lat2: float | None,
+    lon2: float | None,
+) -> float | None:
 
-    if not user_set or not place_set:
-        return 0.0
+    if None in (lat1, lon1, lat2, lon2):
+        return None
 
-    intersection = user_set.intersection(place_set)
-    union = user_set.union(place_set)
+    try:
+        lat1 = float(lat1)
+        lon1 = float(lon1)
+        lat2 = float(lat2)
+        lon2 = float(lon2)
+    except (TypeError, ValueError):
+        return None
 
-    return len(intersection) / len(union) if union else 0.0
+    earth_radius = 6371.0
 
+    d_lat = radians(lat2 - lat1)
+    d_lon = radians(lon2 - lon1)
 
-def _get_member_activities(member: Dict[str, Any]) -> List[str]:
-    """Support both the existing API format and preference model format."""
-    activities = member.get(
-        "activities",
-        member.get("activity_tags", []),
+    a = (
+        sin(d_lat / 2) ** 2
+        + cos(radians(lat1))
+        * cos(radians(lat2))
+        * sin(d_lon / 2) ** 2
     )
 
-    return activities if isinstance(activities, list) else []
+    return earth_radius * 2 * atan2(
+        sqrt(a),
+        sqrt(max(0.0, 1 - a)),
+    )
 
 
-def _get_place_tags(place: Dict[str, Any]) -> List[str]:
-    """Support list-based tags and the current database string format."""
-    tags = place.get("tags", [])
+def calculate_activity_score(
+    member_tags: list[str],
+    place,
+) -> float:
 
-    if isinstance(tags, list):
-        return tags
+    member = _normalize(member_tags)
 
-    if isinstance(tags, str):
-        return [
-            tag.strip()
-            for tag in tags.split(",")
-            if tag.strip()
-        ]
+    place_features = _normalize(
+        getattr(place, "activity_tags", None)
+    )
 
-    return []
+    category = getattr(place, "category", None)
+
+    if category:
+        place_features.add(
+            str(category).strip().casefold()
+        )
+
+    if not member:
+        return 0.50
+
+    if not place_features:
+        return 0.0
+
+    matched = member.intersection(place_features)
+
+    if not matched:
+        return 0.0
+
+    return min(
+        1.0,
+        (len(matched) / len(member))
+        + min(len(matched) * 0.05, 0.15),
+    )
+
+
+def calculate_member_score(
+    member: dict,
+    place,
+) -> float:
+
+    activity_score = calculate_activity_score(
+        member.get("activity_tags", []),
+        place,
+    )
+
+    dietary_required = _normalize(
+        member.get("dietary_preferences", [])
+    )
+
+    dietary_available = _normalize(
+        getattr(place, "dietary_options", None)
+    )
+
+    if not dietary_required:
+        dietary_score = 1.0
+    elif dietary_available:
+        dietary_score = (
+            len(dietary_required.intersection(dietary_available))
+            / len(dietary_required)
+        )
+    else:
+        dietary_score = 0.0
+
+    accessibility_required = _normalize(
+        member.get("accessibility_preferences", [])
+    )
+
+    accessibility_available = _normalize(
+        getattr(place, "accessibility_pets", None)
+    )
+
+    if not accessibility_required:
+        accessibility_score = 1.0
+    elif accessibility_available:
+        accessibility_score = (
+            len(
+                accessibility_required.intersection(
+                    accessibility_available
+                )
+            )
+            / len(accessibility_required)
+        )
+    else:
+        accessibility_score = 0.0
+
+    max_budget = member.get("max_budget")
+
+    try:
+        max_budget = float(max_budget)
+    except (TypeError, ValueError):
+        max_budget = None
+
+    min_cost = float(
+        getattr(place, "min_cost", 0) or 0
+    )
+
+    entrance_fee = float(
+        getattr(place, "entrance_fee", 0) or 0
+    )
+
+    estimated_cost = max(min_cost, entrance_fee)
+
+    if max_budget is None or max_budget <= 0:
+        budget_score = 1.0
+    elif estimated_cost <= max_budget:
+        budget_score = 1.0
+    else:
+        budget_score = max(
+            0.0,
+            1.0 - (
+                (estimated_cost - max_budget)
+                / max_budget
+            ),
+        )
+
+    # Activity is the main preference signal.
+    # Dietary/accessibility/budget support the match.
+    return (
+        0.55 * activity_score
+        + 0.20 * dietary_score
+        + 0.15 * accessibility_score
+        + 0.10 * budget_score
+    )
+
+
+def calculate_group_score(
+    member_scores: list[float],
+) -> dict[str, float]:
+
+    if not member_scores:
+        return {
+            "average": 0.0,
+            "least_misery": 0.0,
+            "support": 0.0,
+            "consensus": 0.0,
+        }
+
+    average = sum(member_scores) / len(member_scores)
+
+    least_misery = min(member_scores)
+
+    support = sum(
+        score >= 0.50
+        for score in member_scores
+    ) / len(member_scores)
+
+    # Average satisfaction + protection for the least satisfied member.
+    consensus = (
+        0.50 * average
+        + 0.30 * least_misery
+        + 0.20 * support
+    )
+
+    return {
+        "average": average,
+        "least_misery": least_misery,
+        "support": support,
+        "consensus": consensus,
+    }
+
+
+def calculate_rating_score(place) -> float:
+    """
+    Rating is secondary evidence only.
+
+    New/no-review places are not penalized to zero.
+    """
+
+    rating = getattr(place, "rating", 0) or 0
+    reviews = getattr(place, "reviews", 0) or 0
+
+    try:
+        rating = float(rating)
+        reviews = int(reviews)
+    except (TypeError, ValueError):
+        return 0.50
+
+    if rating <= 0 or reviews <= 0:
+        return 0.50
+
+    normalized = max(
+        0.0,
+        min(1.0, rating / 5.0),
+    )
+
+    # Reliability increases with review count.
+    reliability = min(
+        1.0,
+        reviews / 100.0,
+    )
+
+    return (
+        normalized * reliability
+        + 0.50 * (1.0 - reliability)
+    )
+
+
+def calculate_spatial_score(
+    place,
+    origin_lat: float | None,
+    origin_lon: float | None,
+) -> float:
+
+    distance = _distance_km(
+        origin_lat,
+        origin_lon,
+        getattr(place, "latitude", None),
+        getattr(place, "longitude", None),
+    )
+
+    if distance is None:
+        return 0.50
+
+    # Smooth decay rather than a hard cutoff.
+    return max(
+        0.0,
+        min(
+            1.0,
+            1.0 / (1.0 + distance / 5.0),
+        ),
+    )
 
 
 def aggregate_group_scores(
-    group_profiles: List[Dict[str, Any]],
-    candidate_places: List[Dict[str, Any]],
-    alpha: float = 0.7,
-) -> List[Dict[str, Any]]:
-    """
-    Rank POIs using Average Satisfaction, Least Misery,
-    group preference support, and available hard constraints.
+    group_profiles: list[dict[str, Any]],
+    candidate_places: list[Any],
+    origin_lat: float | None = None,
+    origin_lon: float | None = None,
+) -> list[dict[str, Any]]:
 
-    Existing API fields are preserved.
-    """
     if not group_profiles:
         return []
 
-    if not 0.0 <= alpha <= 1.0:
-        raise ValueError("alpha must be between 0 and 1")
-
-    # Build ACS consensus only when profiles contain preference data.
-    has_full_preferences = any(
-        any(
-            key in member
-            for key in (
-                "activity_tags",
-                "dietary_preferences",
-                "max_budget",
-                "preferred_pace",
-                "accessibility_preferences",
-            )
-        )
-        for member in group_profiles
-    )
-
-    consensus_result = None
-
-    if has_full_preferences:
-        consensus_result = solve_group_consensus(group_profiles)
-
-    scored_places = []
+    scored = []
 
     for place in candidate_places:
-        place_tags = _get_place_tags(place)
 
         member_scores = [
-            calculate_cbf_score(
-                _get_member_activities(member),
-                place_tags,
+            calculate_member_score(
+                member,
+                place,
             )
             for member in group_profiles
         ]
 
-        avg_score = sum(member_scores) / len(member_scores)
-        min_score = min(member_scores)
-
-        # Existing Average Satisfaction + Least Misery formula.
-        base_group_score = (
-            alpha * avg_score
-            + (1 - alpha) * min_score
+        group = calculate_group_score(
+            member_scores
         )
 
-        group_support = sum(
-            score > 0 for score in member_scores
-        ) / len(member_scores)
-
-        constraint_result = {
-            "feasible": True,
-            "penalty": 0.0,
-            "reasons": [],
-        }
-
-        if consensus_result is not None:
-            constraint_result = calculate_constraint_penalty(
-                place,
-                consensus_result["consensus"],
-            )
-
-        # Do not recommend a POI that violates a known hard constraint.
-        if not constraint_result["feasible"]:
-            continue
-
-        # Give additional credit to places relevant to more members.
-        final_group_score = (
-            0.8 * base_group_score
-            + 0.2 * group_support
+        rating_score = calculate_rating_score(
+            place
         )
 
-        scored_places.append({
-            **place,
-            "group_score": round(final_group_score, 4),
-            "average_satisfaction": round(avg_score, 4),
-            "least_misery_score": round(min_score, 4),
-            "group_support": round(group_support, 4),
+        spatial_score = calculate_spatial_score(
+            place,
+            origin_lat,
+            origin_lon,
+        )
+
+        # Content/group consensus is dominant.
+        final_score = (
+            0.65 * group["consensus"]
+            + 0.15 * rating_score
+            + 0.20 * spatial_score
+        )
+
+        scored.append({
+            "id": place.id,
+            "master_id": place.master_id,
+            "name": place.name,
+            "district": place.district,
+            "category": place.category,
+            "description": place.description,
+            "image_url": place.image_url,
+            "address": place.address,
+            "latitude": place.latitude,
+            "longitude": place.longitude,
+            "activity_tags": place.activity_tags or [],
+            "dietary_options": place.dietary_options or [],
+            "entrance_fee": place.entrance_fee,
+            "min_cost": place.min_cost,
+            "max_cost": place.max_cost,
+            "accessibility_pets": (
+                place.accessibility_pets or []
+            ),
+            "days_open": place.days_open,
+            "open_time": (
+                place.open_time.isoformat()
+                if place.open_time
+                else None
+            ),
+            "close_time": (
+                place.close_time.isoformat()
+                if place.close_time
+                else None
+            ),
+            "rating": place.rating or 0,
+            "reviews": place.reviews or 0,
+
+            "match_score": round(
+                final_score,
+                4,
+            ),
+
+            "group_score": round(
+                group["consensus"],
+                4,
+            ),
+
+            "average_satisfaction": round(
+                group["average"],
+                4,
+            ),
+
+            "least_misery_score": round(
+                group["least_misery"],
+                4,
+            ),
+
+            "group_support": round(
+                group["support"],
+                4,
+            ),
+
+            "rating_score": round(
+                rating_score,
+                4,
+            ),
+
+            "spatial_score": round(
+                spatial_score,
+                4,
+            ),
+
             "member_scores": [
                 round(score, 4)
                 for score in member_scores
             ],
-            "constraint_check": constraint_result,
+
+            "is_new": (
+                (place.reviews or 0) == 0
+            ),
         })
 
-    return sorted(
-        scored_places,
-        key=lambda item: item["group_score"],
+    scored.sort(
+        key=lambda item: item["match_score"],
         reverse=True,
     )
+
+    return scored

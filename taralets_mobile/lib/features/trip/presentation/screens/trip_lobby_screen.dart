@@ -274,8 +274,23 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                       TaraletsButton.orange(
                         label: 'Find Places →',
                         onPressed: () {
-                          context.push(AppRoutes.recommendations);
+                          context.push(
+                            AppRoutes.recommendations,
+                            extra: {'groupId': widget.trip.id}, // Ito ang idinagdag natin
+                          );
                         },
+                      ),
+                    ] else if (isLeader) ...[
+                      TaraletsButton.ghost(
+                        label:
+                            'Waiting... ${_trip.readyCount}/${_trip.memberCount} ready',
+                        onPressed: null,
+                      ),
+                      const SizedBox(height: 10),
+                      TaraletsButton.orange(
+                        label: 'Start Trip',
+                        isLoading: _starting,
+                        onPressed: _starting ? null : _start,
                       ),
                     ] else ...[
                       TaraletsButton.orange(

@@ -179,6 +179,9 @@ abstract class TripRepository {
   Future<List<Trip>> getMyTrips();
   Future<Trip> createTrip(CreateTripDto dto);
   Future<GroupPreferences?> getGroupPreferences(String tripId);
+  Future<List<Map<String, dynamic>>> getGroupRecommendations(
+  String tripId,
+);
   Future<void> updateGroupPreferences(String tripId, GroupPreferences prefs);
   Future<Trip> getTrip(String tripId);
   Future<Trip> updateTrip(Trip updatedTrip);
@@ -303,6 +306,39 @@ class ApiTripRepository implements TripRepository {
     );
 
     return GroupPreferences.fromJson(response.data);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getGroupRecommendations(
+    String tripId,
+  ) async {
+    try {
+      final response = await _dio.get(
+        '${ApiEndpoints.apiPrefix}/groups/$tripId/recommendations',
+      );
+
+      final payload = response.data;
+
+      if (payload is! Map || payload['data'] is! List) {
+        throw const TripException(
+          'INVALID RESPONSE',
+          'The recommendations response has an unexpected format.',
+        );
+      }
+
+      return (payload['data'] as List)
+          .whereType<Map>()
+          .map((place) => Map<String, dynamic>.from(place))
+          .toList();
+    } on DioException catch (e) {
+      throw TripException(
+        'RECOMMENDATIONS FAILED',
+        _handleError(
+          e,
+          'Could not load group recommendations. Please try again.',
+        ),
+      );
+    }
   }
 
   @override
@@ -512,6 +548,13 @@ class MockTripRepository implements TripRepository {
 
   @override
   Future<GroupPreferences?> getGroupPreferences(String tripId) async => null;
+
+  @override
+  Future<List<Map<String, dynamic>>> getGroupRecommendations(
+    String tripId,
+  ) async {
+    return [];
+  }
 
   @override
   Future<void> updateGroupPreferences(

@@ -1,342 +1,563 @@
+
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
-import '../../../../core/router/app_routes.dart';
-import '../../../../shared/widgets/back_button_tile.dart';
-import '../../../../shared/widgets/taralets_button.dart';
+import '../../../../repositories/repository_providers.dart';
+import '../../../../repositories/trip_repository.dart';
 
-/// Screen displaying recommended places calculated from the group consensus match.
-class GroupRecommendationsScreen extends StatefulWidget {
-  const GroupRecommendationsScreen({super.key});
+class GroupRecommendationsScreen extends ConsumerStatefulWidget {
+  final String groupId;
+
+  const GroupRecommendationsScreen({
+    super.key,
+    required this.groupId,
+  });
 
   @override
-  State<GroupRecommendationsScreen> createState() =>
+  ConsumerState<GroupRecommendationsScreen> createState() =>
       _GroupRecommendationsScreenState();
 }
 
 class _GroupRecommendationsScreenState
-    extends State<GroupRecommendationsScreen> {
+    extends ConsumerState<GroupRecommendationsScreen> {
+  List<Map<String, dynamic>> _allRecommendations = [];
+
   String _selectedCategory = 'All';
-  final Set<String> _selectedPlaceIds = {};
-
-  static const _places = [
-    (
-      id: 'p1',
-      name: 'Intramuros Heritage Walking Tour',
-      category: 'Historical',
-      rating: '4.9 ★',
-      matchScore: '98%',
-      price: '₱450 / person',
-      dietaryNote: 'Halal-friendly food stops nearby',
-      bgColor: Color(0xFFE2E8F0),
-    ),
-    (
-      id: 'p2',
-      name: 'Barbara\'s Heritage Restaurant',
-      category: 'Food',
-      rating: '4.7 ★',
-      matchScore: '96%',
-      price: '₱500 – ₱700 / person',
-      dietaryNote: 'Halal Certified & Vegan options',
-      bgColor: Color(0xFFFEF3C7),
-    ),
-    (
-      id: 'p3',
-      name: 'Escolta Heritage Cafe',
-      category: 'Cafe',
-      rating: '4.8 ★',
-      matchScore: '93%',
-      price: '₱200 – ₱350 / person',
-      dietaryNote: 'Vegan snacks & specialty coffee',
-      bgColor: Color(0xFFFFEDD5),
-    ),
-  ];
-
-  BoxDecoration _card({Border? border}) => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(14),
-    border: border,
-    boxShadow: [
-      BoxShadow(
-        color: Colors.black.withValues(alpha: 0.05),
-        blurRadius: 6,
-        offset: const Offset(0, 1),
-      ),
-    ],
-  );
-
-  Widget _pill(
-    String t,
-    Color bg,
-    Color fg, {
-    double size = 11,
-    FontWeight w = FontWeight.w600,
-    EdgeInsets? pad,
-  }) => Container(
-    padding: pad ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-    decoration: BoxDecoration(
-      color: bg,
-      borderRadius: BorderRadius.circular(99),
-    ),
-    child: Text(t, style: AppText.ui(size, w, color: fg)),
-  );
+  bool _loading = true;
+  String? _error;
 
   @override
-  Widget build(BuildContext context) {
-    final filteredPlaces = _selectedCategory == 'All'
-        ? _places
-        : _places.where((p) => p.category == _selectedCategory).toList();
+  void initState() {
+    super.initState();
+    _fetchRecommendations();
+  }
 
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+  Future<void> _fetchRecommendations() async {
+    if (widget.groupId.trim().isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = 'Missing trip ID. Please return to your trip lobby.';
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final recommendations = await ref
+          .read(tripRepositoryProvider)
+          .getGroupRecommendations(widget.groupId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _allRecommendations = recommendations;
+      });
+    } on TripException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = e.message;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = 'Unable to load recommendations. Please try again.';
+      });
+
+      debugPrint('Group recommendations error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  List<String> _stringList(dynamic value) {
+    if (value is List) {
+      return value
+          .where((item) => item != null)
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+
+    if (value is String && value.trim().isNotEmpty) {
+      return [value.trim()];
+    }
+
+    return [];
+  }
+
+  List<String> get _categories {
+    final values = <String>{};
+
+    for (final place in _allRecommendations) {
+      final category = (place['category'] ?? '').toString().trim();
+
+      if (category.isNotEmpty) {
+        values.add(category);
+      }
+
+      values.addAll(_stringList(place['activity_tags']));
+    }
+
+    final sorted = values.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    return ['All', ...sorted];
+  }
+
+  List<Map<String, dynamic>> get _filteredRecommendations {
+    if (_selectedCategory == 'All') {
+      return _allRecommendations;
+    }
+
+    final target = _selectedCategory.toLowerCase();
+
+    return _allRecommendations.where((place) {
+      final category = (place['category'] ?? '')
+          .toString()
+          .toLowerCase();
+
+      final tags = _stringList(place['activity_tags'])
+          .map((tag) => tag.toLowerCase())
+          .toList();
+
+      return category == target || tags.contains(target);
+    }).toList();
+  }
+
+  String _text(dynamic value, [String fallback = '']) {
+    if (value == null) return fallback;
+
+    final result = value.toString().trim();
+
+    if (result.isEmpty || result.toLowerCase() == 'nan') {
+      return fallback;
+    }
+
+    return result;
+  }
+
+  Widget _buildImage(Map<String, dynamic> place) {
+    final imageUrl = _text(place['image_url']);
+
+    if (imageUrl.startsWith('http://') ||
+        imageUrl.startsWith('https://')) {
+      return Image.network(
+        imageUrl,
+        height: 170,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _imagePlaceholder(),
+      );
+    }
+
+    return _imagePlaceholder();
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      height: 170,
+      width: double.infinity,
+      color: AppColors.bg,
+      child: Icon(
+        Icons.place_outlined,
+        size: 48,
+        color: AppColors.muted,
+      ),
+    );
+  }
+
+  Widget _buildPlaceCard(Map<String, dynamic> place) {
+    final name = _text(place['name'], 'Unnamed place');
+    final category = _text(place['category'], 'Place');
+    final district = _text(place['district']);
+    final address = _text(place['address']);
+    final description = _text(place['description']);
+
+    final tags = _stringList(place['activity_tags']);
+
+    final score =
+        (num.tryParse('${place['match_score'] ?? 0}') ?? 0)
+            .toDouble();
+
+    final percentage = (score * 100).round().clamp(0, 100);
+
+    final minCost = num.tryParse('${place['min_cost']}');
+    final maxCost = num.tryParse('${place['max_cost']}');
+
+    String? costLabel;
+
+    if (minCost != null && maxCost != null) {
+      costLabel =
+          '₱${minCost.round()} - ₱${maxCost.round()}';
+    } else if (minCost != null) {
+      costLabel = 'From ₱${minCost.round()}';
+    } else if (maxCost != null) {
+      costLabel = 'Up to ₱${maxCost.round()}';
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      color: Colors.white,
+      elevation: 2,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              _buildImage(place),
+              if (place['is_new'] == true)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.gold,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Hidden Gem',
+                      style: AppText.ui(
+                        11,
+                        FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: AppText.ui(
+                          17,
+                          FontWeight.w800,
+                          color: AppColors.navy,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
                       children: [
-                        BackButtonTile(onTap: () => context.pop()),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Group Recommendations',
-                              style: AppText.ui(
-                                18,
-                                FontWeight.w800,
-                                color: AppColors.navy,
-                              ),
+                        Container(
+                          padding: const EdgeInsets.all(9),
+                          decoration: BoxDecoration(
+                            color: percentage >= 80
+                                ? AppColors.greenSoft
+                                : AppColors.orangeSoft,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '$percentage%',
+                            style: AppText.ui(
+                              13,
+                              FontWeight.w800,
+                              color: percentage >= 80
+                                  ? AppColors.greenText
+                                  : AppColors.orange,
                             ),
-                            Text(
-                              '95% Group Consensus Match',
-                              style: AppText.ui(
-                                12,
-                                FontWeight.w400,
-                                color: AppColors.muted,
-                              ),
-                            ),
-                          ],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Group Match',
+                          style: AppText.ui(
+                            9,
+                            FontWeight.w600,
+                            color: AppColors.muted,
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-
-                    // Filter chips
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children:
-                            [
-                              'All',
-                              'Historical',
-                              'Cultural',
-                              'Food',
-                              'Cafe',
-                            ].map((cat) {
-                              final isSelected = _selectedCategory == cat;
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: FilterChip(
-                                  label: Text(cat),
-                                  selected: isSelected,
-                                  onSelected: (_) {
-                                    setState(() => _selectedCategory = cat);
-                                  },
-                                  selectedColor: AppColors.orangeSoft,
-                                  checkmarkColor: AppColors.orange,
-                                  labelStyle: AppText.ui(
-                                    12,
-                                    FontWeight.w700,
-                                    color: isSelected
-                                        ? AppColors.orange
-                                        : AppColors.navy,
-                                  ),
-                                  backgroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                    side: BorderSide(
-                                      color: isSelected
-                                          ? AppColors.orange
-                                          : AppColors.border,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  district.isEmpty
+                      ? category
+                      : '$category • $district',
+                  style: AppText.ui(
+                    12,
+                    FontWeight.w500,
+                    color: AppColors.muted,
+                  ),
+                ),
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    description,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.ui(
+                      12,
+                      FontWeight.w400,
+                      color: AppColors.muted,
                     ),
-                    const SizedBox(height: 16),
-
-                    // Recommendation cards
-                    for (final place in filteredPlaces) ...[
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 14),
-                        decoration: _card(),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Container(
-                              height: 100,
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: place.bgColor,
-                                borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(14),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _pill(
-                                    '${place.matchScore} Match',
-                                    AppColors.greenSoft,
-                                    AppColors.greenText,
-                                    w: FontWeight.w800,
-                                  ),
-                                  _pill(
-                                    place.rating,
-                                    Colors.white,
-                                    AppColors.navy,
-                                    w: FontWeight.w700,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    place.name,
-                                    style: AppText.ui(
-                                      15,
-                                      FontWeight.w700,
-                                      color: AppColors.navy,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    place.price,
-                                    style: AppText.ui(
-                                      12,
-                                      FontWeight.w500,
-                                      color: AppColors.muted,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  _pill(
-                                    '✓ ${place.dietaryNote}',
-                                    AppColors.blueSoft,
-                                    const Color(0xFF1E40AF),
-                                    size: 10,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _pill(
-                                        place.category,
-                                        AppColors.orangeSoft,
-                                        AppColors.orange,
-                                      ),
-                                      GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            if (_selectedPlaceIds.contains(
-                                              place.id,
-                                            )) {
-                                              _selectedPlaceIds.remove(
-                                                place.id,
-                                              );
-                                            } else {
-                                              _selectedPlaceIds.add(place.id);
-                                            }
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                _selectedPlaceIds.contains(
-                                                  place.id,
-                                                )
-                                                ? AppColors.greenSoft
-                                                : AppColors.bg,
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            border: Border.all(
-                                              color:
-                                                  _selectedPlaceIds.contains(
-                                                    place.id,
-                                                  )
-                                                  ? AppColors.greenText
-                                                  : AppColors.border,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            _selectedPlaceIds.contains(place.id)
-                                                ? '✓ Added'
-                                                : '+ Add to Itinerary',
-                                            style: AppText.ui(
-                                              11,
-                                              FontWeight.w700,
-                                              color:
-                                                  _selectedPlaceIds.contains(
-                                                    place.id,
-                                                  )
-                                                  ? AppColors.greenText
-                                                  : AppColors.navy,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                  ),
+                ],
+                if (address.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.location_on_outlined,
+                        size: 16,
+                        color: AppColors.orange,
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          address,
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w400,
+                            color: AppColors.muted,
+                          ),
                         ),
                       ),
                     ],
-                  ],
-                ),
-              ),
+                  ),
+                ],
+                if (costLabel != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.payments_outlined,
+                        size: 16,
+                        color: AppColors.orange,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        costLabel,
+                        style: AppText.ui(
+                          12,
+                          FontWeight.w700,
+                          color: AppColors.navy,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (tags.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final tag in tags.take(4))
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.bg,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            tag,
+                            style: AppText.ui(
+                              10,
+                              FontWeight.w600,
+                              color: AppColors.navy,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // Bottom Action Button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              child: TaraletsButton.orange(
-                label: _selectedPlaceIds.isEmpty
-                    ? 'Select Places to Continue'
-                    : 'Build Itinerary (${_selectedPlaceIds.length}) →',
-                onPressed: _selectedPlaceIds.isEmpty
-                    ? null
-                    : () {
-                        context.go(AppRoutes.trips);
-                      },
+  Widget _buildMessage({
+    required IconData icon,
+    required String title,
+    required String message,
+    Widget? action,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: AppColors.muted),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: AppText.ui(
+                17,
+                FontWeight.w800,
+                color: AppColors.navy,
               ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: AppText.ui(
+                13,
+                FontWeight.w400,
+                color: AppColors.muted,
+              ),
+            ),
+            if (action != null) ...[
+              const SizedBox(height: 18),
+              action,
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recommendations = _filteredRecommendations;
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        backgroundColor: AppColors.navy,
+        foregroundColor: Colors.white,
+        title: Text(
+          'Group Recommendations',
+          style: AppText.ui(
+            17,
+            FontWeight.w800,
+            color: Colors.white,
+          ),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh recommendations',
+            onPressed: _loading ? null : _fetchRecommendations,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _buildMessage(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Could not load places',
+                  message: _error!,
+                  action: ElevatedButton.icon(
+                    onPressed: _fetchRecommendations,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Try Again'),
+                  ),
+                )
+              : _allRecommendations.isEmpty
+                  ? _buildMessage(
+                      icon: Icons.explore_outlined,
+                      title: 'No recommendations yet',
+                      message:
+                          'The backend did not return any places for this group. Check the saved member preferences and available place data.',
+                      action: OutlinedButton.icon(
+                        onPressed: _fetchRecommendations,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Refresh'),
+                      ),
+                    )
+                  : Column(
+                      children: [
+                        SizedBox(
+                          height: 58,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            children: [
+                              for (final category in _categories)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: FilterChip(
+                                    label: Text(category),
+                                    selected:
+                                        _selectedCategory == category,
+                                    onSelected: (_) {
+                                      setState(() {
+                                        _selectedCategory = category;
+                                      });
+                                    },
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: recommendations.isEmpty
+                              ? _buildMessage(
+                                  icon: Icons.filter_alt_off_outlined,
+                                  title: 'No matching places',
+                                  message:
+                                      'Try selecting another category or All.',
+                                  action: TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedCategory = 'All';
+                                      });
+                                    },
+                                    child: const Text('Show All Places'),
+                                  ),
+                                )
+                              : ListView.builder(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    8,
+                                    16,
+                                    24,
+                                  ),
+                                  itemCount: recommendations.length,
+                                  itemBuilder: (context, index) {
+                                    return _buildPlaceCard(
+                                      recommendations[index],
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
     );
   }
 }

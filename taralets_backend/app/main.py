@@ -24,7 +24,7 @@ app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Pinapayagan lahat ng web client na kumuha ng data
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

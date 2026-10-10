@@ -1117,7 +1117,10 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                         : 'Waiting for members...',
                     onPressed: () {
                       if (allConfirmed) {
-                        context.push(AppRoutes.recommendations);
+                        context.push(
+                          AppRoutes.recommendations,
+                          extra: {'groupId': widget.trip.id}, // Ito ang idinagdag
+                        );
                       }
                     },
                   ),

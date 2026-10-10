@@ -229,9 +229,15 @@ final routerProvider = Provider<GoRouter>((ref) {
             GroupPrefsScreen(trip: state.extra! as Trip),
       ),
       GoRoute(
-        path: AppRoutes.recommendations,
-        builder: (context, state) => const GroupRecommendationsScreen(),
-      ),
+          path: AppRoutes.recommendations, // Gamitin ang variable mo
+          builder: (context, state) {
+            // Kunin ang ID bilang String
+            final extra = state.extra as Map<String, dynamic>?;
+            final groupId = extra?['groupId'] as String? ?? '';
+
+            return GroupRecommendationsScreen(groupId: groupId);
+          },
+        ),
     ],
   );
 
