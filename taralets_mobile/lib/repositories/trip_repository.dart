@@ -7,6 +7,7 @@ import '../core/network/api_endpoints.dart';
 import '../core/utils/geo_boundary.dart';
 import '../features/trip/data/models/member.dart';
 import '../features/trip/data/models/trip_models.dart';
+import 'package:flutter/foundation.dart';
 
 // ---------------------------------------------------------------------------
 // Model
@@ -316,6 +317,9 @@ class ApiTripRepository implements TripRepository {
       final response = await _dio.get(
         '${ApiEndpoints.apiPrefix}/groups/$tripId/recommendations',
       );
+
+      debugPrint('GROUP RECOMMENDATIONS STATUS: ${response.statusCode}');
+      debugPrint('GROUP RECOMMENDATIONS DATA: ${response.data}');
 
       final payload = response.data;
 

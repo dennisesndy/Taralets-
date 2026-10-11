@@ -1,5 +1,38 @@
 from math import radians, sin, cos, sqrt, atan2
 from typing import Any
+from types import SimpleNamespace
+
+
+def safe_cost(value, default=0.0):
+    if value is None:
+        return default
+
+    text = str(value).strip()
+
+    if not text or text.lower() in {
+        "free", "none", "n/a", "na", "-"
+    }:
+        return 0.0
+
+    text = (
+        text.replace("₱", "")
+        .replace(",", "")
+        .replace("PHP", "")
+        .replace("php", "")
+        .strip()
+    )
+
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return default
+
+
+def _get(place, key, default=None):
+    if isinstance(place, dict):
+        return place.get(key, default)
+    return getattr(place, key, default)
+
 
 
 def _normalize(values: Any) -> set[str]:
@@ -186,11 +219,15 @@ def _expand_activity_preferences(member_tags) -> set[str]:
     return selected
 
 
+
 def _place_activity_values(place) -> set[str]:
-    # Category is the primary classification.
-    category_values = _activity_values(
-        getattr(place, "category", None)
-    )
+    def get_value(field):
+        if isinstance(place, dict):
+            return place.get(field)
+        return getattr(place, field, None)
+
+    # Category remains the primary classification.
+    category_values = _activity_values(get_value("category"))
 
     category_activities = {
         canonical
@@ -198,16 +235,31 @@ def _place_activity_values(place) -> set[str]:
         if (canonical := _canonical_activity(value))
     }
 
-    # If the category already identifies the place, do not let
-    # conflicting tags such as "restaurant" reclassify a Cafe.
-    if category_activities:
-        return category_activities
+    # Include all subcategories to recognize more specific activities.
+    subcategory_activities = set()
 
-    # Use meaningful activity tags only if the category is
-    # missing or does not identify a supported activity.
-    tag_values = _activity_values(
-        getattr(place, "activity_tags", None)
-    )
+    for field in (
+        "sub_category_1",
+        "sub_category_2",
+        "sub_category_3",
+    ):
+        values = _activity_values(get_value(field))
+
+        subcategory_activities.update(
+            canonical
+            for value in values
+            if (canonical := _canonical_activity(value))
+        )
+
+    # Use category and subcategories before falling back to activity tags.
+    place_activities = category_activities | subcategory_activities
+
+    if place_activities:
+        return place_activities
+
+    # Use activity tags only when category and subcategories
+    # do not identify a supported activity.
+    tag_values = _activity_values(get_value("activity_tags"))
 
     return {
         canonical
@@ -216,16 +268,18 @@ def _place_activity_values(place) -> set[str]:
     }
 
 
-def place_matches_activity_preferences(place, member_tags) -> bool:
-    selected = _expand_activity_preferences(member_tags)
-
-    # No activity preference means no activity-based restriction.
-    if not selected:
+def place_matches_activity_preferences(place, member_tags):
+    if not member_tags:
         return True
 
+    selected = _expand_activity_preferences(member_tags)
     place_activities = _place_activity_values(place)
 
+    if not place_activities:
+        return False
+
     return bool(selected.intersection(place_activities))
+
 
 
 def calculate_activity_score(
@@ -308,15 +362,12 @@ def calculate_member_score(
     except (TypeError, ValueError):
         max_budget = None
 
-    min_cost = float(
-        getattr(place, "min_cost", 0) or 0
-    )
+    min_cost = safe_cost(getattr(place, "min_cost", 0))
+    max_cost = safe_cost(getattr(place, "max_cost", 0))
+    entrance_fee = safe_cost(getattr(place, "entrance_fee", 0))
 
-    entrance_fee = float(
-        getattr(place, "entrance_fee", 0) or 0
-    )
-
-    estimated_cost = max(min_cost, entrance_fee)
+    # Use the higher estimated cost and numeric entrance fee.
+    estimated_cost = max(min_cost, max_cost, entrance_fee)
 
     if max_budget is None or max_budget <= 0:
         budget_score = 1.0
@@ -446,18 +497,19 @@ def aggregate_group_scores(
     origin_lon: float | None = None,
 ) -> list[dict[str, Any]]:
 
+    
+
     if not group_profiles:
         return []
 
     scored = []
 
     for place in candidate_places:
+        if isinstance(place, dict):
+            place = SimpleNamespace(**place)
 
         member_scores = [
-            calculate_member_score(
-                member,
-                place,
-            )
+            calculate_member_score(member, place)
             for member in group_profiles
         ]
 
@@ -498,6 +550,12 @@ def aggregate_group_scores(
             "entrance_fee": place.entrance_fee,
             "min_cost": place.min_cost,
             "max_cost": place.max_cost,
+            "sub_category_1": getattr(place, "sub_category_1", None),
+            "sub_category_2": getattr(place, "sub_category_2", None),
+            "sub_category_3": getattr(place, "sub_category_3", None),
+            "pet_friendly": getattr(place, "pet_friendly", None),
+            "wheelchair_accessible": getattr(place, "wheelchair_accessible", None),
+            "good_for_children": getattr(place, "good_for_children", None),
             "accessibility_pets": (
                 place.accessibility_pets or []
             ),
@@ -559,6 +617,10 @@ def aggregate_group_scores(
                 (place.reviews or 0) == 0
             ),
         })
+
+    for place in candidate_places:
+        if isinstance(place, dict):
+            place = SimpleNamespace(**place)
 
     scored.sort(
         key=lambda item: item["match_score"],

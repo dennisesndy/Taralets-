@@ -1,6 +1,27 @@
 from typing import Any
 
 
+def safe_cost(value, default=0.0):
+    if value is None:
+        return default
+
+    text = str(value).strip()
+    if not text or text.lower() in {"free", "none", "n/a", "na", "-"}:
+        return 0.0
+
+    text = (
+        text.replace("₱", "")
+        .replace(",", "")
+        .replace("PHP", "")
+        .replace("php", "")
+        .strip()
+    )
+
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return default
+
 def _normalize(values: Any) -> set[str]:
     if values is None:
         return set()
@@ -20,20 +41,35 @@ def _normalize(values: Any) -> set[str]:
     }
 
 
+
 def _place_features(place) -> set[str]:
     features = set()
 
-    # Category is one feature.
-    category = getattr(place, "category", None)
-    if category:
-        features.add(str(category).strip().casefold())
+    for field in (
+        "category",
+        "sub_category_1",
+        "sub_category_2",
+        "sub_category_3",
+    ):
+        value = (
+            place.get(field)
+            if isinstance(place, dict)
+            else getattr(place, field, None)
+        )
 
-    # Activity tags are multi-label features.
-    features.update(
-        _normalize(getattr(place, "activity_tags", None))
+        if value:
+            features.update(_normalize(value))
+
+    activity_tags = (
+        place.get("activity_tags")
+        if isinstance(place, dict)
+        else getattr(place, "activity_tags", None)
     )
 
+    features.update(_normalize(activity_tags))
+
     return features
+
 
 
 def calculate_member_score(
@@ -110,6 +146,7 @@ def calculate_accessibility_score(
     return len(matches) / len(required)
 
 
+
 def calculate_budget_score(
     max_budget: float | None,
     place,
@@ -122,29 +159,22 @@ def calculate_budget_score(
     except (TypeError, ValueError):
         return 1.0
 
-    min_cost = getattr(place, "min_cost", 0) or 0
-    entrance_fee = getattr(place, "entrance_fee", 0) or 0
+    min_cost = safe_cost(getattr(place, "min_cost", 0))
+    max_cost = safe_cost(getattr(place, "max_cost", 0))
+    entrance_fee = safe_cost(getattr(place, "entrance_fee", 0))
 
-    try:
-        min_cost = float(min_cost)
-        entrance_fee = float(entrance_fee)
-    except (TypeError, ValueError):
-        return 1.0
-
-    required_cost = max(min_cost, entrance_fee)
+    estimated_cost = max(min_cost, max_cost)
+    required_cost = max(estimated_cost, entrance_fee)
 
     if required_cost <= budget:
         if budget <= 0:
             return 1.0
 
-        # Better score for cheaper places.
         return max(
             0.70,
             1.0 - (required_cost / budget) * 0.30,
         )
 
-    # Do not immediately discard the place here.
-    # Hard constraints are handled separately.
     overflow = required_cost - budget
 
     if budget <= 0:
@@ -158,11 +188,12 @@ def calculate_budget_score(
 
 
 
+
+
 def filter_by_hard_constraints(places, group_prefs: dict):
     """
-    Excludes places whose known estimated maximum cost
-    or entrance fee exceeds the group budget.
-    Places with unknown costs are excluded when a budget is set.
+    Excludes places exceeding the specified group budget.
+    Supports dictionaries and objects.
     """
     budget_max = group_prefs.get("budget_max")
 
@@ -180,32 +211,34 @@ def filter_by_hard_constraints(places, group_prefs: dict):
     valid_places = []
 
     for place in places:
-        min_cost = getattr(place, "min_cost", None)
-        max_cost = getattr(place, "max_cost", None)
-        entrance_fee = getattr(place, "entrance_fee", None)
+        def get_value(field):
+            if isinstance(place, dict):
+                return place.get(field)
+            return getattr(place, field, None)
 
-        try:
-            if max_cost is not None:
-                estimated_cost = float(max_cost)
-            elif min_cost is not None:
-                estimated_cost = float(min_cost)
-            else:
-                # Do not treat missing cost data as free.
-                continue
+        min_cost = get_value("min_cost")
+        max_cost = get_value("max_cost")
+        entrance_fee = get_value("entrance_fee")
 
-            fee = (
-                float(entrance_fee)
-                if entrance_fee is not None
-                else 0.0
-            )
-
-        except (TypeError, ValueError):
+        if min_cost is None and max_cost is None:
             continue
 
-        if estimated_cost < 0 or fee < 0:
+        estimated_min = (
+            safe_cost(min_cost)
+            if min_cost is not None
+            else 0.0
+        )
+        estimated_max = (
+            safe_cost(max_cost)
+            if max_cost is not None
+            else estimated_min
+        )
+        fee = safe_cost(entrance_fee)
+
+        if min(estimated_min, estimated_max, fee) < 0:
             continue
 
-        required_cost = max(estimated_cost, fee)
+        required_cost = max(estimated_max, fee)
 
         if required_cost <= budget:
             valid_places.append(place)

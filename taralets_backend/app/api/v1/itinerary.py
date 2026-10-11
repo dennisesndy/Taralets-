@@ -29,8 +29,24 @@ class PlaceSchema(BaseModel):
     lng: float | None = None
     latitude: float | None = None
     longitude: float | None = None
-    entrance_fee: float | None = None
+    entrance_fee: str | None = None
     is_open: bool | None = None
+    sub_category_1: str | None = None
+    sub_category_2: str | None = None
+    sub_category_3: str | None = None
+
+    pet_friendly: bool | None = None
+    wheelchair_accessible: bool | None = None
+    good_for_children: bool | None = None
+    
+    days_open: List[str] = Field(default_factory=list)
+    open_time: str | None = None
+    close_time: str | None = None
+    min_cost: float | None = None
+    max_cost: float | None = None
+    rating: float | None = None
+    reviews: int | None = None
+
 
 
 class GroupRecommendPayload(BaseModel):

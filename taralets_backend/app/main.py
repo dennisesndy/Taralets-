@@ -22,13 +22,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
 # CORS Configuration
+# CORS Configuration
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Pinapayagan lahat ng web client na kumuha ng data
+    allow_origins=[],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 
 # Central API Router
 app.include_router(api_router)

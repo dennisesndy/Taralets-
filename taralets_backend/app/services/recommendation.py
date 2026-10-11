@@ -81,6 +81,9 @@ async def get_group_recommendations(
         },
     )
 
+    if not candidates:
+        candidates = list(all_places)
+
     # IMPORTANT:
     # If strict filtering removes everything, don't show
     # "No places found". Let the scoring system rank them
@@ -100,7 +103,7 @@ async def get_group_recommendations(
     ]
 
     if selected_activities:
-        candidates = [
+        activity_matches = [
             place
             for place in candidates
             if place_matches_activity_preferences(
@@ -109,9 +112,9 @@ async def get_group_recommendations(
             )
         ]
 
-    if not candidates:
-        return []
-
+        # Keep the original candidates if no activity matches.
+        if activity_matches:
+            candidates = activity_matches
     # ---------------------------------------------------------
     # 5. Group consensus scoring
     # ---------------------------------------------------------
