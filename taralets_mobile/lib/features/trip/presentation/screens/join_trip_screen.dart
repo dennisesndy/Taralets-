@@ -391,7 +391,7 @@ class _HowItWorks extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${s.$1}. ${s.$3}',
+                          '${s.$1}.${s.$3}',
                           style: AppText.ui(13, FontWeight.w700),
                         ),
                         const SizedBox(height: 2),
@@ -727,6 +727,8 @@ class _FoundStep extends ConsumerWidget {
                   AppRoutes.tripPreferences,
                   extra: {
                     'tripId': currentState.trip!.id,
+                    // FIX: Direct na pumunta sa my trips tab para madaling mag-load ulit
+                    // kasama ang bagong trip data
                     'returnRoute': AppRoutes.trips,
                   },
                 );
@@ -812,7 +814,7 @@ class _JoinedStep extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${trip.dateLabel.replaceFirst('Today, ', '')} • ${trip.meetup} • ${trip.memberCount} members',
+                          '${trip.dateLabel.replaceFirst('Today, ', '')} • ${trip.meetup} •${trip.memberCount} members',
                           style: AppText.ui(
                             12,
                             FontWeight.w400,

@@ -24,73 +24,104 @@ class MyTripsScreen extends ConsumerWidget {
           child: CircularProgressIndicator(color: AppColors.orange),
         ),
         error: (e, s) => Center(
-          child: Text(
-            "Couldn't load your trips.",
-            style: AppText.ui(13, FontWeight.w400, color: AppColors.muted),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                "Couldn't load your trips.",
+                style: AppText.ui(14, FontWeight.w600, color: AppColors.navy),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Please check your connection and try again.",
+                style: AppText.ui(12, FontWeight.w400, color: AppColors.muted),
+              ),
+              const SizedBox(height: 16),
+              TaraletsButton.ghost(
+                label: 'Retry',
+                onPressed: () => ref.invalidate(myTripsProvider),
+              ),
+            ],
           ),
         ),
         data: (items) {
           Iterable<Trip> of(TripStatus s) => items.where((t) => t.status == s);
-          // `lobby` trips show as "Upcoming". Cancelled trips are hidden.
+
+          // `lobby` trips show as "Upcoming". Cancelled trips are hidden from sections.
           final sections = [
             ('Active', of(TripStatus.active).toList()),
             ('Upcoming', of(TripStatus.lobby).toList()),
             ('Completed', of(TripStatus.completed).toList()),
-          ].where((s) => s.$2.isNotEmpty).toList(); // I-cast to list
+          ].where((s) => s.$2.isNotEmpty).toList();
 
           if (sections.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'No trips yet.',
-                    style: AppText.ui(
-                      16,
-                      FontWeight.w600,
-                      color: AppColors.muted,
+            return RefreshIndicator(
+              color: AppColors.orange,
+              onRefresh: () async => ref.invalidate(myTripsProvider),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.7,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'No trips yet.',
+                          style: AppText.ui(
+                            16,
+                            FontWeight.w600,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        TaraletsButton.orange(
+                          label: '+ Create New Trip',
+                          onPressed: () => context.push(AppRoutes.createTrip),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  TaraletsButton.orange(
-                    label: '+ Create New Trip',
-                    onPressed: () => context.push(AppRoutes.createTrip),
-                  ),
-                ],
+                ),
               ),
             );
           }
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-            children: [
-              Text(
-                'My Trips',
-                style: AppText.ui(20, FontWeight.w800, color: AppColors.navy),
-              ),
-              const SizedBox(height: 16),
-              for (final s in sections) ...[
+          return RefreshIndicator(
+            color: AppColors.orange,
+            onRefresh: () async => ref.invalidate(myTripsProvider),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+              children: [
                 Text(
-                  s.$1.toUpperCase(),
-                  style: AppText.ui(
-                    13,
-                    FontWeight.w700,
-                    color: AppColors.muted,
-                    letterSpacing: 1,
-                  ),
+                  'My Trips',
+                  style: AppText.ui(20, FontWeight.w800, color: AppColors.navy),
                 ),
-                const SizedBox(height: 10),
-                for (final t in s.$2) ...[
-                  _TripCard(trip: t),
-                  if (t != s.$2.last) const SizedBox(height: 8),
+                const SizedBox(height: 16),
+                for (final s in sections) ...[
+                  Text(
+                    s.$1.toUpperCase(),
+                    style: AppText.ui(
+                      13,
+                      FontWeight.w700,
+                      color: AppColors.muted,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  for (final t in s.$2) ...[
+                    _TripCard(trip: t),
+                    if (t != s.$2.last) const SizedBox(height: 8),
+                  ],
+                  const SizedBox(height: 20),
                 ],
-                const SizedBox(height: 20),
+                TaraletsButton.orange(
+                  label: '+ Create New Trip',
+                  onPressed: () => context.push(AppRoutes.createTrip),
+                ),
               ],
-              TaraletsButton.orange(
-                label: '+ Create New Trip',
-                onPressed: () => context.push(AppRoutes.createTrip),
-              ),
-            ],
+            ),
           );
         },
       ),
@@ -231,7 +262,12 @@ class _TripCard extends ConsumerWidget {
                             children: [
                               AppIcons.pin(color: AppColors.muted, size: 16),
                               const SizedBox(width: 4),
-                              Text(trip.meetup, style: meta),
+                              Text(
+                                trip.meetup,
+                                style: meta,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ],
                           ),
                         ],
@@ -246,13 +282,15 @@ class _TripCard extends ConsumerWidget {
       ),
     );
 
-    final me = ref.watch(currentUserProvider).maybeWhen(data: (u) => u, orElse: () => null);
+    final me = ref
+        .watch(currentUserProvider)
+        .maybeWhen(data: (u) => u, orElse: () => null);
     final isLeader = trip.isLeader(me?.id);
 
     if (trip.status == TripStatus.lobby) {
       final actionText = isLeader ? 'Cancel Trip' : 'Leave Trip';
-      final dialogContent = isLeader 
-          ? 'Are you sure you want to cancel this trip? All members will be notified.' 
+      final dialogContent = isLeader
+          ? 'Are you sure you want to cancel this trip? All members will be notified.'
           : 'Are you sure you want to leave this trip?';
       final confirmText = isLeader ? 'Yes, Cancel' : 'Yes, Leave';
 
@@ -281,11 +319,25 @@ class _TripCard extends ConsumerWidget {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(c, false),
-                  child: Text('No', style: AppText.ui(14, FontWeight.w600, color: AppColors.navy)),
+                  child: Text(
+                    'No',
+                    style: AppText.ui(
+                      14,
+                      FontWeight.w600,
+                      color: AppColors.navy,
+                    ),
+                  ),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(c, true),
-                  child: Text(confirmText, style: AppText.ui(14, FontWeight.w700, color: AppColors.red)),
+                  child: Text(
+                    confirmText,
+                    style: AppText.ui(
+                      14,
+                      FontWeight.w700,
+                      color: AppColors.red,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -301,11 +353,18 @@ class _TripCard extends ConsumerWidget {
             ref.invalidate(myTripsProvider);
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(isLeader ? 'Trip cancelled successfully.' : 'You have left the trip.')),
+                SnackBar(
+                  content: Text(
+                    isLeader
+                        ? 'Trip cancelled successfully.'
+                        : 'You have left the trip.',
+                  ),
+                ),
               );
             }
           } catch (e) {
-            // Ignored, state refresh will happen anyway
+            // Error caught, provider invalidation will reset the UI
+            ref.invalidate(myTripsProvider);
           }
         },
         child: cardUI,

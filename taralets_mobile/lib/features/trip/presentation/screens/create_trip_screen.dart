@@ -22,7 +22,10 @@ import '../../../../shared/widgets/map_background.dart';
 import '../../../../shared/widgets/step_bar.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/taralets_field.dart';
+import '../../../../shared/widgets/taralets_text_field.dart';
 import '../../../profile/providers/preferences_provider.dart';
+// FIX: Idinagdag ang profile preferences repo para ma-save ang prefs ni leader
+import '../../../profile/data/profile_preferences_repository.dart';
 import '../../data/models/trip_models.dart';
 import '../../../routing/data/routing_repository.dart';
 
@@ -55,7 +58,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     ('Binondo Church', 14.6004, 120.9742),
     ('National Museum Plaza', 14.5870, 120.9815),
     ('Baywalk Promenade', 14.5740, 120.9760),
-    // Tinanggal na dito ang duplicate na "Use my current location"
   ];
 
   final List<String> _activityOptions = [
@@ -133,9 +135,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   final _query = TextEditingController();
   bool _pinMoved = false;
 
-  // MAP & SEARCH STATES
   final MapController _mapController = MapController();
-  LatLng _mapCenter = const LatLng(14.5896, 120.9753); // Default to Plaza Roma
+  LatLng _mapCenter = const LatLng(14.5896, 120.9753);
   Timer? _debounce;
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
@@ -145,7 +146,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
   late List<String> _cats;
   late List<String> _dietary;
-  double _budget = 2500.0;
+  final _budgetController = TextEditingController(text: '2500');
   String? _pace;
   final List<String> _accessibility = [];
 
@@ -173,12 +174,13 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     _desc.dispose();
     _query.dispose();
     _username.dispose();
+    _budgetController.dispose();
     super.dispose();
   }
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    
+
     if (query.isEmpty) {
       setState(() => _searchResults.clear());
       return;
@@ -188,7 +190,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       setState(() => _isSearching = true);
       final repo = ref.read(routingRepositoryProvider);
       final results = await repo.searchPlaces(query);
-      
+
       if (mounted) {
         setState(() {
           _searchResults = results;
@@ -202,7 +204,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     setState(() => _isSearching = true);
     final repo = ref.read(routingRepositoryProvider);
     final location = await repo.getCurrentLocation();
-    
+
     if (mounted) {
       setState(() {
         _isSearching = false;
@@ -273,6 +275,9 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   }
 
   Future<void> _next() async {
+    // FIX: Guard against double-tapping which causes duplicated trips and mismatched codes!
+    if (_submitting) return;
+
     if (_step == 2 && _outOfBoundary) return;
 
     if (_step == 2 && _createdTrip == null) {
@@ -336,21 +341,37 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     setState(() => _submitting = true);
 
     try {
-      final preferences = GroupPreferences(
+      final parsedBudget =
+          double.tryParse(_budgetController.text.replaceAll(',', '')) ?? 2500.0;
+
+      // 1. I-save ang GROUP Preferences
+      final groupPreferences = GroupPreferences(
         categories: [..._cats, ..._dietary, ..._accessibility],
-        budget: '₱${_budget.toInt()}',
+        budget: '₱${parsedBudget.toInt()}',
         walking: _pace ?? 'Not specified',
       );
 
       await ref
           .read(tripRepositoryProvider)
-          .updateGroupPreferences(_createdTripId!, preferences);
+          .updateGroupPreferences(_createdTripId!, groupPreferences);
+
+      // 2. FIX: I-save din ang INDIVIDUAL Preferences ng LEADER para hindi lumabas na "No saved preferences"
+      final dietaryToSave = _dietary.isEmpty ? ['None'] : _dietary;
+      await ref
+          .read(profilePreferencesRepoProvider)
+          .saveTripPreferences(
+            tripId: _createdTripId!,
+            activityTags: _cats,
+            dietaryPreferences: dietaryToSave,
+            maxBudget: parsedBudget,
+            preferredPace: _pace ?? 'Moderate',
+            accessibilityPreferences: _accessibility,
+          );
 
       if (mounted) {
         final trip = await ref
             .read(tripRepositoryProvider)
             .getTrip(_createdTripId!);
-
         ref.invalidate(myTripsProvider);
         if (mounted) {
           context.go(AppRoutes.tripCreated, extra: trip);
@@ -436,8 +457,9 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           ),
         ],
       ),
-      // Binawasan natin ang maxHeight mula 0.45 papuntang 0.35 para mas makita ang mapa
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.35),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.35,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -459,21 +481,37 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                     onTap: _useCurrentLocation,
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 11,
+                      ),
                       child: Row(
                         children: [
-                          const Icon(Icons.my_location, color: AppColors.orange, size: 20),
+                          const Icon(
+                            Icons.my_location,
+                            color: AppColors.orange,
+                            size: 20,
+                          ),
                           const SizedBox(width: 10),
-                          Text('Use my current location', style: AppText.ui(13, FontWeight.w600, color: AppColors.orange)),
+                          Text(
+                            'Use my current location',
+                            style: AppText.ui(
+                              13,
+                              FontWeight.w600,
+                              color: AppColors.orange,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
                   if (_isSearching)
-                    const Center(child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(),
-                    ))
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
                   else if (_searchResults.isNotEmpty)
                     for (final result in _searchResults)
                       GestureDetector(
@@ -490,7 +528,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                         },
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 2),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 11,
+                          ),
                           child: Row(
                             children: [
                               AppIcons.pin(color: AppColors.muted),
@@ -498,7 +539,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                               Expanded(
                                 child: Text(
                                   result['full_address'],
-                                  style: AppText.ui(13, FontWeight.w500, color: AppColors.text),
+                                  style: AppText.ui(
+                                    13,
+                                    FontWeight.w500,
+                                    color: AppColors.text,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -556,18 +601,25 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                                   o.$1,
                                   style: AppText.ui(
                                     13,
-                                    _selected == o.$1 ? FontWeight.w700 : FontWeight.w500,
-                                    color: _selected == o.$1 ? AppColors.orange : AppColors.text,
+                                    _selected == o.$1
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: _selected == o.$1
+                                        ? AppColors.orange
+                                        : AppColors.text,
                                   ),
                                 ),
                               ),
                               if (_selected == o.$1)
-                                AppIcons.check(color: AppColors.orange, size: 14),
+                                AppIcons.check(
+                                  color: AppColors.orange,
+                                  size: 14,
+                                ),
                             ],
                           ),
                         ),
                       ),
-                  ]
+                  ],
                 ],
               ),
             ),
@@ -585,12 +637,12 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         opacity: _outOfBoundary ? 0.45 : 1,
         child: TaraletsButton.orange(
           label: 'Confirm Location →',
+          isLoading: _submitting,
           onPressed: _next,
         ),
       ),
       3 => TaraletsButton.orange(
         label: 'Continue to Preferences →',
-        isLoading: _submitting,
         onPressed: _next,
       ),
       4 => TaraletsButton.orange(
@@ -633,7 +685,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.taralets.app',
                     ),
                   ],
@@ -648,7 +701,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                     children: [
                       const Text('📍', style: TextStyle(fontSize: 40)),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: out ? AppColors.redSoft : Colors.white,
                           borderRadius: BorderRadius.circular(6),
@@ -675,11 +731,15 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               ),
 
               Positioned(
-                top: 0, left: 0, right: 0,
+                top: 0,
+                left: 0,
+                right: 0,
                 child: Container(
                   padding: EdgeInsets.only(
                     top: MediaQuery.of(context).padding.top + 16,
-                    left: 24, right: 24, bottom: 24
+                    left: 24,
+                    right: 24,
+                    bottom: 24,
                   ),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -698,9 +758,16 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               ),
 
               Positioned(
-                bottom: 0, left: 0, right: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
                 child: Container(
-                  padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).padding.bottom + 16),
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    16,
+                    24,
+                    MediaQuery.of(context).padding.bottom + 16,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -710,7 +777,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                         const SizedBox(height: 14),
                         const ErrorNote(
                           title: 'OUT OF BOUNDARY',
-                          message: 'This meetup location is outside the supported City of Manila area. Choose a location inside the City of Manila to continue.',
+                          message:
+                              'This meetup location is outside the supported City of Manila area. Choose a location inside the City of Manila to continue.',
                         ),
                       ],
                       const SizedBox(height: 16),
@@ -918,6 +986,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
   List<Widget> _step3() {
     final joined = _members.where((m) => m.joined).length;
+    final currentCode = _createdTrip?.code ?? _code;
 
     return [
       Container(
@@ -957,7 +1026,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _code,
+                    currentCode,
                     style: AppText.mono(
                       30,
                       FontWeight.w900,
@@ -975,7 +1044,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                   child: TaraletsButton.ghost(
                     label: 'Copy Code',
                     onPressed: () {
-                      Clipboard.setData(ClipboardData(text: _code));
+                      Clipboard.setData(ClipboardData(text: currentCode));
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Code copied')),
                       );
@@ -989,7 +1058,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                     onPressed: () {
                       Clipboard.setData(
                         ClipboardData(
-                          text: 'Join my Taralets trip with room code $_code',
+                          text:
+                              'Join my Taralets trip with room code $currentCode',
                         ),
                       );
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1256,47 +1326,12 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         emoji: '💰',
         title: 'Spending budget',
         subtitle: 'Your preferred budget for this trip.',
-        child: Column(
-          children: [
-            Text(
-              '₱${_budget.toInt()}',
-              style: AppText.ui(24, FontWeight.w800, color: AppColors.orange),
-            ),
-            const SizedBox(height: 8),
-            Slider(
-              value: _budget,
-              min: 1,
-              max: 10000,
-              activeColor: AppColors.orange,
-              inactiveColor: AppColors.orangeSoft,
-              onChanged: (val) {
-                setState(() {
-                  _budget = val;
-                });
-              },
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '₱1',
-                  style: AppText.ui(
-                    12,
-                    FontWeight.w500,
-                    color: AppColors.muted,
-                  ),
-                ),
-                Text(
-                  '₱10,000',
-                  style: AppText.ui(
-                    12,
-                    FontWeight.w500,
-                    color: AppColors.muted,
-                  ),
-                ),
-              ],
-            ),
-          ],
+        child: TaraletsTextField(
+          label: 'Maximum Budget (₱)',
+          controller: _budgetController,
+          keyboardType: TextInputType.number,
+          hint: 'e.g. 2500',
+          icon: Icons.account_balance_wallet_outlined,
         ),
       ),
       const SizedBox(height: 16),
@@ -1365,11 +1400,14 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ('👥', 'Members', '${_members.length} people'),
     ];
 
+    final parsedBudget =
+        double.tryParse(_budgetController.text.replaceAll(',', '')) ?? 2500.0;
+
     final combinedPrefs = [
       ..._cats,
       ..._dietary,
-      '₱${_budget.toInt()}',
-      ?_pace,
+      '₱${parsedBudget.toInt()}',
+      if (_pace != null) _pace!,
       ..._accessibility,
     ];
 
@@ -1553,12 +1591,14 @@ class _SectionCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.child,
+    this.trailing,
   });
 
   final String emoji;
   final String title;
   final String subtitle;
   final Widget child;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1617,6 +1657,7 @@ class _SectionCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (trailing != null) ...[const SizedBox(width: 8), trailing!],
             ],
           ),
           const SizedBox(height: 18),

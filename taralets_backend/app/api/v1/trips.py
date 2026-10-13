@@ -1,4 +1,3 @@
-
 import random
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,8 +18,6 @@ from app.schemas.trip import (
 )
 
 router = APIRouter()
-
-
 
 async def _serialize_trip(db: AsyncSession, trip: Trip) -> dict:
     members_result = await db.execute(
@@ -97,10 +94,7 @@ async def _serialize_trip(db: AsyncSession, trip: Trip) -> dict:
                 ),
                 "max_budget": (
                     float(preference.max_budget)
-                    if (
-                        preference
-                        and preference.max_budget is not None
-                    )
+                    if (preference and preference.max_budget is not None)
                     else None
                 ),
                 "preferred_pace": (
@@ -166,7 +160,6 @@ async def get_my_trips(
         for trip in trips
     ]
 
-
 @router.get("/code/{code}")
 async def find_trip_by_code(
     code: str,
@@ -191,7 +184,6 @@ async def find_trip_by_code(
         )
 
     return await _serialize_trip(db, trip)
-
 
 @router.post("/{code}/join")
 async def join_trip(
@@ -230,7 +222,6 @@ async def join_trip(
 
     return await _serialize_trip(db, trip)
 
-
 @router.post("/{trip_id}/member-preferences")
 async def save_member_preferences(
     trip_id: str,
@@ -262,9 +253,7 @@ async def save_member_preferences(
         existing.dietary_preferences = payload.dietary_preferences
         existing.max_budget = payload.max_budget
         existing.preferred_pace = payload.preferred_pace
-        existing.accessibility_preferences = (
-            payload.accessibility_preferences
-        )
+        existing.accessibility_preferences = payload.accessibility_preferences
     else:
         new_preferences = TripMemberPreference(
             trip_member_id=member.id,
@@ -272,9 +261,7 @@ async def save_member_preferences(
             dietary_preferences=payload.dietary_preferences,
             max_budget=payload.max_budget,
             preferred_pace=payload.preferred_pace,
-            accessibility_preferences=(
-                payload.accessibility_preferences
-            ),
+            accessibility_preferences=payload.accessibility_preferences,
         )
         db.add(new_preferences)
 
@@ -283,7 +270,6 @@ async def save_member_preferences(
     return {
         "message": "Trip preferences successfully saved",
     }
-
 
 @router.post("")
 async def create_trip(
@@ -351,7 +337,6 @@ async def create_trip(
 
     return await _serialize_trip(db, new_trip)
 
-
 @router.get("/{trip_id}")
 async def get_trip(
     trip_id: str,
@@ -370,7 +355,6 @@ async def get_trip(
         )
 
     return await _serialize_trip(db, trip)
-
 
 @router.put("/{trip_id}")
 async def update_trip(
@@ -402,7 +386,6 @@ async def update_trip(
     await db.commit()
 
     return await _serialize_trip(db, trip)
-
 
 @router.post("/{trip_id}/members/{user_id}/toggle-ready")
 async def toggle_member_status(
@@ -451,7 +434,6 @@ async def toggle_member_status(
         )
 
     return await _serialize_trip(db, trip)
-
 
 @router.post("/{trip_id}/invite")
 async def invite_member(
@@ -511,7 +493,6 @@ async def invite_member(
 
     return await _serialize_trip(db, trip)
 
-
 @router.post("/{trip_id}/start")
 async def start_trip(
     trip_id: str,
@@ -547,7 +528,6 @@ async def start_trip(
 
     return await _serialize_trip(db, trip)
 
-
 @router.post("/{trip_id}/complete")
 async def complete_trip(
     trip_id: str,
@@ -570,6 +550,84 @@ async def complete_trip(
 
     return await _serialize_trip(db, trip)
 
+@router.post("/{trip_id}/cancel")
+async def cancel_trip(
+    trip_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    trip_result = await db.execute(
+        select(Trip).where(Trip.id == trip_id)
+    )
+    trip = trip_result.scalars().first()
+
+    if not trip:
+        raise HTTPException(
+            status_code=404,
+            detail="Trip not found",
+        )
+
+    if str(trip.leader_id) != str(current_user.id):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the trip leader can cancel the trip",
+        )
+
+    trip.status = "cancelled"
+    await db.commit()
+
+    return await _serialize_trip(db, trip)
+
+@router.post("/{trip_id}/leave")
+async def leave_trip(
+    trip_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    trip_result = await db.execute(
+        select(Trip).where(Trip.id == trip_id)
+    )
+    trip = trip_result.scalars().first()
+
+    if not trip:
+        raise HTTPException(
+            status_code=404,
+            detail="Trip not found",
+        )
+
+    if str(trip.leader_id) == str(current_user.id):
+        raise HTTPException(
+            status_code=400,
+            detail="The leader cannot leave the trip. Cancel it instead.",
+        )
+
+    member_result = await db.execute(
+        select(TripMember).where(
+            TripMember.trip_id == trip_id,
+            TripMember.user_id == current_user.id,
+        )
+    )
+    member = member_result.scalars().first()
+
+    if not member:
+        raise HTTPException(
+            status_code=404,
+            detail="You are not a member of this trip",
+        )
+
+    # Delete member preferences to maintain referential integrity
+    pref_result = await db.execute(
+        select(TripMemberPreference).where(TripMemberPreference.trip_member_id == member.id)
+    )
+    pref = pref_result.scalars().first()
+    
+    if pref:
+        await db.delete(pref)
+
+    await db.delete(member)
+    await db.commit()
+
+    return await _serialize_trip(db, trip)
 
 @router.get("/{trip_id}/preferences")
 async def get_group_preferences(
@@ -605,7 +663,6 @@ async def get_group_preferences(
         "budget": "₱0",
         "walking": "Not specified",
     }
-
 
 @router.put("/{trip_id}/preferences")
 async def update_group_preferences(

@@ -38,7 +38,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   bool _refreshing = false;
   bool _toggling = false;
   bool _starting = false;
-  bool _cancellingOrLeaving = false; 
+  bool _cancellingOrLeaving = false;
   String? _errorTitle;
   String? _errorMessage;
 
@@ -55,7 +55,12 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   }
 
   Future<void> _refreshTrip() async {
-    if (!mounted || _refreshing || _toggling || _starting || _cancellingOrLeaving) return;
+    if (!mounted ||
+        _refreshing ||
+        _toggling ||
+        _starting ||
+        _cancellingOrLeaving)
+      return;
 
     _refreshing = true;
 
@@ -63,6 +68,12 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
       final latestTrip = await _repo.getTrip(_trip.id);
 
       if (!mounted) return;
+
+      // FIX: Check kung may pagbabago sa member count or ready count para ma-invalidate
+      if (_trip.memberCount != latestTrip.memberCount ||
+          _trip.readyCount != latestTrip.readyCount) {
+        ref.invalidate(myTripsProvider);
+      }
 
       setState(() {
         _trip = latestTrip;
@@ -165,7 +176,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
     if (_cancellingOrLeaving) return;
 
     final title = isLeader ? 'Cancel Trip' : 'Leave Trip';
-    final content = isLeader 
+    final content = isLeader
         ? 'Are you sure you want to cancel this trip? All members will be notified and the trip will be deleted.'
         : 'Are you sure you want to leave this trip?';
     final confirmText = isLeader ? 'Yes, Cancel' : 'Yes, Leave';
@@ -181,11 +192,17 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
-            child: Text('No', style: AppText.ui(14, FontWeight.w600, color: AppColors.navy)),
+            child: Text(
+              'No',
+              style: AppText.ui(14, FontWeight.w600, color: AppColors.navy),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(c, true),
-            child: Text(confirmText, style: AppText.ui(14, FontWeight.w700, color: AppColors.red)),
+            child: Text(
+              confirmText,
+              style: AppText.ui(14, FontWeight.w700, color: AppColors.red),
+            ),
           ),
         ],
       ),
@@ -202,7 +219,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
       }
       ref.invalidate(myTripsProvider);
       if (!mounted) return;
-      context.go(AppRoutes.trips); 
+      context.go(AppRoutes.trips);
     } catch (e) {
       if (mounted) {
         _snack('Failed to process request. Please try again.');
@@ -276,7 +293,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                         onPressed: () {
                           context.push(
                             AppRoutes.recommendations,
-                            extra: {'groupId': widget.trip.id}, // Ito ang idinagdag natin
+                            extra: {'groupId': widget.trip.id},
                           );
                         },
                       ),
@@ -313,23 +330,41 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                           onPressed: _toggling ? null : () => _toggleReady(me),
                         ),
                     ],
-                    
+
                     // BUTTON PARA SA CANCEL/LEAVE DEPENDE KUNG SINO KA
                     if (isLeader || myMember != null) ...[
                       const SizedBox(height: 16),
                       GestureDetector(
-                        onTap: _cancellingOrLeaving ? null : () => _cancelOrLeaveTrip(isLeader),
+                        onTap: _cancellingOrLeaving
+                            ? null
+                            : () => _cancelOrLeaveTrip(isLeader),
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: AppColors.redSoft,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.red.withValues(alpha: 0.2)),
+                            border: Border.all(
+                              color: AppColors.red.withValues(alpha: 0.2),
+                            ),
                           ),
-                          child: _cancellingOrLeaving 
-                              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: AppColors.red, strokeWidth: 2))
-                              : Text(isLeader ? 'Cancel Trip' : 'Leave Trip', style: AppText.ui(14, FontWeight.w700, color: AppColors.red)),
+                          child: _cancellingOrLeaving
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.red,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  isLeader ? 'Cancel Trip' : 'Leave Trip',
+                                  style: AppText.ui(
+                                    14,
+                                    FontWeight.w700,
+                                    color: AppColors.red,
+                                  ),
+                                ),
                         ),
                       ),
                     ],
@@ -399,7 +434,6 @@ class _Header extends StatelessWidget {
                   ],
                 ),
               ),
-              // Leader-only edit button (same pill as the Profile "Edit").
               if (showEdit)
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,

@@ -10,6 +10,24 @@ import '../features/trip/data/models/trip_models.dart';
 import 'package:flutter/foundation.dart';
 
 // ---------------------------------------------------------------------------
+// Bulletproof Parsing Helpers (To prevent silent Flutter crashes)
+// ---------------------------------------------------------------------------
+
+double _parseDouble(dynamic val, [double def = 0.0]) {
+  if (val == null) return def;
+  if (val is num) return val.toDouble();
+  if (val is String) return double.tryParse(val) ?? def;
+  return def;
+}
+
+int _parseInt(dynamic val, [int def = 0]) {
+  if (val == null) return def;
+  if (val is num) return val.toInt();
+  if (val is String) return int.tryParse(val) ?? def;
+  return def;
+}
+
+// ---------------------------------------------------------------------------
 // Model
 // ---------------------------------------------------------------------------
 
@@ -110,30 +128,51 @@ class Trip {
     );
   }
 
-  factory Trip.fromJson(Map<String, dynamic> json) => Trip(
-    id: json['id'].toString(),
-    code: json['code'] as String,
-    title: json['title'] as String,
-    status: TripStatus.values.byName(json['status'] as String),
-    dateLabel: json['date_label'] as String? ?? '',
-    longDate: json['long_date'] as String? ?? '',
-    meetup: json['meetup'] as String,
-    meetupFull: json['meetup_full'] as String,
-    arrivalTarget: json['arrival_target'] as String,
-    leaderId: json['leader_id'].toString(),
-    members: [
-      if (json['members'] != null)
-        for (final m in json['members'] as List)
-          Member.fromJson(m as Map<String, dynamic>),
-    ],
-    description: json['description'] as String? ?? '',
-    date: json['date'] == null ? null : DateTime.parse(json['date'] as String),
-    wrapUp: json['wrap_up'] as String? ?? '8:00 PM',
-    latitude: (json['latitude'] as num?)?.toDouble() ?? 14.5896,
-    longitude: (json['longitude'] as num?)?.toDouble() ?? 120.9753,
-    spotsOpen: (json['spots_open'] as num?)?.toInt() ?? 0,
-    onWayCount: (json['on_way_count'] as num?)?.toInt() ?? 0,
-  );
+  factory Trip.fromJson(Map<String, dynamic> json) {
+    TripStatus parseStatus(dynamic s) {
+      if (s == null) return TripStatus.lobby;
+      try {
+        return TripStatus.values.byName(s.toString());
+      } catch (_) {
+        return TripStatus.lobby;
+      }
+    }
+
+    DateTime? parseDate(dynamic d) {
+      if (d == null || d.toString() == 'None' || d.toString().isEmpty)
+        return null;
+      try {
+        return DateTime.parse(d.toString());
+      } catch (_) {
+        return null;
+      }
+    }
+
+    return Trip(
+      id: json['id']?.toString() ?? '',
+      code: json['code']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Untitled Trip',
+      status: parseStatus(json['status']),
+      dateLabel: json['date_label']?.toString() ?? '',
+      longDate: json['long_date']?.toString() ?? '',
+      meetup: json['meetup']?.toString() ?? '',
+      meetupFull: json['meetup_full']?.toString() ?? '',
+      arrivalTarget: json['arrival_target']?.toString() ?? '',
+      leaderId: json['leader_id']?.toString() ?? '',
+      members: [
+        if (json['members'] != null && json['members'] is List)
+          for (final m in json['members'] as List)
+            if (m is Map<String, dynamic>) Member.fromJson(m),
+      ],
+      description: json['description']?.toString() ?? '',
+      date: parseDate(json['date']),
+      wrapUp: json['wrap_up']?.toString() ?? '8:00 PM',
+      latitude: _parseDouble(json['latitude'], 14.5896),
+      longitude: _parseDouble(json['longitude'], 120.9753),
+      spotsOpen: _parseInt(json['spots_open'], 0),
+      onWayCount: _parseInt(json['on_way_count'], 0),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -180,9 +219,7 @@ abstract class TripRepository {
   Future<List<Trip>> getMyTrips();
   Future<Trip> createTrip(CreateTripDto dto);
   Future<GroupPreferences?> getGroupPreferences(String tripId);
-  Future<List<Map<String, dynamic>>> getGroupRecommendations(
-  String tripId,
-);
+  Future<List<Map<String, dynamic>>> getGroupRecommendations(String tripId);
   Future<void> updateGroupPreferences(String tripId, GroupPreferences prefs);
   Future<Trip> getTrip(String tripId);
   Future<Trip> updateTrip(Trip updatedTrip);
@@ -190,8 +227,8 @@ abstract class TripRepository {
   Future<Trip> inviteMember(String tripId, String username);
   Future<Trip> startTrip(String tripId);
   Future<Trip> completeTrip(String tripId);
-  Future<Trip> cancelTrip(String tripId); 
-  Future<Trip> leaveTrip(String tripId); // BAGONG FUNCTION PARA SA LEAVE
+  Future<Trip> cancelTrip(String tripId);
+  Future<Trip> leaveTrip(String tripId);
 }
 
 String generateRoomCode([Random? random]) {
@@ -256,7 +293,10 @@ class ApiTripRepository implements TripRepository {
   Future<List<Trip>> getMyTrips() async {
     try {
       final res = await _dio.get('${ApiEndpoints.apiPrefix}/trips/me');
-      return (res.data as List).map((e) => Trip.fromJson(e)).toList();
+      if (res.data == null) return [];
+
+      final list = res.data as List;
+      return list.map((e) => Trip.fromJson(e as Map<String, dynamic>)).toList();
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
         return [];
@@ -264,6 +304,12 @@ class ApiTripRepository implements TripRepository {
       throw TripException(
         'LOAD FAILED',
         _handleError(e, 'Could not load your trips'),
+      );
+    } catch (e) {
+      debugPrint("Parsing Error in getMyTrips: $e");
+      throw TripException(
+        'DATA ERROR',
+        'Something went wrong while reading your trips.',
       );
     }
   }
@@ -317,9 +363,6 @@ class ApiTripRepository implements TripRepository {
       final response = await _dio.get(
         '${ApiEndpoints.apiPrefix}/groups/$tripId/recommendations',
       );
-
-      debugPrint('GROUP RECOMMENDATIONS STATUS: ${response.statusCode}');
-      debugPrint('GROUP RECOMMENDATIONS DATA: ${response.data}');
 
       final payload = response.data;
 
@@ -476,7 +519,7 @@ class ApiTripRepository implements TripRepository {
   Future<Trip> cancelTrip(String tripId) async {
     try {
       final res = await _dio.post(
-        '${ApiEndpoints.apiPrefix}/trips/$tripId/cancel', 
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/cancel',
       );
       return Trip.fromJson(res.data);
     } on DioException catch (e) {
@@ -491,7 +534,7 @@ class ApiTripRepository implements TripRepository {
   Future<Trip> leaveTrip(String tripId) async {
     try {
       final res = await _dio.post(
-        '${ApiEndpoints.apiPrefix}/trips/$tripId/leave', 
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/leave',
       );
       return Trip.fromJson(res.data);
     } on DioException catch (e) {
@@ -603,7 +646,9 @@ class MockTripRepository implements TripRepository {
   Future<Trip> leaveTrip(String tripId) async {
     final index = _trips.indexWhere((t) => t.id == tripId);
     if (index != -1) {
-      final updatedMembers = _trips[index].members.where((m) => m.id != currentUserId).toList();
+      final updatedMembers = _trips[index].members
+          .where((m) => m.id != currentUserId)
+          .toList();
       _trips[index] = _trips[index].copyWith(members: updatedMembers);
       return _trips[index];
     }

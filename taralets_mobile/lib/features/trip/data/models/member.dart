@@ -1,6 +1,19 @@
 /// Ready state of a trip member inside the Group Lobby.
 enum MemberStatus { ready, notReady }
 
+List<String> _parseList(dynamic val) {
+  if (val == null) return [];
+  if (val is List) return val.map((e) => e.toString()).toList();
+  return [];
+}
+
+double? _parseDoubleNull(dynamic val) {
+  if (val == null) return null;
+  if (val is num) return val.toDouble();
+  if (val is String) return double.tryParse(val);
+  return null;
+}
+
 /// A person inside a trip lobby (leader or invited member).
 class Member {
   const Member({
@@ -18,23 +31,14 @@ class Member {
     this.accessibilityPreferences = const [],
   });
 
-  /// User id (matches AuthUser.id for the signed-in user).
   final String id;
-
-  /// Lowercase username without the leading @.
   final String username;
-
-  /// Display name, e.g. "Dennise".
   final String name;
-
   final String? avatarUrl;
   final bool isLeader;
   final MemberStatus status;
 
-  /// Legacy preference list retained for existing UI.
   final List<String> preferences;
-
-  /// Structured individual trip preferences.
   final List<String> activityTags;
   final List<String> dietaryPreferences;
   final double? maxBudget;
@@ -74,34 +78,27 @@ class Member {
 
   factory Member.fromJson(Map<String, dynamic> json) {
     final tripPreferences =
-        json['trip_preferences'] as Map<String, dynamic>? ?? {};
+        json['trip_preferences'] as Map<String, dynamic>? ??
+        json['trip_member_preferences'] as Map<String, dynamic>? ??
+        json['member_preferences'] as Map<String, dynamic>? ??
+        {};
 
     return Member(
-      id: json['user_id'].toString(),
-      username: json['username'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      avatarUrl: json['avatar_url'] as String?,
-      isLeader: json['is_leader'] as bool? ?? false,
-      status: (json['status'] as String?) == 'ready'
+      id: json['user_id']?.toString() ?? '',
+      username: json['username']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      avatarUrl: json['avatar_url']?.toString(),
+      isLeader: json['is_leader'] == true || json['is_leader'] == 'true',
+      status: (json['status']?.toString() == 'ready')
           ? MemberStatus.ready
           : MemberStatus.notReady,
-
-      // Retain the existing field for compatibility.
-      preferences: json['preferences'] != null
-          ? List<String>.from(json['preferences'])
-          : [],
-
-      // Read the new structured fields from the backend.
-      activityTags: List<String>.from(tripPreferences['activity_tags'] ?? []),
-      dietaryPreferences: List<String>.from(
-        tripPreferences['dietary_preferences'] ?? [],
-      ),
-      maxBudget: tripPreferences['max_budget'] != null
-          ? (tripPreferences['max_budget'] as num).toDouble()
-          : null,
-      preferredPace: tripPreferences['preferred_pace'] as String?,
-      accessibilityPreferences: List<String>.from(
-        tripPreferences['accessibility_preferences'] ?? [],
+      preferences: _parseList(json['preferences']),
+      activityTags: _parseList(tripPreferences['activity_tags']),
+      dietaryPreferences: _parseList(tripPreferences['dietary_preferences']),
+      maxBudget: _parseDoubleNull(tripPreferences['max_budget']),
+      preferredPace: tripPreferences['preferred_pace']?.toString(),
+      accessibilityPreferences: _parseList(
+        tripPreferences['accessibility_preferences'],
       ),
     );
   }

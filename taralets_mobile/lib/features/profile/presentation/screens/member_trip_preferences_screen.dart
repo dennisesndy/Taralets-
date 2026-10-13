@@ -13,6 +13,7 @@ import '../../../../shared/widgets/auth_backdrop.dart';
 import '../../../../shared/widgets/auth_logo.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/taralets_button.dart';
+import '../../../../shared/widgets/taralets_text_field.dart'; // FIX: Idinagdag ang Custom TextField
 import '../../providers/preferences_provider.dart';
 import '../../data/profile_preferences_repository.dart';
 
@@ -98,7 +99,8 @@ class _MemberTripPreferenceScreenState
   final List<String> _selectedDietary = [];
   final List<String> _selectedAccessibility = [];
 
-  double _budget = 2500.0;
+  // FIX: Inalis ang double at pinalitan ng TextField Controller
+  final _budgetController = TextEditingController(text: '2500');
   String? _pace;
 
   bool _isLoading = false;
@@ -113,6 +115,7 @@ class _MemberTripPreferenceScreenState
   @override
   void dispose() {
     _shake.dispose();
+    _budgetController.dispose();
     super.dispose();
   }
 
@@ -141,11 +144,13 @@ class _MemberTripPreferenceScreenState
           ? ['None']
           : _selectedDietary;
 
-      // Gamit na ang bagong ProfilePreferencesRepository
       if (widget.tripId == null) {
         _toast('Trip information is missing');
         return;
       }
+
+      final parsedBudget =
+          double.tryParse(_budgetController.text.replaceAll(',', '')) ?? 2500.0;
 
       await ref
           .read(profilePreferencesRepoProvider)
@@ -153,7 +158,7 @@ class _MemberTripPreferenceScreenState
             tripId: widget.tripId!,
             activityTags: _selectedActivities,
             dietaryPreferences: dietaryToSave,
-            maxBudget: _budget,
+            maxBudget: parsedBudget,
             preferredPace: _pace ?? 'Moderate',
             accessibilityPreferences: _selectedAccessibility,
           );
@@ -519,28 +524,13 @@ class _MemberTripPreferenceScreenState
       emoji: '💰',
       title: 'Spending budget',
       subtitle: 'How much are you willing to spend on this trip?',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '₱${_budget.toInt()}',
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          Slider(
-            value: _budget,
-            min: 1,
-            max: 10000,
-            divisions: 9999,
-            label: '₱${_budget.toInt()}',
-            onChanged: (value) {
-              setState(() => _budget = value);
-            },
-          ),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [Text('₱1'), Text('₱10,000')],
-          ),
-        ],
+      // FIX: Pinalitan ang nakakalitong Slider sa uniform na TaraletsTextField
+      child: TaraletsTextField(
+        label: 'Maximum Budget (₱)',
+        controller: _budgetController,
+        keyboardType: TextInputType.number,
+        hint: 'e.g. 2500',
+        icon: Icons.account_balance_wallet_outlined,
       ),
     );
   }
