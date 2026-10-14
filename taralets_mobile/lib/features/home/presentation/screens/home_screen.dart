@@ -11,9 +11,9 @@ import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/app_icons.dart';
 import '../../../../shared/widgets/avatar.dart';
-import '../../../../shared/widgets/dashed_border_box.dart';
 import '../../../../shared/widgets/taralets_card.dart';
 import '../../../../shared/widgets/taralets_chip.dart';
+import '../../../../shared/widgets/ticket_card.dart';
 import '../../../discover/presentation/screens/place_detail_sheet.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart'; // IMPORT PARA SA NOTIFICATIONS
 
@@ -72,41 +72,67 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // -----------------------------------------------------------------
             // Header
             // -----------------------------------------------------------------
-            Container(
-              color: AppColors.navy,
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
                     children: [
+                      // AVATAR
+                      GestureDetector(
+                        onTap: () => context.go(AppRoutes.profile),
+                        child: Avatar(name: displayName, size: 46),
+                      ),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              greetingFor(DateTime.now()),
-                              style: AppText.ui(
-                                13,
-                                FontWeight.w400,
-                                color: Colors.white.withValues(alpha: 0.6),
-                              ),
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    '${greetingFor(DateTime.now())},',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppText.ui(
+                                      12,
+                                      FontWeight.w400,
+                                      color: AppColors.muted,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              '$displayName! 👋',
-                              style: AppText.ui(
-                                20,
-                                FontWeight.w800,
-                                color: Colors.white,
-                              ),
+                            const SizedBox(height: 1),
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    '$displayName!',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppText.ui(
+                                      16,
+                                      FontWeight.w800,
+                                      color: AppColors.navy,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const Icon(
+                                  Icons.waving_hand_rounded,
+                                  size: 16,
+                                  color: TicketPalette.amberLine,
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 1),
                             Text(
                               'Ready for your next gala?',
                               style: AppText.ui(
                                 12,
                                 FontWeight.w400,
-                                color: Colors.white.withValues(alpha: 0.5),
+                                color: AppColors.muted,
                               ),
                             ),
                           ],
@@ -114,36 +140,65 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       // NOTIFICATION BELL ICON
                       Container(
-                        margin: const EdgeInsets.only(right: 12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
+                          color: Colors.white,
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: TicketPalette.shadow.withValues(
+                                alpha: 0.08,
+                              ),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child: IconButton(
-                          icon: const Icon(Icons.notifications_none_rounded, color: Colors.white),
+                          icon: const Icon(
+                            Icons.notifications_none_rounded,
+                            color: AppColors.navy,
+                          ),
                           onPressed: () {
                             Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationsScreen(),
+                              ),
                             );
                           },
                         ),
                       ),
-                      // AVATAR
-                      GestureDetector(
-                        onTap: () => context.go(AppRoutes.profile),
-                        child: Avatar(name: displayName, size: 42),
-                      ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Explore Manila!',
+                    style: AppText.ui(
+                      28,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   GestureDetector(
                     onTap: () => context.go(AppRoutes.discover),
                     child: Container(
-                      height: 46,
-                      padding: const EdgeInsets.only(left: 14),
+                      height: 48,
+                      padding: const EdgeInsets.only(left: 16),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: TicketPalette.lavenderLine.withValues(
+                            alpha: 0.8,
+                          ),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: TicketPalette.shadow.withValues(alpha: 0.05),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: Row(
                         children: [
@@ -169,28 +224,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // Body
             // -----------------------------------------------------------------
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Dynamic Trip Card (Ipapakita kung may existing trip)
-                  if (displayTrip != null) ...[
-                    _ActiveTripCard(trip: displayTrip),
-                    const SizedBox(height: 20),
-                  ] else ...[
-                    const _EmptyTripCard(),
-                    const SizedBox(height: 20),
-                  ],
-
                   // Create / Join Trip actions
                   Row(
                     children: [
                       Expanded(
                         child: _ActionTile(
-                          color: AppColors.orange,
-                          tileColor: AppColors.orangeSoft,
+                          lineColor: TicketPalette.amberLine,
+                          fillColor: TicketPalette.amberFill,
+                          textColor: TicketPalette.amberText,
                           icon: AppIcons.plus(
-                            color: AppColors.orange,
+                            color: TicketPalette.amberText,
                             size: 18,
                           ),
                           title: 'Create Trip',
@@ -198,12 +245,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           onTap: () => context.push(AppRoutes.createTrip),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: _ActionTile(
-                          color: AppColors.navy,
-                          tileColor: AppColors.blueSoft,
-                          icon: AppIcons.users(color: AppColors.navy, size: 18),
+                          lineColor: TicketPalette.skyLine,
+                          fillColor: TicketPalette.skyFill,
+                          textColor: TicketPalette.skyText,
+                          icon: AppIcons.users(
+                            color: TicketPalette.skyText,
+                            size: 18,
+                          ),
                           title: 'Join a Trip',
                           subtitle: 'Enter invite code',
                           onTap: () => context.push(AppRoutes.joinTrip),
@@ -214,11 +265,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                   const SizedBox(height: 20),
 
-                  // Explore Manila
+                  // Dynamic Trip Card (Ipapakita kung may existing trip)
+                  if (displayTrip != null) ...[
+                    _ActiveTripCard(trip: displayTrip),
+                    const SizedBox(height: 24),
+                  ] else ...[
+                    const _EmptyTripCard(),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Category browser
                   Text(
-                    'Explore Manila',
+                    'Browse by Category',
                     style: AppText.ui(
-                      16,
+                      18,
                       FontWeight.w800,
                       color: AppColors.navy,
                     ),
@@ -245,16 +305,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
                   // Recommended Places
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
                         'Recommended Places',
                         style: AppText.ui(
-                          16,
+                          18,
                           FontWeight.w800,
                           color: AppColors.navy,
                         ),
@@ -288,7 +349,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       onTap: () => showPlaceDetail(context, p),
                     ),
                     if (p.id != filteredPlaces.take(4).last.id)
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                   ],
                 ],
               ),
@@ -311,49 +372,59 @@ class _EmptyTripCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => context.push(AppRoutes.createTrip),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.orangeSoft,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
-        ),
+      child: TicketCard(
+        fillColor: TicketPalette.lavenderFill,
+        lineColor: TicketPalette.lavenderLine,
+        notchOffset: 64,
+        padding: const EdgeInsets.symmetric(vertical: 16),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(
-                color: AppColors.orange,
-                shape: BoxShape.circle,
+            SizedBox(
+              width: 64,
+              child: Center(
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.orange.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: AppIcons.plus(color: AppColors.orange, size: 18),
+                ),
               ),
-              child: AppIcons.plus(color: Colors.white, size: 20),
             ),
-            const SizedBox(width: 14),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'No active trips',
-                    style: AppText.ui(
-                      15,
-                      FontWeight.w800,
-                      color: AppColors.navy,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'No active trips',
+                      style: AppText.ui(
+                        15,
+                        FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Create a trip now and plan your gala!',
-                    style: AppText.ui(
-                      12,
-                      FontWeight.w400,
-                      color: AppColors.navy.withValues(alpha: 0.7),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Create a trip now and plan your gala!',
+                      style: AppText.ui(
+                        12,
+                        FontWeight.w400,
+                        color: AppColors.navy.withValues(alpha: 0.7),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-            const Icon(Icons.chevron_right, color: AppColors.orange),
+            const Padding(
+              padding: EdgeInsets.only(right: 14),
+              child: Icon(Icons.chevron_right, color: AppColors.orange),
+            ),
           ],
         ),
       ),
@@ -370,10 +441,12 @@ class _ActiveTripCard extends StatelessWidget {
 
   final Trip trip;
 
+  static const double _stubHeight = 50;
+
   @override
   Widget build(BuildContext context) {
-    final soft = Colors.white.withValues(alpha: 0.6);
-    final faint = Colors.white.withValues(alpha: 0.5);
+    final soft = AppColors.navy.withValues(alpha: 0.65);
+    final faint = AppColors.navy.withValues(alpha: 0.45);
 
     // Gawing dynamic ang mga kulay at text base sa status
     final isUpcoming = trip.status != TripStatus.active;
@@ -382,181 +455,128 @@ class _ActiveTripCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: () => context.go(AppRoutes.itinerary),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.navy,
-          borderRadius: BorderRadius.circular(16),
-        ),
+      child: TicketCard(
+        fillColor: TicketPalette.lavenderFill,
+        lineColor: TicketPalette.lavenderLine,
+        notchAxis: TicketNotchAxis.leftRight,
+        notchOffset: _stubHeight,
+        notchRadius: 10,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+            // Ticket stub (above the dashed divider)
+            SizedBox(
+              height: _stubHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: badgeColor,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: badgeColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          badgeText,
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w700,
+                            color: badgeColor,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      badgeText,
-                      style: AppText.ui(
-                        10,
-                        FontWeight.w700,
-                        color: badgeColor,
-                        letterSpacing: 1,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.orange.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text(
+                        isUpcoming ? 'Soon' : 'Today',
+                        style: AppText.ui(
+                          11,
+                          FontWeight.w700,
+                          color: AppColors.orange,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.orange.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: Text(
-                    isUpcoming ? 'Soon' : 'Today',
-                    style: AppText.ui(
-                      11,
-                      FontWeight.w700,
-                      color: AppColors.orange,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              trip.title,
-              style: AppText.ui(16, FontWeight.w800, color: Colors.white),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                AppIcons.pin(color: faint),
-                const SizedBox(width: 5),
-                Text(
-                  trip.meetup,
-                  style: AppText.ui(12, FontWeight.w400, color: soft),
-                ),
-                const SizedBox(width: 12),
-                AppIcons.clock(color: faint),
-                const SizedBox(width: 5),
-                Text(
-                  'Arrival ${trip.arrivalTarget}',
-                  style: AppText.ui(12, FontWeight.w400, color: soft),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                AvatarStack(
-                  names: trip.memberNames,
-                  size: 26,
-                  ringColor: AppColors.navy,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${trip.onWayCount} of ${trip.memberCount} joined',
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.ui(12, FontWeight.w400, color: soft),
-                  ),
-                ),
-                Text(
-                  'View →',
-                  style: AppText.ui(
-                    12,
-                    FontWeight.w700,
-                    color: AppColors.orange,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// Action Tile
-// =============================================================================
-
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
-    required this.color,
-    required this.tileColor,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final Color color;
-  final Color tileColor;
-  final Widget icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: DashedBorderBox(
-        color: color,
-        radius: 14,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: tileColor,
-                borderRadius: BorderRadius.circular(10),
               ),
-              alignment: Alignment.center,
-              child: icon,
             ),
-            const SizedBox(width: 10),
-            Expanded(
+
+            // Ticket body (below the dashed divider)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    trip.title,
                     style: AppText.ui(
-                      13,
+                      20,
                       FontWeight.w800,
                       color: AppColors.navy,
                     ),
                   ),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.ui(
-                      11,
-                      FontWeight.w400,
-                      color: AppColors.muted,
-                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      AppIcons.pin(color: faint),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          trip.meetup,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.ui(12, FontWeight.w500, color: soft),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      AppIcons.clock(color: faint),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Arrival ${trip.arrivalTarget}',
+                        style: AppText.ui(12, FontWeight.w500, color: soft),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      AvatarStack(
+                        names: trip.memberNames,
+                        size: 28,
+                        ringColor: TicketPalette.lavenderFill,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${trip.onWayCount} of ${trip.memberCount} joined',
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.ui(12, FontWeight.w400, color: soft),
+                        ),
+                      ),
+                      Text(
+                        'View →',
+                        style: AppText.ui(
+                          12,
+                          FontWeight.w700,
+                          color: AppColors.orange,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -567,6 +587,96 @@ class _ActionTile extends StatelessWidget {
     );
   }
 }
+
+// =============================================================================
+// Action Tile (Create / Join ticket)
+// =============================================================================
+
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.lineColor,
+    required this.fillColor,
+    required this.textColor,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final Color lineColor;
+  final Color fillColor;
+  final Color textColor;
+  final Widget icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: TicketCard(
+        fillColor: fillColor,
+        lineColor: lineColor,
+        notchOffset: 52,
+        notchRadius: 8,
+        cornerRadius: 16,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 52,
+              child: Center(
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: lineColor.withValues(alpha: 0.18),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: icon,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12, right: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.ui(14, FontWeight.w800, color: textColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.ui(
+                        11,
+                        FontWeight.w400,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Place Row
+// =============================================================================
 
 // =============================================================================
 // Place Row
@@ -588,15 +698,11 @@ class _PlaceRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = place;
-
-    // Get the user's live location and calculate the distance
-    // to the recommended place.
     final locationAsync = ref.watch(userLocationProvider);
 
     final dynamicDistanceLabel = locationAsync.maybeWhen(
       data: (pos) {
         final dist = calculateDistanceKm(pos, p.lat, p.lng);
-
         return dist != null ? '${dist.toStringAsFixed(1)} km' : p.distanceLabel;
       },
       orElse: () => p.distanceLabel,
@@ -607,106 +713,145 @@ class _PlaceRow extends ConsumerWidget {
       blur: 8,
       shadowAlpha: 0.06,
       onTap: onTap,
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            Container(
-              width: 90,
-              height: 90,
-              color: AppColors.bg,
-              alignment: Alignment.center,
-              child: Text(p.emoji, style: const TextStyle(fontSize: 36)),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        // TINANGGAL: IntrinsicHeight. IPINALIT: SizedBox na may fixed height.
+        child: SizedBox(
+          height: 96,
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: 88,
+                  height: 96,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [TicketPalette.skyFill, TicketPalette.amberFill],
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(p.emoji, style: const TextStyle(fontSize: 36)),
                 ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  // IPINALIT: MainAxisAlignment.spaceBetween imbes na Spacer()
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // TOP SECTION (Name, Heart, Subtitle, Hours)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                p.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppText.ui(
+                                  15,
+                                  FontWeight.w800,
+                                  color: AppColors.navy,
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: onToggleSave,
+                              child: Padding(
+                                padding: const EdgeInsets.all(2),
+                                child: AppIcons.heart(
+                                  filled: saved,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
                           child: Text(
-                            p.name,
+                            p.sub,
                             overflow: TextOverflow.ellipsis,
-                            style: AppText.ui(14, FontWeight.w700),
+                            style: AppText.ui(
+                              12,
+                              FontWeight.w400,
+                              color: AppColors.muted,
+                            ),
                           ),
                         ),
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: onToggleSave,
-                          child: Padding(
-                            padding: const EdgeInsets.all(2),
-                            child: AppIcons.heart(
-                              filled: saved,
-                              color: AppColors.orange,
-                            ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              AppIcons.clock(color: AppColors.muted),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  p.openingHours,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppText.ui(
+                                    11,
+                                    FontWeight.w500,
+                                    color: AppColors.muted,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
 
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        p.sub,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.ui(
-                          12,
-                          FontWeight.w400,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                    ),
-
-                    // Opening hours from the revised version.
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        '🕒 ${p.openingHours}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.ui(
-                          11,
-                          FontWeight.w500,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                    ),
-
-                    const Spacer(),
-
+                    // BOTTOM SECTION (Ratings, Price, Distance, Status)
                     Row(
                       children: [
-                        AppIcons.star(),
+                        AppIcons.star(color: TicketPalette.amberLine),
                         const SizedBox(width: 3),
                         Text(
                           '${p.rating}',
                           style: AppText.ui(12, FontWeight.w700),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          p.price,
-                          style: AppText.ui(
-                            12,
-                            FontWeight.w400,
-                            color: AppColors.muted,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: TicketPalette.skyText.withValues(
+                              alpha: 0.12,
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            p.price,
+                            style: AppText.ui(
+                              11,
+                              FontWeight.w700,
+                              color: TicketPalette.skyText,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          dynamicDistanceLabel,
-                          style: AppText.ui(
-                            12,
-                            FontWeight.w400,
-                            color: AppColors.muted,
+                        Expanded(
+                          child: Text(
+                            dynamicDistanceLabel,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.ui(
+                              12,
+                              FontWeight.w400,
+                              color: AppColors.muted,
+                            ),
                           ),
                         ),
-                        const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 6,
@@ -732,8 +877,8 @@ class _PlaceRow extends ConsumerWidget {
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

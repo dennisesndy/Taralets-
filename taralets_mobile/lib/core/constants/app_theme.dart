@@ -7,11 +7,13 @@ import '../constants/app_colors.dart';
 class AppTheme {
   AppTheme._();
 
-  /// The Figma prototype is light-only.
+  /// Light-only theme: white surfaces, soft blue primary, soft red for errors.
   static ThemeData get light {
     const scheme = ColorScheme.light(
-      primary: AppColors.orange,
+      primary: AppColors.primary,
       onPrimary: Colors.white,
+      primaryContainer: AppColors.primarySoft,
+      onPrimaryContainer: AppColors.navy,
       secondary: AppColors.navy,
       onSecondary: Colors.white,
       surface: AppColors.card,
@@ -24,7 +26,7 @@ class AppTheme {
     );
 
     final base = ThemeData(brightness: Brightness.light);
-    final textTheme = GoogleFonts.plusJakartaSansTextTheme(
+    final textTheme = GoogleFonts.manropeTextTheme(
       base.textTheme,
     ).apply(bodyColor: AppColors.text, displayColor: AppColors.text);
 
@@ -32,11 +34,14 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: AppColors.bg,
+      canvasColor: AppColors.bg,
       textTheme: textTheme,
+      dividerColor: AppColors.border,
       splashFactory: NoSplash.splashFactory,
       highlightColor: Colors.transparent,
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.bg,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         systemOverlayStyle: SystemUiOverlayStyle(
@@ -48,7 +53,8 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.navy,
         behavior: SnackBarBehavior.floating,
-        contentTextStyle: GoogleFonts.plusJakartaSans(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        contentTextStyle: GoogleFonts.manrope(
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: Colors.white,
