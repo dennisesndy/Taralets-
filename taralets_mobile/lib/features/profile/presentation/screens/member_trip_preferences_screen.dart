@@ -16,6 +16,8 @@ import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/taralets_text_field.dart'; // FIX: Idinagdag ang Custom TextField
 import '../../providers/preferences_provider.dart';
 import '../../data/profile_preferences_repository.dart';
+import '../../../../repositories/repository_providers.dart';
+import '../../../../repositories/trip_repository.dart';
 
 class MemberTripPreferencesScreen extends ConsumerStatefulWidget {
   final String? returnRoute;
@@ -170,36 +172,23 @@ class _MemberTripPreferenceScreenState
             dietary: dietaryToSave,
           );
 
+      final trip = await ref.read(tripRepositoryProvider).getTrip(widget.tripId!);
+
+      // ITO ANG PAPALIT DOON SA LUMANG if (mounted) BLOCK:
       if (mounted) {
-        final messenger = ScaffoldMessenger.of(context);
-
-        if (widget.returnRoute != null) {
-          context.go(widget.returnRoute!, extra: widget.returnExtra);
-
-          messenger.showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Preferences saved!',
-                style: TextStyle(color: Colors.white),
-              ),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Preferences saved!',
+              style: TextStyle(color: Colors.white),
             ),
-          );
-        } else {
-          context.go(AppRoutes.login);
-
-          messenger.showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Preferences saved! You can now log in.',
-                style: TextStyle(color: Colors.white),
-              ),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        
+        // Dumiretso na sa Trip Lobby at ipasa ang trip data
+        context.pushReplacement(AppRoutes.tripLobby, extra: trip);
       }
     } on DioException catch (e) {
       _toast(_errorText(e, 'Failed to save preferences'));
