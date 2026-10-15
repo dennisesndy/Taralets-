@@ -374,7 +374,13 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             .getTrip(_createdTripId!);
         ref.invalidate(myTripsProvider);
         if (mounted) {
-          context.go(AppRoutes.tripCreated, extra: trip);
+          context.go(
+            AppRoutes.tripLobby,
+            extra: {
+              'trip': trip,
+              'showCreatedOverlay': true,
+            },
+          );
         }
       }
     } catch (e) {

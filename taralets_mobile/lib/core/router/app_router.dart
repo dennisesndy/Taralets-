@@ -193,14 +193,30 @@ final routerProvider = Provider<GoRouter>((ref) {
             TripCreatedScreen(trip: state.extra! as Trip),
       ),
       // Group Lobby: Full screen bago umalis ang grupo
+      
       GoRoute(
         path: AppRoutes.tripLobby,
         parentNavigatorKey: _rootNavigatorKey,
-        redirect: (context, state) =>
-            state.extra is Trip ? null : AppRoutes.trips,
-        builder: (context, state) =>
-            TripLobbyScreen(trip: state.extra! as Trip),
+        redirect: (context, state) {
+          if (state.extra is Trip) return null;
+          if (state.extra is Map<String, dynamic> && 
+              (state.extra as Map)['trip'] is Trip) {
+            return null;
+          }
+          return AppRoutes.trips;
+        },
+        builder: (context, state) {
+          if (state.extra is Map<String, dynamic>) {
+            final data = state.extra as Map<String, dynamic>;
+            return TripLobbyScreen(
+              trip: data['trip'] as Trip,
+              showCreatedOverlay: data['showCreatedOverlay'] as bool? ?? false,
+            );
+          }
+          return TripLobbyScreen(trip: state.extra! as Trip);
+        },
       ),
+
 
       // Edit Trip: Leader-only form (pops with updated Trip)
       GoRoute(

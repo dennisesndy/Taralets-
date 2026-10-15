@@ -14,24 +14,19 @@ import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/dashed_border_box.dart';
 import '../../../../shared/widgets/status_badge.dart';
 import '../../../../shared/widgets/taralets_button.dart';
+import '../../../../shared/widgets/ticket_card.dart'; // IDINAGDAG: TicketCard import
 import '../../data/models/member.dart';
 
-/// Active Trip (after the leader presses Start Trip). Built from the Figma
-/// "Active Trip" header + departure schedule, plus the live banner, presence
-/// strip, destination summary, placeholders and host options.
 class ActiveTripScreen extends ConsumerStatefulWidget {
   const ActiveTripScreen({super.key, required this.trip});
-
   final Trip trip;
 
   @override
   ConsumerState<ActiveTripScreen> createState() => _ActiveTripScreenState();
 }
 
-/// Mock travel plan per member (Manila districts only).
 class _Plan {
   const _Plan(this.from, this.travelMin, this.traffic, this.status);
-
   final String from;
   final int travelMin;
   final String traffic;
@@ -44,6 +39,7 @@ const Map<String, _Plan> _plans = {
   'paola': _Plan('Sta. Cruz', 15, 'Moderate', PresenceStatus.onWay),
   'jewelle': _Plan('Ermita', 12, 'Moderate', PresenceStatus.notLeft),
 };
+
 const _Plan _fallbackPlan = _Plan(
   'Paco',
   20,
@@ -53,12 +49,12 @@ const _Plan _fallbackPlan = _Plan(
 
 const int _bufferMin = 15;
 
-/// Figma `fmtDur`.
 String _fmtDur(int m) =>
     m >= 60 ? '${m ~/ 60} hr${m % 60 != 0 ? ' ${m % 60} min' : ''}' : '$m min';
 
 class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
   late final Trip _trip = widget.trip;
+
   bool _paused = false;
   bool _busy = false;
 
@@ -70,12 +66,13 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
 
   BoxDecoration get _cardDeco => BoxDecoration(
     color: Colors.white,
-    borderRadius: BorderRadius.circular(14),
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: AppColors.border),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.05),
-        blurRadius: 6,
-        offset: const Offset(0, 1),
+        color: Colors.black.withValues(alpha: 0.03),
+        blurRadius: 12,
+        offset: const Offset(0, 4),
       ),
     ],
   );
@@ -110,6 +107,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
         .watch(currentUserProvider)
         .maybeWhen(data: (u) => u, orElse: () => null);
     final isLeader = _trip.isLeader(me?.id);
+
     final target = parseTimeOfDay(_trip.arrivalTarget);
     final targetMin = target.hour * 60 + target.minute;
 
@@ -124,43 +122,41 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
-                  vertical: 16,
+                  vertical: 20,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _liveBanner(),
-                    const SizedBox(height: 12),
-                    _presenceStrip(),
                     const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        'Departure Schedule',
-                        style: AppText.ui(
-                          15,
-                          FontWeight.w800,
-                          color: AppColors.navy,
-                        ),
+                    _presenceStrip(),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Departure Schedule',
+                      style: AppText.ui(
+                        16,
+                        FontWeight.w900,
+                        color: AppColors.navy,
                       ),
                     ),
+                    const SizedBox(height: 12),
                     for (final m in _trip.members) ...[
                       _scheduleCard(m, targetMin),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                     ],
-                    const SizedBox(height: 10),
-                    _destinationCard(),
-                    const SizedBox(height: 14),
-                    _recsPlaceholder(),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
+                    _destinationCard(), // BOARDING PASS THEME APPLIED
+                    const SizedBox(height: 16),
                     _liveUpdatesPlaceholder(),
+                    const SizedBox(height: 16),
+                    _recsPlaceholder(),
                     if (isLeader) ...[
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                       Text(
                         'Host Options',
-                        style: AppText.ui(13, FontWeight.w700),
+                        style: AppText.ui(13, FontWeight.w800, color: AppColors.muted, letterSpacing: 1),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
@@ -191,18 +187,17 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     );
   }
 
-  // Header: same as Figma ActiveTrip.
   Widget _header() {
     return Container(
       color: AppColors.navy,
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               BackButtonTile(onTap: () => context.go(AppRoutes.home)),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -212,18 +207,18 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppText.ui(
-                        17,
-                        FontWeight.w800,
+                        18,
+                        FontWeight.w900,
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       'Today • Target arrival ${_trip.arrivalTarget}',
                       style: AppText.ui(
-                        12,
-                        FontWeight.w400,
-                        color: Colors.white.withValues(alpha: 0.55),
+                        13,
+                        FontWeight.w500,
+                        color: Colors.white.withValues(alpha: 0.7),
                       ),
                     ),
                   ],
@@ -231,30 +226,31 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
               children: [
-                AppIcons.pin(color: AppColors.orange),
-                const SizedBox(width: 10),
+                AppIcons.pin(color: AppColors.primary), // Changed to Rose
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Meetup Location',
+                        'MEETUP LOCATION',
                         style: AppText.ui(
-                          12,
-                          FontWeight.w400,
-                          color: Colors.white.withValues(alpha: 0.55),
+                          10,
+                          FontWeight.w800,
+                          color: Colors.white.withValues(alpha: 0.6),
+                          letterSpacing: 1,
                         ),
                       ),
-                      const SizedBox(height: 1),
+                      const SizedBox(height: 2),
                       Text(
                         _trip.meetupFull,
                         maxLines: 1,
@@ -273,20 +269,21 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'Group',
+                      'ON THE WAY',
                       style: AppText.ui(
-                        11,
-                        FontWeight.w400,
-                        color: Colors.white.withValues(alpha: 0.55),
+                        10,
+                        FontWeight.w800,
+                        color: Colors.white.withValues(alpha: 0.6),
+                        letterSpacing: 1,
                       ),
                     ),
-                    const SizedBox(height: 1),
+                    const SizedBox(height: 2),
                     Text(
-                      '$_onWay/${_trip.memberCount} on the way',
+                      '$_onWay/${_trip.memberCount}',
                       style: AppText.ui(
-                        14,
-                        FontWeight.w700,
-                        color: AppColors.gold,
+                        15,
+                        FontWeight.w800,
+                        color: AppColors.primaryLight, // Changed to light Rose
                       ),
                     ),
                   ],
@@ -299,7 +296,6 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     );
   }
 
-  /// Live status banner (green when ongoing, amber when paused).
   Widget _liveBanner() {
     final bg = _paused ? const Color(0xFFFEF3C7) : const Color(0xFFF0FDF4);
     final border = _paused ? const Color(0xFFFDE68A) : const Color(0xFFBBF7D0);
@@ -307,41 +303,40 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     final body = _paused ? const Color(0xFFA16207) : const Color(0xFF15803D);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: border, width: 1.5),
       ),
       child: Row(
         children: [
           Container(
-            width: 8,
-            height: 8,
+            width: 10,
+            height: 10,
             decoration: BoxDecoration(
               color: _paused ? AppColors.amber : AppColors.green,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(5),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _paused ? 'Trip is Paused' : 'Trip is Ongoing',
-                  style: AppText.ui(12, FontWeight.w800, color: title),
+                  _paused ? 'Trip is Paused' : 'Trip is Live',
+                  style: AppText.ui(13, FontWeight.w800, color: title),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   _paused
                       ? 'The host paused the trip. Hang tight.'
-                      : 'The trip is live. Everyone is heading to the meetup.',
+                      : 'Everyone is heading to the meetup location.',
                   style: AppText.ui(
-                    11,
-                    FontWeight.w400,
+                    12,
+                    FontWeight.w500,
                     color: body,
-                    height: 1.5,
                   ),
                 ),
               ],
@@ -352,7 +347,6 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     );
   }
 
-  /// Horizontal avatar row of everyone on the trip.
   Widget _presenceStrip() {
     Color dot(PresenceStatus s) => switch (s) {
       PresenceStatus.onWay || PresenceStatus.arrived => AppColors.green,
@@ -361,7 +355,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     };
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: _cardDeco,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -369,14 +363,14 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('On this trip', style: AppText.ui(13, FontWeight.w700)),
+              Text('On this trip', style: AppText.ui(14, FontWeight.w800, color: AppColors.navy)),
               Text(
                 '${_trip.memberCount} members',
-                style: AppText.ui(12, FontWeight.w700, color: AppColors.orange),
+                style: AppText.ui(12, FontWeight.w700, color: AppColors.primary),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -387,39 +381,39 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                       Stack(
                         clipBehavior: Clip.none,
                         children: [
-                          Avatar(name: m.name, size: 44),
+                          Avatar(name: m.name, size: 48),
                           Positioned(
-                            right: -1,
-                            bottom: -1,
+                            right: -2,
+                            bottom: -2,
                             child: Container(
-                              width: 12,
-                              height: 12,
+                              width: 14,
+                              height: 14,
                               decoration: BoxDecoration(
                                 color: dot(_planFor(m).status),
                                 shape: BoxShape.circle,
                                 border: Border.all(
                                   color: Colors.white,
-                                  width: 2,
+                                  width: 2.5,
                                 ),
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         m.isLeader ? 'Host' : m.name,
                         style: AppText.ui(
-                          10,
-                          m.isLeader ? FontWeight.w700 : FontWeight.w600,
+                          11,
+                          m.isLeader ? FontWeight.w800 : FontWeight.w600,
                           color: m.isLeader
-                              ? AppColors.orange
+                              ? AppColors.primary
                               : AppColors.muted,
                         ),
                       ),
                     ],
                   ),
-                  if (m != _trip.members.last) const SizedBox(width: 14),
+                  if (m != _trip.members.last) const SizedBox(width: 16),
                 ],
               ],
             ),
@@ -429,26 +423,25 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     );
   }
 
-  /// Figma departure-schedule card.
   Widget _scheduleCard(Member m, int targetMin) {
     final plan = _planFor(m);
     final heavy = plan.traffic.contains('Heavy');
 
     Widget box(String label, Widget value, {Color? bg}) => Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: bg ?? AppColors.bg,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              label,
-              style: AppText.ui(10, FontWeight.w400, color: AppColors.muted),
+              label.toUpperCase(),
+              style: AppText.ui(9, FontWeight.w800, color: AppColors.muted, letterSpacing: 1),
             ),
-            const SizedBox(height: 1),
+            const SizedBox(height: 2),
             value,
           ],
         ),
@@ -456,14 +449,14 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     );
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: _cardDeco,
       child: Column(
         children: [
           Row(
             children: [
-              Avatar(name: m.name, size: 36),
-              const SizedBox(width: 10),
+              Avatar(name: m.name, size: 40),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -471,16 +464,16 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(m.name, style: AppText.ui(14, FontWeight.w700)),
+                        Text(m.name, style: AppText.ui(15, FontWeight.w800, color: AppColors.navy)),
                         StatusBadge(status: plan.status),
                       ],
                     ),
-                    const SizedBox(height: 1),
+                    const SizedBox(height: 2),
                     Text(
-                      'From ${plan.from}',
+                      'Origin: ${plan.from}',
                       style: AppText.ui(
                         12,
-                        FontWeight.w400,
+                        FontWeight.w500,
                         color: AppColors.muted,
                       ),
                     ),
@@ -489,7 +482,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               box(
@@ -497,8 +490,8 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                 Text(
                   formatMinutes(targetMin - plan.travelMin - _bufferMin),
                   style: AppText.mono(
-                    13,
-                    FontWeight.w800,
+                    14,
+                    FontWeight.w900,
                     color: AppColors.navy,
                   ),
                 ),
@@ -508,7 +501,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                 'Travel time',
                 Text(
                   _fmtDur(plan.travelMin),
-                  style: AppText.ui(12, FontWeight.w700),
+                  style: AppText.ui(13, FontWeight.w700, color: AppColors.navy),
                 ),
               ),
               const SizedBox(width: 8),
@@ -517,8 +510,8 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                 Text(
                   plan.traffic.split(' ').first,
                   style: AppText.ui(
-                    11,
-                    FontWeight.w700,
+                    12,
+                    FontWeight.w800,
                     color: heavy ? const Color(0xFF92400E) : AppColors.text,
                   ),
                 ),
@@ -531,77 +524,159 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     );
   }
 
+  // BINAGO: Ang Destination Card ay ginawang Transit Ticket format
   Widget _destinationCard() {
-    final rows = [
-      ('📍', 'Destination', _trip.meetupFull),
-      ('🗓', 'Date', _trip.longDate),
-      ('⏰', 'Schedule', '${_trip.arrivalTarget} – ${_trip.wrapUp}'),
-    ];
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _cardDeco,
+    return TicketCard(
+      fillColor: TicketPalette.skyFill,
+      lineColor: TicketPalette.skyLine,
+      notchAxis: TicketNotchAxis.leftRight,
+      notchOffset: 95,
+      cornerRadius: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final r in rows) ...[
-            Row(
+          // Top Ticket Part
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
               children: [
-                Text(r.$1, style: const TextStyle(fontSize: 20)),
-                const SizedBox(width: 14),
+                const Icon(Icons.flag_circle_rounded, color: TicketPalette.skyText, size: 36),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        r.$2,
-                        style: AppText.ui(
-                          11,
-                          FontWeight.w400,
-                          color: AppColors.muted,
-                        ),
+                        'DESTINATION',
+                        style: AppText.ui(10, FontWeight.w800, color: TicketPalette.skyText, letterSpacing: 1),
                       ),
-                      const SizedBox(height: 1),
-                      Text(r.$3, style: AppText.ui(14, FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(
+                        _trip.meetupFull,
+                        style: AppText.ui(16, FontWeight.w800, color: AppColors.navy),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
-            if (r != rows.last) const SizedBox(height: 14),
-          ],
+          ),
+          // Bottom Ticket Part
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'DATE',
+                        style: AppText.ui(10, FontWeight.w800, color: AppColors.muted, letterSpacing: 1),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _trip.longDate,
+                        style: AppText.ui(14, FontWeight.w700, color: AppColors.navy),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SCHEDULE',
+                        style: AppText.ui(10, FontWeight.w800, color: AppColors.muted, letterSpacing: 1),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_trip.arrivalTarget} – ${_trip.wrapUp}',
+                        style: AppText.ui(14, FontWeight.w700, color: AppColors.navy),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  /// Placeholder for the itinerary / API recommendations module.
+  // BINAGO: Mas clean na status indicator para sa Live Updates
+  Widget _liveUpdatesPlaceholder() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            child: const Icon(Icons.sensors_rounded, color: AppColors.primary, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Live Group Updates', style: AppText.ui(15, FontWeight.w800, color: AppColors.primary)),
+                const SizedBox(height: 4),
+                Text('Check-ins and delays will appear here once tracking is active.', style: AppText.ui(12, FontWeight.w500, color: AppColors.primary.withValues(alpha: 0.8), height: 1.4)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // BINAGO: Vibrant banner papuntang recommendations
   Widget _recsPlaceholder() {
-    return DashedBorderBox(
-      color: AppColors.border,
-      radius: 14,
-      padding: const EdgeInsets.all(16),
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFF4EB), Colors.white],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.2)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            '🧭',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 28),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                child: const Icon(Icons.auto_awesome_rounded, color: AppColors.orange, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Itinerary Ideas', style: AppText.ui(15, FontWeight.w800, color: AppColors.navy)),
+                    const SizedBox(height: 2),
+                    Text('Places picked based on your group prefs.', style: AppText.ui(12, FontWeight.w500, color: AppColors.muted)),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Itinerary recommendations',
-            textAlign: TextAlign.center,
-            style: AppText.ui(13, FontWeight.w700, color: AppColors.navy),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Places picked for your group will show up here.',
-            textAlign: TextAlign.center,
-            style: AppText.ui(12, FontWeight.w400, color: AppColors.muted),
-          ),
-          const SizedBox(height: 12),
-          TaraletsButton.ghost(
+          const SizedBox(height: 16),
+          TaraletsButton.orange(
+            small: true,
             label: 'View Recommendations',
             onPressed: () => context.push(AppRoutes.recommendations),
           ),
@@ -609,42 +684,8 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
       ),
     );
   }
-
-  Widget _liveUpdatesPlaceholder() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: _cardDeco,
-      child: Row(
-        children: [
-          const Text('📡', style: TextStyle(fontSize: 20)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Live group updates',
-                  style: AppText.ui(14, FontWeight.w600),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  'Check-ins and delays appear here once live tracking is on.',
-                  style: AppText.ui(
-                    11,
-                    FontWeight.w400,
-                    color: AppColors.muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-/// Confirm dialog for "Complete Trip" (styled like the Figma modals).
 class _CompleteDialog extends StatelessWidget {
   const _CompleteDialog();
 
@@ -663,24 +704,24 @@ class _CompleteDialog extends StatelessWidget {
           children: [
             Text(
               'Complete this trip?',
-              style: AppText.ui(17, FontWeight.w800, color: AppColors.navy),
+              style: AppText.ui(18, FontWeight.w900, color: AppColors.navy),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               'This ends the trip for everyone and moves it to Completed.',
               style: AppText.ui(
-                12,
-                FontWeight.w400,
+                13,
+                FontWeight.w500,
                 color: AppColors.muted,
                 height: 1.6,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             TaraletsButton.navy(
               label: 'Complete Trip',
               onPressed: () => Navigator.of(context).pop(true),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TaraletsButton.ghost(
               label: 'Not yet',
               onPressed: () => Navigator.of(context).pop(false),

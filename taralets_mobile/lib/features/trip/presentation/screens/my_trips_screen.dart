@@ -8,32 +8,241 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/app_icons.dart';
+import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/taralets_button.dart';
+import '../../../../shared/widgets/taralets_chip.dart';
+import '../../../../shared/widgets/taralets_dialogs.dart';
+import '../../../../shared/widgets/ticket_card.dart';
 
-class MyTripsScreen extends ConsumerWidget {
+class MyTripsScreen extends ConsumerStatefulWidget {
   const MyTripsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyTripsScreen> createState() => _MyTripsScreenState();
+}
+
+class _MyTripsScreenState extends ConsumerState<MyTripsScreen> {
+  static const _filters = ['All', 'Active', 'Upcoming', 'Completed'];
+  String _filter = 'All';
+
+  @override
+  Widget build(BuildContext context) {
     final trips = ref.watch(myTripsProvider);
 
-    return ColoredBox(
-      color: AppColors.bg,
-      child: trips.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.orange),
+    return Scaffold(
+      backgroundColor: AppColors.bg, // Clean white bg
+      body: SafeArea(
+        bottom: false, // Hayaan nating umabot hanggang ibaba ang kulay ng container
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. HEADER (Navy)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'My Trips',
+                        style: AppText.ui(28, FontWeight.w900, color: AppColors.navy),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Manage your travel itineraries',
+                        style: AppText.ui(13, FontWeight.w500, color: AppColors.muted),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: AppIcons.compass(color: AppColors.navy, size: 20),
+                  ),
+                ],
+              ),
+            ),
+
+            // 2. FILTER CHIPS (Square-ish, Rose / Primary color when active)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  for (final f in _filters) ...[
+                    _buildFilterChip(f),
+                    if (f != _filters.last) const SizedBox(width: 10),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // 3. VIBRANT NAVY CONTAINER FOR TICKETS
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.navy, 
+                      Color(0xFF2A3F6D), // Lighter, elegant navy/slate blend
+                    ],
+                  ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                ),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                  child: trips.when(
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    ),
+                    error: (e, s) => _buildErrorState(),
+                    data: (items) => _buildList(items),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-        error: (e, s) => Center(
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String f) {
+    final selected = _filter == f;
+    return GestureDetector(
+      onTap: () => setState(() => _filter = f),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+            width: 1.5,
+          ),
+          boxShadow: selected ? [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            )
+          ] : [],
+        ),
+        child: Text(
+          f,
+          style: AppText.ui(
+            13,
+            selected ? FontWeight.w800 : FontWeight.w600,
+            color: selected ? Colors.white : AppColors.muted,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildList(List<Trip> items) {
+    Iterable<Trip> of(TripStatus s) => items.where((t) => t.status == s);
+    final sections = [
+      ('Active', of(TripStatus.active).toList()),
+      ('Upcoming', of(TripStatus.lobby).toList()),
+      ('Completed', of(TripStatus.completed).toList()),
+    ].where((s) => s.$2.isNotEmpty).toList();
+
+    final visible = _filter == 'All'
+        ? sections
+        : sections.where((s) => s.$1 == _filter).toList();
+
+    return RefreshIndicator(
+      color: AppColors.primary,
+      backgroundColor: Colors.white,
+      onRefresh: () async => ref.invalidate(myTripsProvider),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 100),
+        children: [
+          if (visible.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Center(
+                child: Text(
+                  'No $_filter trips found.',
+                  style: AppText.ui(14, FontWeight.w500, color: Colors.white.withValues(alpha: 0.7)),
+                ),
+              ),
+            ),
+          for (final s in visible) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Text(
+                    s.$1.toUpperCase(),
+                    style: AppText.ui(12, FontWeight.w800, color: Colors.white.withValues(alpha: 0.8), letterSpacing: 1.2),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySoft.withValues(alpha: 0.2), // Rose tint on navy
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      '${s.$2.length}',
+                      style: AppText.ui(11, FontWeight.w800, color: AppColors.primarySoft),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            for (final t in s.$2) ...[
+              _TripCard(trip: t),
+              const SizedBox(height: 16),
+            ],
+            const SizedBox(height: 16),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: TicketCard(
+          fillColor: TicketPalette.redFill,
+          lineColor: TicketPalette.redLine,
+          notchOffset: 56,
+          padding: const EdgeInsets.fromLTRB(0, 0, 0, 20),
+          notchAxis: TicketNotchAxis.leftRight,
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
+              const SizedBox(
+                height: 56,
+                child: Center(
+                  child: Icon(Icons.wifi_off_rounded, color: TicketPalette.redText),
+                ),
+              ),
+              const SizedBox(height: 16),
               Text(
                 "Couldn't load your trips.",
-                style: AppText.ui(14, FontWeight.w600, color: AppColors.navy),
+                style: AppText.ui(14, FontWeight.w700, color: AppColors.navy),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 "Please check your connection and try again.",
+                textAlign: TextAlign.center,
                 style: AppText.ui(12, FontWeight.w400, color: AppColors.muted),
               ),
               const SizedBox(height: 16),
@@ -44,86 +253,6 @@ class MyTripsScreen extends ConsumerWidget {
             ],
           ),
         ),
-        data: (items) {
-          Iterable<Trip> of(TripStatus s) => items.where((t) => t.status == s);
-
-          // `lobby` trips show as "Upcoming". Cancelled trips are hidden from sections.
-          final sections = [
-            ('Active', of(TripStatus.active).toList()),
-            ('Upcoming', of(TripStatus.lobby).toList()),
-            ('Completed', of(TripStatus.completed).toList()),
-          ].where((s) => s.$2.isNotEmpty).toList();
-
-          if (sections.isEmpty) {
-            return RefreshIndicator(
-              color: AppColors.orange,
-              onRefresh: () async => ref.invalidate(myTripsProvider),
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.7,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'No trips yet.',
-                          style: AppText.ui(
-                            16,
-                            FontWeight.w600,
-                            color: AppColors.muted,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        TaraletsButton.orange(
-                          label: '+ Create New Trip',
-                          onPressed: () => context.push(AppRoutes.createTrip),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }
-
-          return RefreshIndicator(
-            color: AppColors.orange,
-            onRefresh: () async => ref.invalidate(myTripsProvider),
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-              children: [
-                Text(
-                  'My Trips',
-                  style: AppText.ui(20, FontWeight.w800, color: AppColors.navy),
-                ),
-                const SizedBox(height: 16),
-                for (final s in sections) ...[
-                  Text(
-                    s.$1.toUpperCase(),
-                    style: AppText.ui(
-                      13,
-                      FontWeight.w700,
-                      color: AppColors.muted,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  for (final t in s.$2) ...[
-                    _TripCard(trip: t),
-                    if (t != s.$2.last) const SizedBox(height: 8),
-                  ],
-                  const SizedBox(height: 20),
-                ],
-                TaraletsButton.orange(
-                  label: '+ Create New Trip',
-                  onPressed: () => context.push(AppRoutes.createTrip),
-                ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }
@@ -132,6 +261,8 @@ class MyTripsScreen extends ConsumerWidget {
 class _TripCard extends ConsumerWidget {
   const _TripCard({required this.trip});
   final Trip trip;
+
+  static const double _stubHeight = 48;
 
   /// Lobby trips open the Group Lobby, active trips open the Active Trip.
   void _open(BuildContext context) {
@@ -148,136 +279,236 @@ class _TripCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final (accent, pillBg, pillFg, pillLabel) = switch (trip.status) {
+    final (fill, line, accent, pillBg, pillLabel) = switch (trip.status) {
       TripStatus.active => (
-        AppColors.orange,
-        AppColors.orangeSoft,
-        AppColors.orange,
+        TicketPalette.skyFill,
+        TicketPalette.skyLine,
+        AppColors.primary,
+        AppColors.primarySoft,
         'Active',
       ),
       TripStatus.lobby => (
+        TicketPalette.lavenderFill,
+        TicketPalette.lavenderLine,
         AppColors.navy,
         AppColors.blueSoft,
-        AppColors.navy,
         'Upcoming',
       ),
       TripStatus.completed => (
+        const Color(0xFFF5FBF8),
+        const Color(0xFFBFE6D3),
         AppColors.green,
         AppColors.greenSoft,
-        AppColors.green,
-        '✓ Done',
+        'Done',
       ),
       TripStatus.cancelled => (
+        TicketPalette.redFill,
+        TicketPalette.redLine,
         AppColors.red,
         AppColors.redSoft,
-        AppColors.red,
         'Cancelled',
       ),
     };
+
+    final label = AppText.ui(
+      10,
+      FontWeight.w700,
+      color: AppColors.muted,
+      letterSpacing: 1,
+    );
+    final value = AppText.ui(13, FontWeight.w700, color: AppColors.navy);
     final meta = AppText.ui(12, FontWeight.w400, color: AppColors.muted);
+
+    final actionLabel = switch (trip.status) {
+      TripStatus.lobby => 'Open lobby →',
+      TripStatus.active => 'View →',
+      _ => null,
+    };
 
     final cardUI = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _open(context),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 6,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(width: 4, color: accent), // borderLeft: 4px solid
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+      child: TicketCard(
+        fillColor: fill,
+        lineColor: line,
+        notchAxis: TicketNotchAxis.leftRight,
+        notchOffset: _stubHeight,
+        notchRadius: 10,
+        cornerRadius: 20,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Stub: status + date
+            SizedBox(
+              height: _stubHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: pillBg,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Expanded(
-                            child: Text(
-                              trip.title,
-                              style: AppText.ui(14, FontWeight.w700),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: pillBg,
-                              borderRadius: BorderRadius.circular(99),
-                            ),
-                            child: Text(
-                              pillLabel,
-                              style: AppText.ui(
-                                10,
-                                FontWeight.w700,
-                                color: pillFg,
+                          if (trip.status == TripStatus.completed) ...[
+                            Icon(Icons.check_rounded, size: 12, color: accent),
+                            const SizedBox(width: 3),
+                          ] else ...[
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: accent,
+                                shape: BoxShape.circle,
                               ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Text(
+                            pillLabel,
+                            style: AppText.ui(
+                              11,
+                              FontWeight.w700,
+                              color: accent,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 4,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
+                    ),
+                    const Spacer(),
+                    AppIcons.clock(),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        trip.dateLabel,
+                        overflow: TextOverflow.ellipsis,
+                        style: meta,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Body: title + route row + footer
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    trip.title,
+                    style: AppText.ui(
+                      18,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('MEET UP', style: label),
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                AppIcons.pin(color: AppColors.muted, size: 14),
+                                const SizedBox(width: 3),
+                                Expanded(
+                                  child: Text(
+                                    trip.meetup,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: value,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        width: 72,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Row(
                             children: [
-                              AppIcons.clock(),
-                              const SizedBox(width: 4),
-                              Text(trip.dateLabel, style: meta),
+                              _dot(accent),
+                              const Expanded(child: _DashedConnector()),
+                              AppIcons.users(color: accent, size: 14),
+                              const Expanded(child: _DashedConnector()),
+                              _dot(accent.withValues(alpha: 0.35)),
                             ],
                           ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              AppIcons.users(size: 12),
-                              const SizedBox(width: 4),
-                              Text('${trip.memberCount} members', style: meta),
-                            ],
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              AppIcons.pin(color: AppColors.muted, size: 16),
-                              const SizedBox(width: 4),
-                              Text(
-                                trip.meetup,
-                                style: meta,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('ARRIVAL', style: label),
+                            const SizedBox(height: 3),
+                            Text(
+                              trip.arrivalTarget,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: value,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      AvatarStack(
+                        names: trip.memberNames,
+                        size: 26,
+                        ringColor: fill,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            AppIcons.users(size: 12),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                '${trip.memberCount} members',
+                                overflow: TextOverflow.ellipsis,
+                                style: meta,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (actionLabel != null)
+                        Text(
+                          actionLabel,
+                          style: AppText.ui(
+                            12,
+                            FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -299,48 +530,33 @@ class _TripCard extends ConsumerWidget {
         direction: DismissDirection.endToStart,
         background: Container(
           alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 20),
+          padding: const EdgeInsets.only(right: 24),
           decoration: BoxDecoration(
             color: AppColors.redSoft,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(color: AppColors.red.withValues(alpha: 0.2)),
           ),
-          child: const Icon(Icons.delete_outline, color: AppColors.red),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.delete_outline, color: AppColors.red),
+              const SizedBox(height: 2),
+              Text(
+                isLeader ? 'Cancel' : 'Leave',
+                style: AppText.ui(11, FontWeight.w700, color: AppColors.red),
+              ),
+            ],
+          ),
         ),
         confirmDismiss: (direction) async {
-          return await showDialog<bool>(
-            context: context,
-            builder: (c) => AlertDialog(
-              title: Text(actionText, style: AppText.ui(18, FontWeight.w800)),
-              content: Text(
-                dialogContent,
-                style: AppText.ui(14, FontWeight.w400, color: AppColors.muted),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(c, false),
-                  child: Text(
-                    'No',
-                    style: AppText.ui(
-                      14,
-                      FontWeight.w600,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(c, true),
-                  child: Text(
-                    confirmText,
-                    style: AppText.ui(
-                      14,
-                      FontWeight.w700,
-                      color: AppColors.red,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          return await showTaraletsConfirm(
+            context,
+            title: actionText,
+            message: dialogContent,
+            confirmLabel: confirmText,
+            icon: isLeader
+                ? Icons.event_busy_rounded
+                : Icons.logout_rounded,
           );
         },
         onDismissed: (direction) async {
@@ -372,5 +588,37 @@ class _TripCard extends ConsumerWidget {
     }
 
     return cardUI;
+  }
+
+  Widget _dot(Color c) => Container(
+    width: 7,
+    height: 7,
+    decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+  );
+}
+
+/// Small dashed line that fills the space it is given.
+class _DashedConnector extends StatelessWidget {
+  const _DashedConnector();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final n = (box.maxWidth / 6).floor();
+        if (n <= 0) return const SizedBox.shrink();
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: List.generate(
+            n,
+            (_) => Container(
+              width: 3,
+              height: 1.5,
+              color: AppColors.muted.withValues(alpha: 0.35),
+            ),
+          ),
+        );
+      },
+    );
   }
 }

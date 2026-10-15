@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,16 +17,18 @@ import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/error_note.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/invite_member_sheet.dart';
+import '../../../../shared/widgets/ticket_card.dart'; // IDINAGDAG: TicketCard
 import '../../data/models/member.dart';
 
-/// Group Lobby: the hub the group sees before the leader starts the trip.
-///
-/// Leader: Edit (header), Invite Member, Start Trip (needs everyone ready).
-/// Members: toggle their own Ready state.
 class TripLobbyScreen extends ConsumerStatefulWidget {
-  const TripLobbyScreen({super.key, required this.trip});
+  const TripLobbyScreen({
+    super.key,
+    required this.trip,
+    this.showCreatedOverlay = false,
+  });
 
   final Trip trip;
+  final bool showCreatedOverlay;
 
   @override
   ConsumerState<TripLobbyScreen> createState() => _TripLobbyScreenState();
@@ -33,7 +36,6 @@ class TripLobbyScreen extends ConsumerStatefulWidget {
 
 class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   late Trip _trip = widget.trip;
-
   Timer? _refreshTimer;
   bool _refreshing = false;
   bool _toggling = false;
@@ -47,39 +49,97 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   @override
   void initState() {
     super.initState();
-
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 3),
       (_) => _refreshTrip(),
     );
+
+    if (widget.showCreatedOverlay) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) _showSuccessOverlay();
+      });
+    }
+  }
+
+  void _showSuccessOverlay() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: const BoxDecoration(
+                  color: AppColors.primarySoft,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: AppColors.primary,
+                  size: 48,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "You're all set!",
+                style: AppText.ui(22, FontWeight.w900, color: AppColors.navy),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Your group trip is ready. Share the code to invite your friends.",
+                textAlign: TextAlign.center,
+                style: AppText.ui(13, FontWeight.w500, color: AppColors.muted, height: 1.5),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                decoration: BoxDecoration(
+                  color: AppColors.bg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border, width: 1.5),
+                ),
+                child: Text(
+                  _trip.code,
+                  textAlign: TextAlign.center,
+                  style: AppText.mono(
+                    32,
+                    FontWeight.w900,
+                    color: AppColors.navy,
+                    letterSpacing: 4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              TaraletsButton.orange(
+                label: 'Got it',
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _refreshTrip() async {
-    if (!mounted ||
-        _refreshing ||
-        _toggling ||
-        _starting ||
-        _cancellingOrLeaving)
-      return;
-
+    if (!mounted || _refreshing || _toggling || _starting || _cancellingOrLeaving) return;
     _refreshing = true;
-
     try {
       final latestTrip = await _repo.getTrip(_trip.id);
-
       if (!mounted) return;
-
-      // FIX: Check kung may pagbabago sa member count or ready count para ma-invalidate
       if (_trip.memberCount != latestTrip.memberCount ||
           _trip.readyCount != latestTrip.readyCount) {
         ref.invalidate(myTripsProvider);
       }
-
-      setState(() {
-        _trip = latestTrip;
-      });
+      setState(() => _trip = latestTrip);
     } on TripException {
-      // Keep the current trip data if a refresh temporarily fails.
     } finally {
       _refreshing = false;
     }
@@ -97,8 +157,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
       ..showSnackBar(SnackBar(content: Text(text)));
   }
 
-  void _back() =>
-      context.canPop() ? context.pop() : context.go(AppRoutes.trips);
+  void _back() => context.canPop() ? context.pop() : context.go(AppRoutes.trips);
 
   void _copyCode() {
     Clipboard.setData(ClipboardData(text: _trip.code));
@@ -174,7 +233,6 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
 
   Future<void> _cancelOrLeaveTrip(bool isLeader) async {
     if (_cancellingOrLeaving) return;
-
     final title = isLeader ? 'Cancel Trip' : 'Leave Trip';
     final content = isLeader
         ? 'Are you sure you want to cancel this trip? All members will be notified and the trip will be deleted.'
@@ -184,32 +242,27 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(title, style: AppText.ui(18, FontWeight.w800)),
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(title, style: AppText.ui(18, FontWeight.w900, color: AppColors.navy)),
         content: Text(
           content,
-          style: AppText.ui(14, FontWeight.w400, color: AppColors.muted),
+          style: AppText.ui(13, FontWeight.w500, color: AppColors.muted, height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
-            child: Text(
-              'No',
-              style: AppText.ui(14, FontWeight.w600, color: AppColors.navy),
-            ),
+            child: Text('No', style: AppText.ui(14, FontWeight.w700, color: AppColors.navy)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(c, true),
-            child: Text(
-              confirmText,
-              style: AppText.ui(14, FontWeight.w700, color: AppColors.red),
-            ),
+            child: Text(confirmText, style: AppText.ui(14, FontWeight.w800, color: AppColors.red)),
           ),
         ],
       ),
     );
 
     if (confirm != true) return;
-
     setState(() => _cancellingOrLeaving = true);
     try {
       if (isLeader) {
@@ -230,9 +283,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final me = ref
-        .watch(currentUserProvider)
-        .maybeWhen(data: (u) => u, orElse: () => null);
+    final me = ref.watch(currentUserProvider).maybeWhen(data: (u) => u, orElse: () => null);
     final isLeader = _trip.isLeader(me?.id);
     final myMember = _trip.members.where((m) => m.id == me?.id).firstOrNull;
 
@@ -243,41 +294,24 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(
-                trip: _trip,
-                showEdit: isLeader,
-                onBack: _back,
-                onEdit: _edit,
-              ),
+              _Header(trip: _trip, showEdit: isLeader, onBack: _back, onEdit: _edit),
               Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _RoomCodeCard(
-                      code: _trip.code,
-                      onCopy: _copyCode,
-                      onShare: _shareInvite,
-                    ),
-                    const SizedBox(height: 14),
-                    _OverviewCard(trip: _trip),
-                    const SizedBox(height: 14),
-                    _MembersCard(trip: _trip, meId: me?.id),
-                    const SizedBox(height: 14),
-                    _PrefsLink(
-                      onTap: () =>
-                          context.push(AppRoutes.groupPrefs, extra: _trip),
-                    ),
+                    _RoomCodeCard(code: _trip.code, onCopy: _copyCode, onShare: _shareInvite),
                     const SizedBox(height: 16),
+                    _OverviewCard(trip: _trip),
+                    const SizedBox(height: 16),
+                    _MembersCard(trip: _trip, meId: me?.id),
+                    const SizedBox(height: 16),
+                    _PrefsLink(onTap: () => context.push(AppRoutes.groupPrefs, extra: _trip)),
+                    const SizedBox(height: 24),
+
                     if (_errorTitle != null) ...[
-                      ErrorNote(
-                        title: _errorTitle!,
-                        message: _errorMessage ?? '',
-                      ),
-                      const SizedBox(height: 12),
+                      ErrorNote(title: _errorTitle!, message: _errorMessage ?? ''),
+                      const SizedBox(height: 16),
                     ],
 
                     if (isLeader) ...[
@@ -285,25 +319,22 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                         label: 'Invite Member',
                         onPressed: me == null ? null : () => _invite(me),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                     ],
+
                     if (_trip.everyoneReady) ...[
                       TaraletsButton.orange(
-                        label: 'Find Places →',
+                        label: 'Find Places',
                         onPressed: () {
-                          context.push(
-                            AppRoutes.recommendations,
-                            extra: {'groupId': widget.trip.id},
-                          );
+                          context.push(AppRoutes.recommendations, extra: {'groupId': widget.trip.id});
                         },
                       ),
                     ] else if (isLeader) ...[
                       TaraletsButton.ghost(
-                        label:
-                            'Waiting... ${_trip.readyCount}/${_trip.memberCount} ready',
+                        label: 'Waiting... ${_trip.readyCount}/${_trip.memberCount} ready',
                         onPressed: null,
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       TaraletsButton.orange(
                         label: 'Start Trip',
                         isLoading: _starting,
@@ -311,13 +342,13 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                       ),
                     ] else ...[
                       TaraletsButton.orange(
-                        label:
-                            'Waiting... ${_trip.readyCount}/${_trip.memberCount} ready',
+                        label: 'Waiting... ${_trip.readyCount}/${_trip.memberCount} ready',
                         onPressed: null,
                       ),
                     ],
+
                     if (!isLeader && myMember != null && me != null) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       if (myMember.isReady)
                         TaraletsButton.ghost(
                           label: 'Mark as Not Ready',
@@ -325,45 +356,29 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                         )
                       else
                         TaraletsButton.orange(
-                          label: "I'm Ready ✓",
+                          label: "I'm Ready",
                           isLoading: _toggling,
                           onPressed: _toggling ? null : () => _toggleReady(me),
                         ),
                     ],
 
-                    // BUTTON PARA SA CANCEL/LEAVE DEPENDE KUNG SINO KA
                     if (isLeader || myMember != null) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
                       GestureDetector(
-                        onTap: _cancellingOrLeaving
-                            ? null
-                            : () => _cancelOrLeaveTrip(isLeader),
+                        onTap: _cancellingOrLeaving ? null : () => _cancelOrLeaveTrip(isLeader),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: AppColors.redSoft,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: AppColors.red.withValues(alpha: 0.2),
-                            ),
+                            border: Border.all(color: AppColors.red.withValues(alpha: 0.2)),
                           ),
                           child: _cancellingOrLeaving
-                              ? const SizedBox(
-                                  height: 16,
-                                  width: 16,
-                                  child: CircularProgressIndicator(
-                                    color: AppColors.red,
-                                    strokeWidth: 2,
-                                  ),
-                                )
+                              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: AppColors.red, strokeWidth: 2))
                               : Text(
                                   isLeader ? 'Cancel Trip' : 'Leave Trip',
-                                  style: AppText.ui(
-                                    14,
-                                    FontWeight.w700,
-                                    color: AppColors.red,
-                                  ),
+                                  style: AppText.ui(14, FontWeight.w800, color: AppColors.red),
                                 ),
                         ),
                       ),
@@ -380,17 +395,10 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Header (navy, same as Figma Active Trip header)
+// Header
 // ---------------------------------------------------------------------------
-
 class _Header extends StatelessWidget {
-  const _Header({
-    required this.trip,
-    required this.showEdit,
-    required this.onBack,
-    required this.onEdit,
-  });
-
+  const _Header({required this.trip, required this.showEdit, required this.onBack, required this.onEdit});
   final Trip trip;
   final bool showEdit;
   final VoidCallback onBack;
@@ -398,138 +406,57 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.navy,
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              BackButtonTile(onTap: onBack),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          BackButtonTile(onTap: onBack),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    trip.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    // Parehong-pareho na ng timbang at kulay sa Create Trip
+                    style: AppText.ui(18, FontWeight.w800, color: AppColors.navy), 
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${trip.dateLabel} • Target arrival ${trip.arrivalTarget}',
+                    style: AppText.ui(13, FontWeight.w500, color: AppColors.muted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (showEdit)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onEdit,
+              child: Container(
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: AppColors.border, width: 1.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      trip.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.ui(
-                        17,
-                        FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${trip.dateLabel} • Target arrival ${trip.arrivalTarget}',
-                      style: AppText.ui(
-                        12,
-                        FontWeight.w400,
-                        color: Colors.white.withValues(alpha: 0.55),
-                      ),
-                    ),
+                    const Icon(AppIcons.edit, color: AppColors.navy, size: 16),
+                    const SizedBox(width: 6),
+                    Text('Edit', style: AppText.ui(12, FontWeight.w700, color: AppColors.navy)),
                   ],
                 ),
               ),
-              if (showEdit)
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onEdit,
-                  child: Container(
-                    margin: const EdgeInsets.only(left: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(AppIcons.edit, color: Colors.white, size: 14),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Edit',
-                          style: AppText.ui(
-                            12,
-                            FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(
-              children: [
-                AppIcons.pin(color: AppColors.orange),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Meetup Location',
-                        style: AppText.ui(
-                          12,
-                          FontWeight.w400,
-                          color: Colors.white.withValues(alpha: 0.55),
-                        ),
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        trip.meetupFull,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.ui(
-                          14,
-                          FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Group',
-                      style: AppText.ui(
-                        11,
-                        FontWeight.w400,
-                        color: Colors.white.withValues(alpha: 0.55),
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      '${trip.readyCount}/${trip.memberCount} ready',
-                      style: AppText.ui(
-                        14,
-                        FontWeight.w700,
-                        color: AppColors.gold,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -537,86 +464,75 @@ class _Header extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Cards
+// TICKET CARDS & SECTIONS
 // ---------------------------------------------------------------------------
-
 BoxDecoration _cardDeco() => BoxDecoration(
   color: Colors.white,
-  borderRadius: BorderRadius.circular(14),
+  borderRadius: BorderRadius.circular(16),
+  border: Border.all(color: AppColors.border),
   boxShadow: [
     BoxShadow(
-      color: Colors.black.withValues(alpha: 0.05),
-      blurRadius: 6,
-      offset: const Offset(0, 1),
+      color: Colors.black.withValues(alpha: 0.03),
+      blurRadius: 12,
+      offset: const Offset(0, 4),
     ),
   ],
 );
 
+// BINAGO: Literal na TicketCard para sa Room Code
 class _RoomCodeCard extends StatelessWidget {
-  const _RoomCodeCard({
-    required this.code,
-    required this.onCopy,
-    required this.onShare,
-  });
-
+  const _RoomCodeCard({required this.code, required this.onCopy, required this.onShare});
   final String code;
   final VoidCallback onCopy;
   final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _cardDeco(),
+    return TicketCard(
+      fillColor: Colors.white,
+      lineColor: AppColors.border,
+      notchAxis: TicketNotchAxis.leftRight,
+      notchOffset: 105,
+      cornerRadius: 20,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppColors.bg,
-              borderRadius: BorderRadius.circular(12),
-            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
             child: Column(
               children: [
-                Text(
-                  'ROOM CODE',
-                  style: AppText.ui(
-                    11,
-                    FontWeight.w600,
-                    color: AppColors.muted,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.confirmation_number_outlined, size: 16, color: AppColors.primary), // Rose color
+                    const SizedBox(width: 8),
+                    Text(
+                      'TRIP INVITE CODE',
+                      style: AppText.ui(11, FontWeight.w800, color: AppColors.primary, letterSpacing: 1.5),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 12),
                 Text(
                   code,
-                  style: AppText.mono(
-                    30,
-                    FontWeight.w900,
-                    color: AppColors.navy,
-                    letterSpacing: 2,
-                  ),
+                  style: AppText.mono(36, FontWeight.w900, color: AppColors.navy, letterSpacing: 4),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: TaraletsButton.ghost(
-                  label: 'Copy Code',
-                  onPressed: onCopy,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TaraletsButton.ghost(label: 'Copy Code', onPressed: onCopy),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TaraletsButton.orange(
-                  label: 'Share Invite',
-                  onPressed: onShare,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TaraletsButton.orange(label: 'Share Invite', onPressed: onShare),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -626,14 +542,13 @@ class _RoomCodeCard extends StatelessWidget {
 
 class _OverviewCard extends StatelessWidget {
   const _OverviewCard({required this.trip});
-
   final Trip trip;
 
   @override
   Widget build(BuildContext context) {
     final rows = [
       ('📍', 'Destination', trip.meetupFull),
-      ('🗓', 'Date', trip.longDate),
+      ('🗓️', 'Date', trip.longDate),
       ('⏰', 'Schedule', '${trip.arrivalTarget} – ${trip.wrapUp}'),
     ];
 
@@ -652,38 +567,22 @@ class _OverviewCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        r.$2,
-                        style: AppText.ui(
-                          11,
-                          FontWeight.w400,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                      const SizedBox(height: 1),
-                      Text(r.$3, style: AppText.ui(14, FontWeight.w700)),
+                      Text(r.$2.toUpperCase(), style: AppText.ui(10, FontWeight.w800, color: AppColors.muted, letterSpacing: 1)),
+                      const SizedBox(height: 2),
+                      Text(r.$3, style: AppText.ui(15, FontWeight.w800, color: AppColors.navy)),
                     ],
                   ),
                 ),
               ],
             ),
-            if (r != rows.last || trip.description.isNotEmpty)
-              const SizedBox(height: 14),
+            if (r != rows.last || trip.description.isNotEmpty) const SizedBox(height: 18),
           ],
           if (trip.description.isNotEmpty) ...[
-            Text(
-              'ABOUT',
-              style: AppText.ui(11, FontWeight.w400, color: AppColors.muted),
-            ),
-            const SizedBox(height: 4),
+            Text('ABOUT THIS TRIP', style: AppText.ui(10, FontWeight.w800, color: AppColors.muted, letterSpacing: 1)),
+            const SizedBox(height: 6),
             Text(
               trip.description,
-              style: AppText.ui(
-                13,
-                FontWeight.w400,
-                color: AppColors.muted,
-                height: 1.6,
-              ),
+              style: AppText.ui(13, FontWeight.w500, color: AppColors.muted, height: 1.5),
             ),
           ],
         ],
@@ -694,14 +593,13 @@ class _OverviewCard extends StatelessWidget {
 
 class _MembersCard extends StatelessWidget {
   const _MembersCard({required this.trip, required this.meId});
-
   final Trip trip;
   final String? meId;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: _cardDeco(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -709,17 +607,14 @@ class _MembersCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Trip Members', style: AppText.ui(13, FontWeight.w700)),
-              Text(
-                '${trip.readyCount}/${trip.memberCount} ready',
-                style: AppText.ui(12, FontWeight.w700, color: AppColors.orange),
-              ),
+              Text('Trip Members', style: AppText.ui(15, FontWeight.w900, color: AppColors.navy)),
+              Text('${trip.readyCount}/${trip.memberCount} ready', style: AppText.ui(13, FontWeight.w800, color: AppColors.primary)), // Rose text
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           for (final m in trip.members) ...[
             _MemberRow(member: m, isMe: m.id == meId),
-            if (m != trip.members.last) const SizedBox(height: 10),
+            if (m != trip.members.last) const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: AppColors.border)),
           ],
         ],
       ),
@@ -729,7 +624,6 @@ class _MembersCard extends StatelessWidget {
 
 class _MemberRow extends StatelessWidget {
   const _MemberRow({required this.member, required this.isMe});
-
   final Member member;
   final bool isMe;
 
@@ -738,7 +632,7 @@ class _MemberRow extends StatelessWidget {
     final ready = member.isReady;
     return Row(
       children: [
-        Avatar(name: member.name, size: 38),
+        Avatar(name: member.name, size: 40),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -750,53 +644,33 @@ class _MemberRow extends StatelessWidget {
                     child: Text(
                       isMe ? '${member.name} (You)' : member.name,
                       overflow: TextOverflow.ellipsis,
-                      style: AppText.ui(14, FontWeight.w700),
+                      style: AppText.ui(14, FontWeight.w800, color: AppColors.navy),
                     ),
                   ),
                   if (member.isLeader) ...[
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.orangeSoft,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: Text(
-                        'Leader',
-                        style: AppText.ui(
-                          10,
-                          FontWeight.w700,
-                          color: AppColors.orange,
-                        ),
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(color: AppColors.primarySoft, borderRadius: BorderRadius.circular(99)),
+                      child: Text('Leader', style: AppText.ui(10, FontWeight.w800, color: AppColors.primary)),
                     ),
                   ],
                 ],
               ),
-              const SizedBox(height: 1),
-              Text(
-                '@${member.username}',
-                style: AppText.ui(11, FontWeight.w400, color: AppColors.muted),
-              ),
+              const SizedBox(height: 2),
+              Text('@${member.username}', style: AppText.ui(12, FontWeight.w500, color: AppColors.muted)),
             ],
           ),
         ),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
             color: ready ? AppColors.greenSoft : AppColors.amberSoft,
             borderRadius: BorderRadius.circular(99),
           ),
           child: Text(
-            ready ? '✓ Ready' : '⏳ Not Ready',
-            style: AppText.ui(
-              11,
-              FontWeight.w700,
-              color: ready ? AppColors.greenText : AppColors.amberText,
-            ),
+            ready ? '✓ Ready' : 'Pending',
+            style: AppText.ui(11, FontWeight.w800, color: ready ? AppColors.greenText : AppColors.amberText),
           ),
         ),
       ],
@@ -806,7 +680,6 @@ class _MemberRow extends StatelessWidget {
 
 class _PrefsLink extends StatelessWidget {
   const _PrefsLink({required this.onTap});
-
   final VoidCallback onTap;
 
   @override
@@ -815,33 +688,27 @@ class _PrefsLink extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.all(20),
         decoration: _cardDeco(),
         child: Row(
           children: [
-            const Text('🎯', style: TextStyle(fontSize: 20)),
-            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: AppColors.primarySoft, borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.favorite_rounded, color: AppColors.primary, size: 20),
+            ),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Group Preferences',
-                    style: AppText.ui(14, FontWeight.w600),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    'See what the group wants to do',
-                    style: AppText.ui(
-                      11,
-                      FontWeight.w400,
-                      color: AppColors.muted,
-                    ),
-                  ),
+                  Text('Group Preferences', style: AppText.ui(15, FontWeight.w900, color: AppColors.navy)),
+                  const SizedBox(height: 2),
+                  Text('See what the group wants to do', style: AppText.ui(12, FontWeight.w500, color: AppColors.muted)),
                 ],
               ),
             ),
-            AppIcons.chevronRight(),
+            Icon(Icons.chevron_right_rounded, color: AppColors.muted, size: 24),
           ],
         ),
       ),

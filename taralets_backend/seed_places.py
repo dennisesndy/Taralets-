@@ -11,7 +11,7 @@ from app.core.database import AsyncSessionLocal
 from app.models.poi import Place
 
 
-CSV_PATH = "sample cleaned - cleaned sample.csv"
+CSV_PATH = "Dataset - final_postgres_ready_dataset_sequenced.csv"
 
 
 def get_text(value):
