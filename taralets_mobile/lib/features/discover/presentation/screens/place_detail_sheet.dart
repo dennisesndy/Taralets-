@@ -9,20 +9,21 @@ import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 
 /// Place detail (Figma "Place Detail" screen), shown full-height over the tabs.
-Future<void> showPlaceDetail(BuildContext context, Place place) {
+Future<void> showPlaceDetail(BuildContext context, Place place, {VoidCallback? onViewOnMap}) {
   return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.white,
-    builder: (_) => _PlaceDetail(place: place),
+    builder: (_) => _PlaceDetail(place: place, onViewOnMap: onViewOnMap),
   );
 }
 
 class _PlaceDetail extends ConsumerStatefulWidget {
-  const _PlaceDetail({required this.place});
+  const _PlaceDetail({required this.place, this.onViewOnMap});
   final Place place;
+  final VoidCallback? onViewOnMap;
 
   @override
   ConsumerState<_PlaceDetail> createState() => _PlaceDetailState();
@@ -36,7 +37,6 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
     final p = widget.place;
     final filledStars = p.rating.round().clamp(0, 5);
 
-    // Kukunin ang live location para dito
     final locationAsync = ref.watch(userLocationProvider);
     String dynamicDistanceLabel = p.distanceLabel;
 
@@ -58,13 +58,31 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
               alignment: Alignment.center,
               fit: StackFit.expand,
               children: [
-                p.imageUrl.isNotEmpty
+                p.imageUrl.isNotEmpty && p.imageUrl != 'nan'
                     ? Image.network(
                         p.imageUrl,
                         fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: Colors.black.withOpacity(0.05),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(p.emoji, style: const TextStyle(fontSize: 48)),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Image unavailable',
+                                style: AppText.ui(
+                                  12,
+                                  FontWeight.w600,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       )
                     : Container(
-                        color: Colors.black.withValues(alpha: 0.05),
+                        color: Colors.black.withOpacity(0.05),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -122,6 +140,7 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(
@@ -131,8 +150,11 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
                           FontWeight.w800,
                           color: AppColors.navy,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -166,9 +188,11 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
                     ],
                     const SizedBox(width: 8),
                     Text('${p.rating}', style: AppText.ui(13, FontWeight.w700)),
+                    const SizedBox(width: 4),
+                    Text('(${p.reviews})', style: AppText.ui(11, FontWeight.w400, color: AppColors.muted)),
                     const SizedBox(width: 8),
                     Text(
-                      dynamicDistanceLabel, // Ito yung totoong distance galing sa provider
+                      dynamicDistanceLabel,
                       style: AppText.ui(
                         12,
                         FontWeight.w400,
@@ -204,6 +228,8 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
                                   FontWeight.w700,
                                   color: AppColors.navy,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 2),
                               Text(
@@ -221,6 +247,18 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
                       if (s.$1 != 'For groups') const SizedBox(width: 10),
                     ],
                   ],
+                ),
+                const SizedBox(height: 14),
+                Text('Address', style: AppText.ui(13, FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(
+                  p.sub,
+                  style: AppText.ui(
+                    13,
+                    FontWeight.w400,
+                    color: AppColors.muted,
+                    height: 1.6,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 Text('About', style: AppText.ui(13, FontWeight.w700)),
@@ -269,7 +307,13 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
                     TaraletsButton.ghost(
                       label: 'View on Map',
                       full: false,
-                      onPressed: () {},
+                      onPressed: () {
+                        // Isasara ang popup at tatawagin ang function sa DiscoverScreen para lumipat sa Map
+                        Navigator.pop(context);
+                        if (widget.onViewOnMap != null) {
+                          widget.onViewOnMap!();
+                        }
+                      },
                     ),
                     const SizedBox(width: 10),
                     Expanded(
