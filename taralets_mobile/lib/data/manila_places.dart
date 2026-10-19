@@ -15,6 +15,14 @@ class Place {
   final double lat;
   final double lng;
   final String category;
+  // BAGO: Sub-categories at Accessibility
+  final String subCategory1;
+  final String subCategory2;
+  final String subCategory3;
+  final bool petFriendly;
+  final bool wheelchairAccessible;
+  final bool goodForChildren;
+  
   final String openingHours;
   final String description;
   final String imageUrl;
@@ -34,6 +42,12 @@ class Place {
     required this.lat,
     required this.lng,
     required this.category,
+    required this.subCategory1,
+    required this.subCategory2,
+    required this.subCategory3,
+    required this.petFriendly,
+    required this.wheelchairAccessible,
+    required this.goodForChildren,
     required this.openingHours,
     required this.description,
     required this.imageUrl,
@@ -46,7 +60,6 @@ class Place {
       parsedTags = List<String>.from(json['activity_tags']);
     }
     
-    // Kunin ang exact address kung meron, kung wala, fallback sa district, then Manila
     String exactAddress = json['address'] != null && json['address'].toString().isNotEmpty 
         ? json['address'] 
         : (json['district'] ?? 'City of Manila');
@@ -65,6 +78,13 @@ class Place {
       lat: (json['lat'] ?? 0.0).toDouble(), 
       lng: (json['lng'] ?? 0.0).toDouble(), 
       category: json['category'] ?? 'General',
+      // Sinasalo ang sub-categories at boolean filters
+      subCategory1: json['sub_category_1'] ?? '',
+      subCategory2: json['sub_category_2'] ?? '',
+      subCategory3: json['sub_category_3'] ?? '',
+      petFriendly: json['pet_friendly'] == true,
+      wheelchairAccessible: json['wheelchair_accessible'] == true,
+      goodForChildren: json['good_for_children'] == true,
       openingHours: json['open_time'] != null && json['close_time'] != null 
           ? '${json['open_time']} - ${json['close_time']}' 
           : 'Not specified',

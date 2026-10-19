@@ -35,11 +35,14 @@ async def get_place_clusters(db: AsyncSession = Depends(get_db)):
         if cluster_id not in clusters_map:
             clusters_map[cluster_id] = []
         
-        # NGAYON, ipinapasa na natin ang buong details (Address, Description, Reviews, etc.)
+        # IDINAGDAG ANG MGA SUB-CATEGORIES AT ACCESSIBILITY BOOLEANS
         clusters_map[cluster_id].append({
             "id": place.id,
             "name": place.name,
             "category": getattr(place, 'category', 'Unknown'),
+            "sub_category_1": getattr(place, 'sub_category_1', None),
+            "sub_category_2": getattr(place, 'sub_category_2', None),
+            "sub_category_3": getattr(place, 'sub_category_3', None),
             "lat": place.latitude,
             "lng": place.longitude,
             "address": getattr(place, 'address', None),
@@ -52,6 +55,9 @@ async def get_place_clusters(db: AsyncSession = Depends(get_db)):
             "open_time": place.open_time.isoformat() if getattr(place, 'open_time', None) else None,
             "close_time": place.close_time.isoformat() if getattr(place, 'close_time', None) else None,
             "activity_tags": getattr(place, 'activity_tags', []),
+            "pet_friendly": getattr(place, 'pet_friendly', False),
+            "wheelchair_accessible": getattr(place, 'wheelchair_accessible', False),
+            "good_for_children": getattr(place, 'good_for_children', False),
             "is_dot_accredited": getattr(place, 'is_dot_accredited', False)
         })
 
