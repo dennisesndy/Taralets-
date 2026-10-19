@@ -9,13 +9,13 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/services/secure_storage_service.dart';
 import '../../../../shared/widgets/auth_backdrop.dart';
 import '../../../../shared/widgets/auth_logo.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/taralets_button.dart';
-import '../../providers/preferences_provider.dart';
 import '../../data/profile_preferences_repository.dart';
-import '../../../../core/services/secure_storage_service.dart';
+import '../../providers/preferences_provider.dart';
 
 class PreferenceScreen extends ConsumerStatefulWidget {
   final String? returnRoute;
@@ -30,20 +30,20 @@ class PreferenceScreen extends ConsumerStatefulWidget {
 class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
     with SingleTickerProviderStateMixin {
   final List<String> _activityOptions = [
-    "Accommodations",
-    "Cafes",
-    "Desserts / Bakeries",
-    "Restaurant / Eatery",
-    "Museums",
-    "Church / Religious Site",
-    "Parks / Plazas",
-    "Historical / Tourist Site",
-    "Shopping / Retail",
-    "Health / Wellness",
-    "Entertainment / Leisure",
-    "Nightlife / Bars",
-    "Government / Services",
-    "Others",
+    'Accommodations',
+    'Cafes',
+    'Desserts / Bakeries',
+    'Restaurant / Eatery',
+    'Museums',
+    'Church / Religious Site',
+    'Parks / Plazas',
+    'Historical / Tourist Site',
+    'Shopping / Retail',
+    'Health / Wellness',
+    'Entertainment / Leisure',
+    'Nightlife / Bars',
+    'Government / Services',
+    'Others',
   ];
 
   final List<String> _dietaryOptions = [
@@ -54,20 +54,20 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
   ];
 
   static const Map<String, String> _activityEmoji = {
-    "Accommodations": '🏨',
-    "Cafes": '☕',
-    "Desserts / Bakeries": '🧁',
-    "Restaurant / Eatery": '🍽️',
-    "Museums": '🏛️',
-    "Church / Religious Site": '⛪',
-    "Parks / Plazas": '🌳',
-    "Historical / Tourist Site": '🗺️',
-    "Shopping / Retail": '🛍️',
-    "Health / Wellness": '💆',
-    "Entertainment / Leisure": '🎡',
-    "Nightlife / Bars": '🍸',
-    "Government / Services": '🏢',
-    "Others": '📍',
+    'Accommodations': '🏨',
+    'Cafes': '☕',
+    'Desserts / Bakeries': '🧁',
+    'Restaurant / Eatery': '🍽️',
+    'Museums': '🏛️',
+    'Church / Religious Site': '⛪',
+    'Parks / Plazas': '🌳',
+    'Historical / Tourist Site': '🗺️',
+    'Shopping / Retail': '🛍️',
+    'Health / Wellness': '💆',
+    'Entertainment / Leisure': '🎡',
+    'Nightlife / Bars': '🍸',
+    'Government / Services': '🏢',
+    'Others': '📍',
   };
 
   static const Map<String, String> _dietaryEmoji = {
@@ -81,13 +81,123 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
   final List<String> _selectedDietary = [];
 
   bool _isLoading = false;
+  bool _isInitializing = true;
+  bool _isOnboardingFlow = false;
+  bool _hasSavedPreferences = false;
+  bool _isEditing = true;
   bool _tagError = false;
 
+  double _maxBudget = 2500.0;
+  String _preferredPace = 'Moderate';
+  String _passengerType = 'Regular';
+  List<String> _accessibilityPreferences = [];
+
   final GlobalKey _tagsKey = GlobalKey();
+
   late final AnimationController _shake = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 500),
   );
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePreferences();
+  }
+
+  Future<void> _initializePreferences() async {
+    try {
+      final storage = ref.read(secureStorageProvider);
+      final onboardingToken = await storage.getOnboardingToken();
+
+      if (!mounted) return;
+
+      // Registration: show the initial preferences setup.
+      if (onboardingToken != null && onboardingToken.trim().isNotEmpty) {
+        setState(() {
+          _isOnboardingFlow = true;
+          _isEditing = true;
+          _isInitializing = false;
+        });
+        return;
+      }
+
+      // Profile: fetch the logged-in user's saved preferences.
+      final repository = ref.read(profilePreferencesRepoProvider);
+      final preferences = await repository.getPreferences();
+
+      if (!mounted) return;
+
+      if (preferences != null) {
+        final activities = List<String>.from(
+          preferences['activity_tags'] ?? [],
+        );
+
+        final dietary = List<String>.from(
+          preferences['dietary_preferences'] ?? [],
+        );
+
+        setState(() {
+          _selectedActivities
+            ..clear()
+            ..addAll(activities);
+
+          _selectedDietary
+            ..clear()
+            ..addAll(dietary);
+
+          _maxBudget =
+              (preferences['max_budget'] as num?)?.toDouble() ?? 2500.0;
+
+          _preferredPace =
+              preferences['preferred_pace'] as String? ?? 'Moderate';
+
+          _passengerType =
+              preferences['passenger_type'] as String? ?? 'Regular';
+
+          _accessibilityPreferences = List<String>.from(
+            preferences['accessibility_preferences'] ?? [],
+          );
+
+          _hasSavedPreferences = true;
+          _isEditing = false;
+          _isInitializing = false;
+        });
+
+        ref
+            .read(userPreferencesProvider.notifier)
+            .setPreferences(
+              activityTags: activities,
+              dietary: dietary.isEmpty ? ['None'] : dietary,
+            );
+      } else {
+        // Logged-in user with no saved preferences yet.
+        setState(() {
+          _hasSavedPreferences = false;
+          _isEditing = true;
+          _isInitializing = false;
+        });
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isEditing = true;
+        _isInitializing = false;
+      });
+
+      _toast(_errorText(e, 'Failed to load preferences'));
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isEditing = true;
+        _isInitializing = false;
+      });
+
+      _toast('Failed to load preferences: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -95,7 +205,20 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
     super.dispose();
   }
 
+  void _goBack() {
+    if (context.canPop()) {
+      context.pop();
+    } else if (widget.returnRoute != null) {
+      context.go(widget.returnRoute!, extra: widget.returnExtra);
+    } else {
+      // Fallback for navigation stacks without a previous screen.
+      context.go(AppRoutes.login);
+    }
+  }
+
   Future<void> _savePreferences() async {
+    if (_isLoading || _isInitializing) return;
+
     if (_selectedActivities.length < 2) {
       setState(() => _tagError = true);
       HapticFeedback.mediumImpact();
@@ -120,27 +243,42 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
     try {
       final dietaryToSave = _selectedDietary.isEmpty
           ? ['None']
-          : _selectedDietary;
+          : List<String>.from(_selectedDietary);
 
       final repository = ref.read(profilePreferencesRepoProvider);
       final storage = ref.read(secureStorageProvider);
-      final onboardingToken = await storage.getOnboardingToken();
 
-      if (onboardingToken != null && onboardingToken.isNotEmpty) {
-        // Registration flow: save using the temporary onboarding token.
+      if (_isOnboardingFlow) {
+        // Registration: use the temporary onboarding token.
         await repository.saveOnboardingPreferences(
           activityTags: _selectedActivities,
           dietaryPreferences: dietaryToSave,
+          maxBudget: _maxBudget,
+          preferredPace: _preferredPace,
+          passengerType: _passengerType,
+          accessibilityPreferences: _accessibilityPreferences,
         );
 
+        // Delete the temporary token only after a successful save.
         await storage.deleteOnboardingToken();
-      } else {
-        // Existing logged-in user: use the regular access token.
-        await repository.savePreferences(
-          activityTags: _selectedActivities,
-          dietaryPreferences: dietaryToSave,
-        );
+
+        if (!mounted) return;
+
+        _toast('Preferences saved! You can now log in.', isError: false);
+
+        context.go(AppRoutes.login);
+        return;
       }
+
+      // Profile: update preferences using the normal access token.
+      await repository.savePreferences(
+        activityTags: _selectedActivities,
+        dietaryPreferences: dietaryToSave,
+        maxBudget: _maxBudget,
+        preferredPace: _preferredPace,
+        passengerType: _passengerType,
+        accessibilityPreferences: _accessibilityPreferences,
+      );
 
       ref
           .read(userPreferencesProvider.notifier)
@@ -151,61 +289,60 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
 
       if (!mounted) return;
 
-      final messenger = ScaffoldMessenger.of(context);
+      setState(() {
+        _selectedDietary
+          ..clear()
+          ..addAll(dietaryToSave);
 
-      if (widget.returnRoute != null) {
-        context.go(widget.returnRoute!, extra: widget.returnExtra);
+        _hasSavedPreferences = true;
+        _isEditing = false;
+        _tagError = false;
+      });
 
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Preferences saved!',
-              style: TextStyle(color: Colors.white),
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else {
-        context.go(AppRoutes.login);
-
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Preferences saved! You can now log in.',
-              style: TextStyle(color: Colors.white),
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // Show success only after the API confirms the save.
+      _toast('Preferences updated successfully!', isError: false);
     } on DioException catch (e) {
-      _toast(_errorText(e, 'Failed to save preferences'));
+      if (mounted) {
+        _toast(_errorText(e, 'Failed to save preferences'));
+      }
     } catch (e) {
-      _toast('Failed to save preferences: $e');
+      if (mounted) {
+        _toast('Failed to save preferences: $e');
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   String _errorText(DioException e, String fallback) {
     final data = e.response?.data;
+
     if (data is Map && data['detail'] != null) {
-      final d = data['detail'];
-      if (d is String) return d;
-      if (d is List && d.isNotEmpty && d.first is Map) {
-        return (d.first['msg'] ?? fallback).toString();
+      final detail = data['detail'];
+
+      if (detail is String) return detail;
+
+      if (detail is List && detail.isNotEmpty && detail.first is Map) {
+        return (detail.first['msg'] ?? fallback).toString();
       }
     }
+
     if (e.type == DioExceptionType.connectionError) {
       return "Can't reach the server. Is the backend running?";
     }
+
+    if (e.response?.statusCode == 401) {
+      return 'Your session may have expired. Please log in again.';
+    }
+
     return fallback;
   }
 
   void _toast(String message, {bool isError = true}) {
     if (!mounted) return;
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -220,19 +357,28 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
   }
 
   void _toggleActivity(String tag) {
+    if (!_isEditing) return;
+
     HapticFeedback.selectionClick();
+
     setState(() {
       if (_selectedActivities.contains(tag)) {
         _selectedActivities.remove(tag);
       } else {
         _selectedActivities.add(tag);
       }
-      if (_selectedActivities.length >= 2) _tagError = false;
+
+      if (_selectedActivities.length >= 2) {
+        _tagError = false;
+      }
     });
   }
 
   void _toggleDietary(String tag) {
+    if (!_isEditing) return;
+
     HapticFeedback.selectionClick();
+
     setState(() {
       if (_selectedDietary.contains(tag)) {
         _selectedDietary.remove(tag);
@@ -249,14 +395,25 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
   }
 
   double get _progress {
-    var p = 0.0;
-    p += 0.6 * (math.min(_selectedActivities.length, 2) / 2);
-    if (_selectedDietary.isNotEmpty) p += 0.4;
-    return p.clamp(0.0, 1.0).toDouble();
+    var progress = 0.0;
+    progress += 0.6 * (math.min(_selectedActivities.length, 2) / 2);
+
+    if (_selectedDietary.isNotEmpty) {
+      progress += 0.4;
+    }
+
+    return progress.clamp(0.0, 1.0).toDouble();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isInitializing) {
+      return const Scaffold(
+        backgroundColor: AppColors.bg,
+        body: Center(child: CircularProgressIndicator(color: AppColors.orange)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       bottomNavigationBar: _buildBottomBar(),
@@ -264,13 +421,32 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
         child: SafeArea(
           bottom: false,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 480),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Back button.
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        onPressed: _goBack,
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: AppColors.navy,
+                          size: 26,
+                        ),
+                        tooltip: 'Go back',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: 44,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     const Center(child: AuthLogo(emoji: '🧭', size: 76)),
                     const SizedBox(height: 18),
                     FadeSlideIn(
@@ -289,7 +465,11 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
                     FadeSlideIn(
                       delay: const Duration(milliseconds: 250),
                       child: Text(
-                        'Tell us what you like to explore and your dietary preferences.',
+                        _isOnboardingFlow
+                            ? 'Tell us what you like to explore and your dietary preferences.'
+                            : _isEditing
+                            ? 'Update your interests and dining preferences.'
+                            : 'Your saved travel preferences.',
                         textAlign: TextAlign.center,
                         style: AppText.ui(
                           14,
@@ -319,6 +499,9 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
   }
 
   Widget _buildBottomBar() {
+    final bool isReadOnly =
+        !_isOnboardingFlow && _hasSavedPreferences && !_isEditing;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 14),
       decoration: const BoxDecoration(
@@ -340,7 +523,7 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
             Row(
               children: [
                 Text(
-                  'Personalization',
+                  isReadOnly ? 'Your Preferences' : 'Personalization',
                   style: AppText.ui(12, FontWeight.w700, color: AppColors.navy),
                 ),
                 const Spacer(),
@@ -348,8 +531,8 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
                   tween: Tween<double>(end: _progress),
                   duration: const Duration(milliseconds: 400),
                   curve: Curves.easeOutCubic,
-                  builder: (context, v, _) => Text(
-                    '${(v * 100).round()}%',
+                  builder: (context, value, _) => Text(
+                    '${(value * 100).round()}%',
                     style: AppText.ui(
                       12,
                       FontWeight.w800,
@@ -364,10 +547,10 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
               tween: Tween<double>(end: _progress),
               duration: const Duration(milliseconds: 400),
               curve: Curves.easeOutCubic,
-              builder: (context, v, _) => ClipRRect(
+              builder: (context, value, _) => ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: LinearProgressIndicator(
-                  value: v,
+                  value: value,
                   minHeight: 8,
                   backgroundColor: AppColors.border,
                   valueColor: const AlwaysStoppedAnimation<Color>(
@@ -377,11 +560,20 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
               ),
             ),
             const SizedBox(height: 14),
-            TaraletsButton.orange(
-              label: 'Save Preferences',
-              isLoading: _isLoading,
-              onPressed: _savePreferences,
-            ),
+            if (isReadOnly)
+              TaraletsButton.orange(
+                label: 'Edit Preferences',
+                isLoading: _isLoading,
+                onPressed: () {
+                  setState(() => _isEditing = true);
+                },
+              )
+            else
+              TaraletsButton.orange(
+                label: _isOnboardingFlow ? 'Save Preferences' : 'Save Changes',
+                isLoading: _isLoading,
+                onPressed: _savePreferences,
+              ),
           ],
         ),
       ),
@@ -390,12 +582,13 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
 
   Widget _tagsSection() {
     final count = _selectedActivities.length;
-    final ok = count >= 2;
+    final isValid = count >= 2;
 
-    final Color badgeBg = ok
+    final Color badgeBackground = isValid
         ? Colors.green.shade50
         : (_tagError ? Colors.red.shade50 : AppColors.orangeSoft);
-    final Color badgeFg = ok
+
+    final Color badgeForeground = isValid
         ? Colors.green.shade700
         : (_tagError ? Colors.red.shade700 : AppColors.orange);
 
@@ -403,7 +596,7 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
       duration: const Duration(milliseconds: 250),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: badgeBg,
+        color: badgeBackground,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -411,20 +604,20 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
         children: [
           AnimatedSize(
             duration: const Duration(milliseconds: 200),
-            child: ok
+            child: isValid
                 ? Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: Icon(
                       Icons.check_circle_rounded,
                       size: 14,
-                      color: badgeFg,
+                      color: badgeForeground,
                     ),
                   )
                 : const SizedBox.shrink(),
           ),
           Text(
             '$count selected',
-            style: AppText.ui(12, FontWeight.w800, color: badgeFg),
+            style: AppText.ui(12, FontWeight.w800, color: badgeForeground),
           ),
         ],
       ),
@@ -434,15 +627,16 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
       key: _tagsKey,
       animation: _shake,
       builder: (context, child) {
-        final t = _shake.value;
-        final dx = math.sin(t * math.pi * 6) * 10 * (1 - t);
+        final value = _shake.value;
+        final dx = math.sin(value * math.pi * 6) * 10 * (1 - value);
         return Transform.translate(offset: Offset(dx, 0), child: child);
       },
       child: _SectionCard(
         emoji: '🎯',
         title: 'What do you enjoy?',
-        subtitle:
-            'Pick at least 2 interests. These will be your default activities for trips.',
+        subtitle: _isEditing
+            ? 'Pick at least 2 interests. These will be your default activities for trips.'
+            : 'These are your saved default activities for trips.',
         trailing: badge,
         child: Wrap(
           spacing: 8,
@@ -466,8 +660,9 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
     return _SectionCard(
       emoji: '🍽️',
       title: 'Dietary & dining',
-      subtitle:
-          'Set your default dining restrictions. You can still modify these per trip.',
+      subtitle: _isEditing
+          ? 'Set your default dining restrictions. You can still modify these per trip.'
+          : 'These are your saved default dining preferences.',
       child: Wrap(
         spacing: 8,
         runSpacing: 8,

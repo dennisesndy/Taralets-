@@ -53,12 +53,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     final rows = <_Row>[
       const _Row('❤️', 'Saved Places', '12 places saved'),
+
       _Row(
         '🗂️',
         'Travel Preferences',
-        'Update interests & dining',
+        'View or edit your saved preferences',
         onTap: () => context.push(AppRoutes.preferences, extra: u.email),
       ),
+
       _Row(
         '🗺️',
         'Past Trips',
