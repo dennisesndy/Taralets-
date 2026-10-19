@@ -40,18 +40,20 @@ class _MemberTripPreferenceScreenState
     extends ConsumerState<MemberTripPreferencesScreen>
     with SingleTickerProviderStateMixin {
   final List<String> _activityOptions = [
-    "Accommodation",
-    "Cafe",
+    "Accommodations",
+    "Cafes",
+    "Desserts / Bakeries",
     "Restaurant / Eatery",
-    "Museum",
+    "Museums",
     "Church / Religious Site",
-    "Park / Plaza",
+    "Parks / Plazas",
     "Historical / Tourist Site",
-    "Shop / Retail",
-    "Health & Wellness",
-    "Entertainment",
-    "Recreation & Arts",
-    "Community & Events",
+    "Shopping / Retail",
+    "Health / Wellness",
+    "Entertainment / Leisure",
+    "Nightlife / Bars",
+    "Government / Services",
+    "Others",
   ];
 
   final List<String> _dietaryOptions = [
@@ -76,18 +78,20 @@ class _MemberTripPreferenceScreenState
   };
 
   static const Map<String, String> _activityEmoji = {
-    "Accommodation": '🏨',
-    "Cafe": '☕',
+    "Accommodations": '🏨',
+    "Cafes": '☕',
+    "Desserts / Bakeries": '🧁',
     "Restaurant / Eatery": '🍽️',
-    "Museum": '🏛️',
+    "Museums": '🏛️',
     "Church / Religious Site": '⛪',
-    "Park / Plaza": '🌳',
+    "Parks / Plazas": '🌳',
     "Historical / Tourist Site": '🗺️',
-    "Shop / Retail": '🛍️',
-    "Health & Wellness": '💆',
-    "Entertainment": '🎭',
-    "Recreation & Arts": '🎨',
-    "Community & Events": '🎪',
+    "Shopping / Retail": '🛍️',
+    "Health / Wellness": '💆',
+    "Entertainment / Leisure": '🎡',
+    "Nightlife / Bars": '🍸',
+    "Government / Services": '🏢',
+    "Others": '📍',
   };
 
   static const Map<String, String> _dietaryEmoji = {
@@ -172,7 +176,9 @@ class _MemberTripPreferenceScreenState
             dietary: dietaryToSave,
           );
 
-      final trip = await ref.read(tripRepositoryProvider).getTrip(widget.tripId!);
+      final trip = await ref
+          .read(tripRepositoryProvider)
+          .getTrip(widget.tripId!);
 
       // ITO ANG PAPALIT DOON SA LUMANG if (mounted) BLOCK:
       if (mounted) {
@@ -186,7 +192,7 @@ class _MemberTripPreferenceScreenState
             behavior: SnackBarBehavior.floating,
           ),
         );
-        
+
         // Dumiretso na sa Trip Lobby at ipasa ang trip data
         context.pushReplacement(AppRoutes.tripLobby, extra: trip);
       }

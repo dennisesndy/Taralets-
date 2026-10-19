@@ -701,18 +701,20 @@ async def update_group_preferences(
     }
 
     activity_options = {
-        "Accommodation",
-        "Cafe",
+        "Accommodations",
+        "Cafes",
+        "Desserts / Bakeries",
         "Restaurant / Eatery",
-        "Museum",
+        "Museums",
         "Church / Religious Site",
-        "Park / Plaza",
+        "Parks / Plazas",
         "Historical / Tourist Site",
-        "Shop / Retail",
-        "Health & Wellness",
-        "Entertainment",
-        "Recreation & Arts",
-        "Community & Events",
+        "Shopping / Retail",
+        "Health / Wellness",
+        "Entertainment / Leisure",
+        "Nightlife / Bars",
+        "Government / Services",
+        "Others",
     }
 
     dietary_options = {

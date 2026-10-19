@@ -2,17 +2,22 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/services/secure_storage_service.dart';
 
 final profilePreferencesRepoProvider = Provider<ProfilePreferencesRepository>((
   ref,
 ) {
-  return ProfilePreferencesRepository(ref.read(dioProvider));
+  return ProfilePreferencesRepository(
+    ref.read(dioProvider),
+    ref.read(secureStorageProvider),
+  );
 });
 
 class ProfilePreferencesRepository {
   final Dio _dio;
+  final SecureStorageService _storage;
 
-  ProfilePreferencesRepository(this._dio);
+  ProfilePreferencesRepository(this._dio, this._storage);
 
   Future<Map<String, dynamic>?> getPreferences() async {
     try {
@@ -53,6 +58,43 @@ class ProfilePreferencesRepository {
       print('REQUEST URL: ${e.requestOptions.uri}');
       print('HEADERS: ${e.requestOptions.headers}');
       print('=================================');
+      rethrow;
+    }
+  }
+
+  Future<void> saveOnboardingPreferences({
+    required List<String> activityTags,
+    required List<String> dietaryPreferences,
+    double maxBudget = 2500.0,
+    String preferredPace = 'Moderate',
+    String passengerType = 'Regular',
+    List<String> accessibilityPreferences = const [],
+  }) async {
+    final token = await _storage.getOnboardingToken();
+
+    if (token == null || token.trim().isEmpty) {
+      throw StateError('Onboarding token is missing.');
+    }
+
+    try {
+      await _dio.post(
+        '${ApiEndpoints.apiPrefix}/profile/onboarding-preferences',
+        data: {
+          'activity_tags': activityTags,
+          'dietary_preferences': dietaryPreferences,
+          'max_budget': maxBudget,
+          'preferred_pace': preferredPace,
+          'passenger_type': passengerType,
+          'accessibility_preferences': accessibilityPreferences,
+        },
+        options: Options(headers: {'X-Onboarding-Token': token}),
+      );
+    } on DioException catch (e) {
+      print('=== ONBOARDING PREFERENCES ERROR ===');
+      print('STATUS: ${e.response?.statusCode}');
+      print('RESPONSE: ${e.response?.data}');
+      print('REQUEST URL: ${e.requestOptions.uri}');
+      print('====================================');
       rethrow;
     }
   }

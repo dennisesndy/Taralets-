@@ -15,6 +15,7 @@ import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../providers/preferences_provider.dart';
 import '../../data/profile_preferences_repository.dart';
+import '../../../../core/services/secure_storage_service.dart';
 
 class PreferenceScreen extends ConsumerStatefulWidget {
   final String? returnRoute;
@@ -29,18 +30,20 @@ class PreferenceScreen extends ConsumerStatefulWidget {
 class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
     with SingleTickerProviderStateMixin {
   final List<String> _activityOptions = [
-    "Accommodation",
-    "Cafe",
+    "Accommodations",
+    "Cafes",
+    "Desserts / Bakeries",
     "Restaurant / Eatery",
-    "Museum",
+    "Museums",
     "Church / Religious Site",
-    "Park / Plaza",
+    "Parks / Plazas",
     "Historical / Tourist Site",
-    "Shop / Retail",
-    "Health & Wellness",
-    "Entertainment",
-    "Recreation & Arts",
-    "Community & Events",
+    "Shopping / Retail",
+    "Health / Wellness",
+    "Entertainment / Leisure",
+    "Nightlife / Bars",
+    "Government / Services",
+    "Others",
   ];
 
   final List<String> _dietaryOptions = [
@@ -51,18 +54,20 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
   ];
 
   static const Map<String, String> _activityEmoji = {
-    "Accommodation": '🏨',
-    "Cafe": '☕',
+    "Accommodations": '🏨',
+    "Cafes": '☕',
+    "Desserts / Bakeries": '🧁',
     "Restaurant / Eatery": '🍽️',
-    "Museum": '🏛️',
+    "Museums": '🏛️',
     "Church / Religious Site": '⛪',
-    "Park / Plaza": '🌳',
+    "Parks / Plazas": '🌳',
     "Historical / Tourist Site": '🗺️',
-    "Shop / Retail": '🛍️',
-    "Health & Wellness": '💆',
-    "Entertainment": '🎭',
-    "Recreation & Arts": '🎨',
-    "Community & Events": '🎪',
+    "Shopping / Retail": '🛍️',
+    "Health / Wellness": '💆',
+    "Entertainment / Leisure": '🎡',
+    "Nightlife / Bars": '🍸',
+    "Government / Services": '🏢',
+    "Others": '📍',
   };
 
   static const Map<String, String> _dietaryEmoji = {
@@ -94,6 +99,7 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
     if (_selectedActivities.length < 2) {
       setState(() => _tagError = true);
       HapticFeedback.mediumImpact();
+
       final ctx = _tagsKey.currentContext;
       if (ctx != null) {
         Scrollable.ensureVisible(
@@ -103,6 +109,7 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
           alignment: 0.1,
         );
       }
+
       _shake.forward(from: 0);
       _toast('Please select at least 2 activity tags');
       return;
@@ -115,13 +122,25 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
           ? ['None']
           : _selectedDietary;
 
-      // Gamit na ang bagong ProfilePreferencesRepository
-      await ref
-          .read(profilePreferencesRepoProvider)
-          .savePreferences(
-            activityTags: _selectedActivities,
-            dietaryPreferences: dietaryToSave,
-          );
+      final repository = ref.read(profilePreferencesRepoProvider);
+      final storage = ref.read(secureStorageProvider);
+      final onboardingToken = await storage.getOnboardingToken();
+
+      if (onboardingToken != null && onboardingToken.isNotEmpty) {
+        // Registration flow: save using the temporary onboarding token.
+        await repository.saveOnboardingPreferences(
+          activityTags: _selectedActivities,
+          dietaryPreferences: dietaryToSave,
+        );
+
+        await storage.deleteOnboardingToken();
+      } else {
+        // Existing logged-in user: use the regular access token.
+        await repository.savePreferences(
+          activityTags: _selectedActivities,
+          dietaryPreferences: dietaryToSave,
+        );
+      }
 
       ref
           .read(userPreferencesProvider.notifier)
@@ -130,39 +149,41 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
             dietary: dietaryToSave,
           );
 
-      if (mounted) {
-        final messenger = ScaffoldMessenger.of(context);
+      if (!mounted) return;
 
-        if (widget.returnRoute != null) {
-          context.go(widget.returnRoute!, extra: widget.returnExtra);
+      final messenger = ScaffoldMessenger.of(context);
 
-          messenger.showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Preferences saved!',
-                style: TextStyle(color: Colors.white),
-              ),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
+      if (widget.returnRoute != null) {
+        context.go(widget.returnRoute!, extra: widget.returnExtra);
+
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Preferences saved!',
+              style: TextStyle(color: Colors.white),
             ),
-          );
-        } else {
-          context.go(AppRoutes.login);
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        context.go(AppRoutes.login);
 
-          messenger.showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Preferences saved! You can now log in.',
-                style: TextStyle(color: Colors.white),
-              ),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Preferences saved! You can now log in.',
+              style: TextStyle(color: Colors.white),
             ),
-          );
-        }
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } on DioException catch (e) {
       _toast(_errorText(e, 'Failed to save preferences'));
+    } catch (e) {
+      _toast('Failed to save preferences: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

@@ -1,3 +1,8 @@
+import uuid
+import jwt
+
+from fastapi import Header
+from app.core.security import decode_onboarding_token
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -42,3 +47,68 @@ async def save_preferences(payload: PreferenceSetupRequest, db: AsyncSession = D
         
     await db.commit()
     return {"message": "Travel Preferences Successfully Saved"}
+
+
+@router.post("/onboarding-preferences")
+async def save_onboarding_preferences(
+    payload: PreferenceSetupRequest,
+    db: AsyncSession = Depends(get_db),
+    onboarding_token: str | None = Header(
+        default=None,
+        alias="X-Onboarding-Token",
+    ),
+):
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired onboarding token.",
+    )
+
+    if not onboarding_token:
+        raise unauthorized
+
+    try:
+        token_payload = decode_onboarding_token(onboarding_token)
+        user_id = uuid.UUID(token_payload["sub"])
+    except (jwt.PyJWTError, KeyError, ValueError):
+        raise unauthorized
+
+    user = await db.get(User, user_id)
+
+    if user is None or not user.is_active or not user.is_verified:
+        raise unauthorized
+
+    existing = await db.scalar(
+        select(PreferenceProfile).where(
+            PreferenceProfile.email == user.email
+        )
+    )
+
+    if existing:
+        existing.activity_tags = payload.activity_tags
+        existing.dietary_preferences = payload.dietary_preferences
+        existing.max_budget = payload.max_budget
+        existing.preferred_pace = payload.preferred_pace
+        existing.passenger_type = payload.passenger_type
+        existing.accessibility_preferences = (
+            payload.accessibility_preferences
+        )
+    else:
+        db.add(
+            PreferenceProfile(
+                email=user.email,
+                activity_tags=payload.activity_tags,
+                dietary_preferences=payload.dietary_preferences,
+                max_budget=payload.max_budget,
+                preferred_pace=payload.preferred_pace,
+                passenger_type=payload.passenger_type,
+                accessibility_preferences=(
+                    payload.accessibility_preferences
+                ),
+            )
+        )
+
+    await db.commit()
+
+    return {
+        "message": "Travel preferences successfully saved."
+    }

@@ -3,12 +3,21 @@ from typing import List, Literal
 
 # Enforce exact matches for frontend consistency
 ActivityTag = Literal[
-    "Accommodation", "Cafe", "Restaurant / Eatery", "Museum", 
-    "Church / Religious Site", "Park / Plaza", "Historical / Tourist Site", 
-    "Shop / Retail", "Health & Wellness", "Entertainment", 
-    "Recreation & Arts", "Community & Events"
+        "Accommodations",
+        "Cafes",
+        "Desserts / Bakeries",
+        "Restaurant / Eatery",
+        "Museums",
+        "Church / Religious Site",
+        "Parks / Plazas",
+        "Historical / Tourist Site",
+        "Shopping / Retail",
+        "Health / Wellness",
+        "Entertainment / Leisure",
+        "Nightlife / Bars",
+        "Government / Services",
+        "Others",
 ]
-
 DietaryTag = Literal['None', 'Halal', 'Vegan', 'Budget-Friendly']
 PaceTag = Literal['Fast', 'Moderate', 'Leisure']
 AccessibilityTag = Literal['Good for children', 'Pet friendly', 'Wheelchair accessible']

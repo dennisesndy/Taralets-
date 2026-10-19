@@ -19,11 +19,24 @@ final dioProvider = Provider<Dio>((ref) {
     InterceptorsWrapper(
       onRequest: (options, handler) async {
         final storage = ref.read(secureStorageProvider);
+
         final token = await storage.getToken();
 
-        if (token != null && token.isNotEmpty) {
-          options.headers['Authorization'] = 'Bearer $token';
+        if (token != null && token.trim().isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer ${token.trim()}';
         }
+
+        if (kDebugMode) {
+          debugPrint('Request: ${options.method} ${options.uri.path}');
+          debugPrint(
+            'Authorization header attached: '
+            '${options.headers.containsKey('Authorization')}',
+          );
+          debugPrint(
+            'Stored token exists: ${token != null && token.trim().isNotEmpty}',
+          );
+        }
+
         handler.next(options);
       },
     ),

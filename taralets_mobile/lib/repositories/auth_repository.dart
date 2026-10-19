@@ -103,6 +103,14 @@ class ApiAuthRepository implements AuthRepository {
       final token = res.data['access_token'] as String;
       await _storage.saveToken(token);
 
+      final savedToken = await _storage.getToken();
+
+      if (savedToken != token) {
+        throw const AuthException(
+          'Saved access token does not match login token.',
+        );
+      }
+
       return AuthSession(
         user: const AuthUser(id: '', email: '', fullName: '', username: ''),
         accessToken: token,

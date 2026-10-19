@@ -22,29 +22,42 @@ load_dotenv()
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+
 def send_otp_email(receiver_email: str, otp_code: str):
     sender_email = os.getenv("SENDER_EMAIL")
     sender_password = os.getenv("SENDER_PASSWORD")
-    
+
     if not sender_email or not sender_password:
-        print("Error: Hindi nabasa ang SENDER_EMAIL o SENDER_PASSWORD sa .env file.")
+        print("Email configuration error: missing sender credentials.")
         return
 
     msg = EmailMessage()
-    msg.set_content(f"Welcome to Taralets! Your verification code is: {otp_code}. It expires in 10 minutes.")
+    msg.set_content(
+        f"Welcome to Taralets!\n\n"
+        f"Your verification code is: {otp_code}\n"
+        f"It expires in 10 minutes."
+    )
     msg["Subject"] = "Taralets - Email Verification"
     msg["From"] = sender_email
     msg["To"] = receiver_email
 
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as server:
             server.ehlo()
             server.starttls()
+            server.ehlo()
             server.login(sender_email, sender_password)
             server.send_message(msg)
-            print(f"Success! OTP email sent to {receiver_email}")
-    except Exception as e:
-        print(f"Failed to send email: {e}")
+
+        print(f"OTP email sent successfully to {receiver_email}")
+
+    except smtplib.SMTPResponseException as e:
+        print(f"SMTP error code: {e.smtp_code}")
+        print(f"SMTP error response: {e.smtp_error!r}")
+
+    except (smtplib.SMTPException, OSError) as e:
+        print(f"Email sending failed: {type(e).__name__}: {e}")
+
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):

@@ -14,6 +14,7 @@ import '../../../../shared/widgets/auth_logo.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/taralets_button.dart';
+import '../../../../core/services/secure_storage_service.dart';
 
 class OtpScreen extends ConsumerStatefulWidget {
   final String email;
@@ -29,40 +30,75 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
   Future<void> _verifyOtp() async {
     final pin = _pinController.text;
-    if (pin.length < 6) return;
+    if (pin.length < 6 || _isLoading) return;
 
     setState(() => _isLoading = true);
 
     try {
       final dio = ref.read(dioProvider);
 
-      // Ipadala ang OTP sa FastAPI para ma-verify
-      await dio.post('${ApiEndpoints.apiPrefix}/auth/verify', data: {
-        "email": widget.email,
-        "otp_code": pin
-      });
+      final response = await dio.post(
+        '${ApiEndpoints.apiPrefix}/auth/verify',
+        data: {"email": widget.email, "otp_code": pin},
+      );
 
-      if (mounted) {
-          context.go(AppRoutes.preferences, extra: widget.email);        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Email verified! You can now log in.',
-                style: TextStyle(color: Colors.white)),
-            backgroundColor: Colors.green.shade600,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+      // Kunin ang onboarding token mula sa backend response
+      final onboardingToken = response.data['onboarding_token'] as String?;
+
+      if (onboardingToken == null || onboardingToken.isEmpty) {
+        throw Exception('Verification did not return an onboarding token.');
       }
+
+      // I-save muna bago pumunta sa Preferences screen
+      await ref
+          .read(secureStorageProvider)
+          .saveOnboardingToken(onboardingToken);
+
+      if (!mounted) return;
+
+      context.go(AppRoutes.preferences, extra: widget.email);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Email verified! Please set up your preferences.',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: Colors.green.shade600,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } on DioException catch (e) {
-      final errorMsg = e.response?.data['detail'] ?? 'Invalid or expired OTP';
+      final data = e.response?.data;
+      final errorMsg = data is Map
+          ? data['detail'] ?? 'Invalid or expired OTP'
+          : 'Invalid or expired OTP';
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMsg.toString(), style: const TextStyle(color: Colors.white)),
+            content: Text(
+              errorMsg.toString(),
+              style: const TextStyle(color: Colors.white),
+            ),
             backgroundColor: Colors.red.shade600,
             behavior: SnackBarBehavior.floating,
           ),
         );
         _pinController.clear();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Verification failed: $e',
+              style: const TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -104,7 +140,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       child: Text(
                         'Verify Email',
                         textAlign: TextAlign.center,
-                        style: AppText.ui(26, FontWeight.w900, color: AppColors.navy),
+                        style: AppText.ui(
+                          26,
+                          FontWeight.w900,
+                          color: AppColors.navy,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -113,7 +153,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       child: Text.rich(
                         textAlign: TextAlign.center,
                         TextSpan(
-                          style: AppText.ui(14, FontWeight.w400, color: AppColors.muted),
+                          style: AppText.ui(
+                            14,
+                            FontWeight.w400,
+                            color: AppColors.muted,
+                          ),
                           children: [
                             const TextSpan(text: "We sent a 6-digit code to "),
                             TextSpan(
@@ -151,12 +195,18 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                             LayoutBuilder(
                               builder: (context, constraints) {
                                 final pinWidth =
-                                    ((constraints.maxWidth - 40) / 6).floorToDouble().clamp(38.0, 52.0);
+                                    ((constraints.maxWidth - 40) / 6)
+                                        .floorToDouble()
+                                        .clamp(38.0, 52.0);
 
                                 final defaultPinTheme = PinTheme(
                                   width: pinWidth,
                                   height: 58,
-                                  textStyle: AppText.ui(22, FontWeight.w800, color: AppColors.navy),
+                                  textStyle: AppText.ui(
+                                    22,
+                                    FontWeight.w800,
+                                    color: AppColors.navy,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: AppColors.bg,
                                     border: Border.all(color: AppColors.border),
@@ -169,16 +219,25 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                                   controller: _pinController,
                                   showCursor: true,
                                   pinAnimationType: PinAnimationType.scale,
-                                  animationDuration: const Duration(milliseconds: 160),
+                                  animationDuration: const Duration(
+                                    milliseconds: 160,
+                                  ),
                                   defaultPinTheme: defaultPinTheme,
-                                  focusedPinTheme: defaultPinTheme.copyDecorationWith(
-                                    color: Colors.white,
-                                    border: Border.all(color: AppColors.orange, width: 2),
-                                  ),
-                                  submittedPinTheme: defaultPinTheme.copyDecorationWith(
-                                    color: AppColors.orangeSoft,
-                                    border: Border.all(color: AppColors.orange),
-                                  ),
+                                  focusedPinTheme: defaultPinTheme
+                                      .copyDecorationWith(
+                                        color: Colors.white,
+                                        border: Border.all(
+                                          color: AppColors.orange,
+                                          width: 2,
+                                        ),
+                                      ),
+                                  submittedPinTheme: defaultPinTheme
+                                      .copyDecorationWith(
+                                        color: AppColors.orangeSoft,
+                                        border: Border.all(
+                                          color: AppColors.orange,
+                                        ),
+                                      ),
                                   onCompleted: (pin) => _verifyOtp(),
                                 );
                               },
@@ -199,7 +258,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       child: Text(
                         "Can't find it? Check your spam folder.",
                         textAlign: TextAlign.center,
-                        style: AppText.ui(12, FontWeight.w500, color: AppColors.muted),
+                        style: AppText.ui(
+                          12,
+                          FontWeight.w500,
+                          color: AppColors.muted,
+                        ),
                       ),
                     ),
                   ],

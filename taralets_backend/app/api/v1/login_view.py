@@ -7,10 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.core.security import DUMMY_HASH, create_access_token, verify_password
+from app.core.security import DUMMY_HASH, create_access_token, verify_password, create_onboarding_token
 from app.models.user import User
 from app.models.otp import OTP
-from app.schemas.auth import LoginRequest, TokenResponse, UserPublic, OTPVerifyRequest
+from app.schemas.auth import LoginRequest, TokenResponse, UserPublic, OTPVerifyRequest, OTPVerifyResponse
 
 from app.api.v1.registration_view import send_otp_email
 from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest
@@ -21,23 +21,54 @@ from fastapi import BackgroundTasks
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-@router.post("/verify")
-async def verify_otp(payload: OTPVerifyRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/verify", response_model=OTPVerifyResponse)
+async def verify_otp(
+    payload: OTPVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
-        select(OTP).where(OTP.email == payload.email, OTP.otp_code == payload.otp_code)
+        select(OTP).where(
+            OTP.email == payload.email,
+            OTP.otp_code == payload.otp_code,
+        )
     )
     otp_record = result.scalar_one_or_none()
 
-    if not otp_record or otp_record.expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP.")
+    if (
+        not otp_record
+        or otp_record.expires_at < datetime.now(timezone.utc)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP.",
+        )
 
-    user = await db.scalar(select(User).where(User.email == payload.email))
-    if user:
-        user.is_verified = True
-        await db.execute(delete(OTP).where(OTP.email == payload.email))
-        await db.commit()
+    user = await db.scalar(
+        select(User).where(User.email == payload.email)
+    )
 
-    return {"message": "Email verified successfully. You can now log in."}
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to verify this account.",
+        )
+
+    user.is_verified = True
+
+    await db.execute(
+        delete(OTP).where(OTP.email == payload.email)
+    )
+    await db.commit()
+
+    onboarding_token, expires_in = create_onboarding_token(
+        str(user.id)
+    )
+
+    return OTPVerifyResponse(
+        message="Email verified successfully.",
+        onboarding_token=onboarding_token,
+        expires_in=expires_in,
+    )
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):

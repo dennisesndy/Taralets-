@@ -61,18 +61,20 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   ];
 
   final List<String> _activityOptions = [
-    "Accommodation",
-    "Cafe",
+    "Accommodations",
+    "Cafes",
+    "Desserts / Bakeries",
     "Restaurant / Eatery",
-    "Museum",
+    "Museums",
     "Church / Religious Site",
-    "Park / Plaza",
+    "Parks / Plazas",
     "Historical / Tourist Site",
-    "Shop / Retail",
-    "Health & Wellness",
-    "Entertainment",
-    "Recreation & Arts",
-    "Community & Events",
+    "Shopping / Retail",
+    "Health / Wellness",
+    "Entertainment / Leisure",
+    "Nightlife / Bars",
+    "Government / Services",
+    "Others",
   ];
 
   final List<String> _dietaryOptions = [
@@ -91,18 +93,20 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   ];
 
   static const Map<String, String> _activityEmoji = {
-    "Accommodation": '🏨',
-    "Cafe": '☕',
+    "Accommodations": '🏨',
+    "Cafes": '☕',
+    "Desserts / Bakeries": '🧁',
     "Restaurant / Eatery": '🍽️',
-    "Museum": '🏛️',
+    "Museums": '🏛️',
     "Church / Religious Site": '⛪',
-    "Park / Plaza": '🌳',
+    "Parks / Plazas": '🌳',
     "Historical / Tourist Site": '🗺️',
-    "Shop / Retail": '🛍️',
-    "Health & Wellness": '💆',
-    "Entertainment": '🎭',
-    "Recreation & Arts": '🎨',
-    "Community & Events": '🎪',
+    "Shopping / Retail": '🛍️',
+    "Health / Wellness": '💆',
+    "Entertainment / Leisure": '🎡',
+    "Nightlife / Bars": '🍸',
+    "Government / Services": '🏢',
+    "Others": '📍',
   };
 
   static const Map<String, String> _dietaryEmoji = {
@@ -376,10 +380,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         if (mounted) {
           context.go(
             AppRoutes.tripLobby,
-            extra: {
-              'trip': trip,
-              'showCreatedOverlay': true,
-            },
+            extra: {'trip': trip, 'showCreatedOverlay': true},
           );
         }
       }

@@ -65,3 +65,35 @@ def decode_access_token(token: str) -> dict:
     if payload.get("type") != "access":
         raise jwt.InvalidTokenError("Wrong token type")
     return payload
+def create_onboarding_token(subject: str) -> tuple[str, int]:
+    expires = timedelta(minutes=15)
+    now = datetime.now(timezone.utc)
+
+    payload = {
+        "sub": subject,
+        "type": "onboarding",
+        "iat": now,
+        "exp": now + expires,
+    }
+
+    token = jwt.encode(
+        payload,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
+
+    return token, int(expires.total_seconds())
+
+
+def decode_onboarding_token(token: str) -> dict:
+    payload = jwt.decode(
+        token,
+        settings.JWT_SECRET_KEY,
+        algorithms=[settings.JWT_ALGORITHM],
+        options={"require": ["exp", "sub"]},
+    )
+
+    if payload.get("type") != "onboarding":
+        raise jwt.InvalidTokenError("Wrong token type")
+
+    return payload
