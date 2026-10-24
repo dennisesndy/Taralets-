@@ -24,4 +24,5 @@ class AppRoutes {
   static const String preferences = '/preferences';
   static const String tripPreferences = '/trip-preferences';
   static const recommendations = '/group-recommendations';
+  static const String selectedPlaces = '/selected-places';
 }

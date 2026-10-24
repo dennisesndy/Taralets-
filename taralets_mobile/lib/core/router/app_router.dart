@@ -9,7 +9,10 @@ import '../../features/auth/presentation/screens/splash_screen.dart';
 
 import '../../features/discover/presentation/screens/discover_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
+import '../../features/itinerary/data/models/itinerary_models.dart';
+import '../../features/itinerary/presentation/controllers/itinerary_draft_controller.dart';
 import '../../features/itinerary/presentation/screens/itinerary_screen.dart';
+import '../../features/itinerary/presentation/screens/selected_places_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/preference_screen.dart';
 import '../../features/profile/presentation/screens/member_trip_preferences_screen.dart';
@@ -121,7 +124,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.itinerary,
-                builder: (context, state) => const ItineraryScreen(),
+                builder: (context, state) {
+                  final extra = state.extra;
+                  return ItineraryScreen(
+                    initialPlan: extra is ItineraryPlan ? extra : null,
+                  );
+                },
               ),
             ],
           ),
@@ -254,6 +262,16 @@ final routerProvider = Provider<GoRouter>((ref) {
             return GroupRecommendationsScreen(groupId: groupId);
           },
         ),
+      GoRoute(
+        path: AppRoutes.selectedPlaces,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final extra = state.extra;
+          return SelectedPlacesScreen(
+            draft: extra is ItineraryDraftController ? extra : null,
+          );
+        },
+      ),
     ],
   );
 

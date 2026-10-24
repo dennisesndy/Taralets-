@@ -3,14 +3,18 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/utils/activity_category_helper.dart';
 import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/auth_motion.dart';
 import '../../../../shared/widgets/taralets_button.dart';
+import '../../../itinerary/data/models/itinerary_draft_models.dart';
+import '../../../itinerary/presentation/controllers/itinerary_draft_controller.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parsing helpers (fixes the stray quotes / braces in labels)
@@ -138,6 +142,7 @@ class _Place {
     required this.percent,
     required this.isNew,
     required this.searchText,
+    required this.budget,
     this.costLabel,
     this.entranceLabel,
     this.rating,
@@ -165,6 +170,10 @@ class _Place {
   final int percent;
   final bool isNew;
   final String searchText;
+
+  /// Estimated spend for the itinerary draft. `0` means free.
+  final int budget;
+
   final String? costLabel;
   final String? entranceLabel;
   final double? rating;
@@ -180,6 +189,22 @@ class _Place {
       entranceLabel != null ||
       dietary.isNotEmpty ||
       perks.isNotEmpty;
+
+  ItineraryCandidate toCandidate() => ItineraryCandidate(
+    id: id,
+    name: name,
+    category: category,
+    area: district,
+    address: address,
+    description: description,
+    imageUrl: imageUrl,
+    icon: itineraryIconForCategory(category),
+    budget: budget,
+    groupScore: percent / 100,
+    activityTags: activityTags,
+    dietaryTags: dietary,
+    accessibilityTags: perks,
+  );
 
   factory _Place.from(Map<String, dynamic> raw, int index) {
     final name = _cleanText(raw['name'], 'Unnamed place');
@@ -226,12 +251,21 @@ class _Place {
     if (minCost == 0 && (maxCost == null || maxCost == 0)) costLabel = 'Free';
 
     final fee = _cleanText(raw['entrance_fee']);
+    final feeValue = num.tryParse(fee);
     String? entrance;
     if (fee.isNotEmpty) {
-      final n = num.tryParse(fee);
       entrance =
-          n == null ? fee : (n == 0 ? 'Free entrance' : 'Entrance ${_peso(n)}');
+          feeValue == null
+              ? fee
+              : (feeValue == 0
+                    ? 'Free entrance'
+                    : 'Entrance ${_peso(feeValue)}');
     }
+
+    final baseCost = (minCost != null && minCost > 0)
+        ? minCost
+        : (maxCost ?? 0);
+    final budget = (baseCost + (feeValue ?? 0)).round();
 
     final ratingVal = num.tryParse(_cleanText(raw['rating']));
     final rating =
@@ -275,6 +309,7 @@ class _Place {
       percent: percent,
       isNew: raw['is_new'] == true,
       searchText: searchText,
+      budget: budget,
       costLabel: costLabel,
       entranceLabel: entrance,
       rating: rating,
@@ -313,6 +348,7 @@ class _GroupRecommendationsScreenState
   String _searchQuery = '';
   bool _loading = true;
   String? _error;
+  final ItineraryDraftController _draft = ItineraryDraftController();
 
   @override
   void initState() {
@@ -323,7 +359,21 @@ class _GroupRecommendationsScreenState
   @override
   void dispose() {
     _searchController.dispose();
+    _draft.dispose();
     super.dispose();
+  }
+
+  void _addToItinerary(_Place place) {
+    if (_draft.contains(place.id)) return;
+    HapticFeedback.selectionClick();
+    _draft.add(place.toCandidate());
+    setState(() {});
+  }
+
+  Future<void> _reviewSelected() async {
+    if (_draft.selected.isEmpty) return;
+    await context.push(AppRoutes.selectedPlaces, extra: _draft);
+    if (mounted) setState(() {});
   }
 
   Future<void> _fetchRecommendations({bool silent = false}) async {
@@ -440,6 +490,12 @@ class _GroupRecommendationsScreenState
         ],
       ),
       body: _buildBody(),
+      bottomNavigationBar: _draft.selected.isEmpty
+          ? null
+          : _ReviewSelectedBar(
+              count: _draft.selected.length,
+              onReview: _reviewSelected,
+            ),
     );
   }
 
@@ -536,6 +592,8 @@ class _GroupRecommendationsScreenState
                         child: _PlaceCard(
                           place: place,
                           query: _searchQuery,
+                          added: _draft.contains(place.id),
+                          onAdd: () => _addToItinerary(place),
                         ),
                       );
                     },
@@ -684,10 +742,17 @@ class _CategoryChip extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _PlaceCard extends StatefulWidget {
-  const _PlaceCard({required this.place, required this.query});
+  const _PlaceCard({
+    required this.place,
+    required this.query,
+    required this.added,
+    required this.onAdd,
+  });
 
   final _Place place;
   final String query;
+  final bool added;
+  final VoidCallback onAdd;
 
   @override
   State<_PlaceCard> createState() => _PlaceCardState();
@@ -924,6 +989,21 @@ class _PlaceCardState extends State<_PlaceCard> {
                       ),
                     ],
 
+                    const SizedBox(height: 12),
+                    if (widget.added)
+                      const _AddedToItineraryBanner()
+                    else
+                      TaraletsButton.orange(
+                        small: true,
+                        label: 'Add to Itinerary',
+                        icon: const Icon(
+                          Icons.add_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                        onPressed: widget.onAdd,
+                      ),
+
                     // ── Expanded details ──
                     AnimatedSize(
                       duration: const Duration(milliseconds: 260),
@@ -1035,6 +1115,134 @@ class _PlaceCardState extends State<_PlaceCard> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddedToItineraryBanner extends StatelessWidget {
+  const _AddedToItineraryBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: AppColors.greenSoft,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.green.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.check_circle_rounded,
+            size: 16,
+            color: AppColors.greenText,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Added to itinerary',
+            style: AppText.ui(
+              12,
+              FontWeight.w800,
+              color: AppColors.greenText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReviewSelectedBar extends StatelessWidget {
+  const _ReviewSelectedBar({
+    required this.count,
+    required this.onReview,
+  });
+
+  final int count;
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: const Border(
+            top: BorderSide(color: AppColors.border),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 16,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primarySoft,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: const Icon(
+                Icons.playlist_add_check_rounded,
+                size: 20,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$count ${count == 1 ? 'place' : 'places'} added',
+                    style: AppText.ui(
+                      12.5,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    'Review and vote with the group',
+                    style: AppText.ui(
+                      10.5,
+                      FontWeight.w500,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              height: 40,
+              child: TaraletsButton.orange(
+                small: true,
+                full: false,
+                label: 'Review',
+                icon: const Icon(
+                  Icons.how_to_vote_rounded,
+                  size: 15,
+                  color: Colors.white,
+                ),
+                onPressed: onReview,
+              ),
+            ),
+          ],
         ),
       ),
     );

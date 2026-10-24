@@ -8,13 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import models  # noqa: F401
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.core.database import Base, engine, get_db
+from app.core.database import engine, get_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Schema changes are managed by Alembic. Do not create or alter tables
+    # automatically on startup.
     yield
     await engine.dispose()
 

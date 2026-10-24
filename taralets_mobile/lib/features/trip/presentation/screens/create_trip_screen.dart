@@ -282,6 +282,17 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     // FIX: Guard against double-tapping which causes duplicated trips and mismatched codes!
     if (_submitting) return;
 
+    // The member-preferences endpoint requires at least 2 activity tags.
+    // Validate here so Review Trip never submits an invalid payload.
+    if (_step == 4 && _cats.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select at least 2 activity tags.'),
+        ),
+      );
+      return;
+    }
+
     if (_step == 2 && _outOfBoundary) return;
 
     if (_step == 2 && _createdTrip == null) {
@@ -1274,7 +1285,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       _SectionCard(
         emoji: '🎯',
         title: 'What do you enjoy?',
-        subtitle: 'Select interests for this specific trip.',
+        subtitle: 'Select at least 2 interests for this specific trip.',
         child: Wrap(
           spacing: 8,
           runSpacing: 8,

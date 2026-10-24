@@ -27,6 +27,9 @@ class Trip(Base):
     title = Column(String, nullable=False)
     description = Column(String, default="")
     status = Column(String, default="lobby")
+    # NOTE: planning_status is intentionally omitted until the Step 4b
+    # migration (8f2c1d4e6a7b) is applied. Re-add the column here when
+    # applying that migration.
 
     date = Column(DateTime, nullable=True)
     date_label = Column(String, default="Today")
@@ -59,6 +62,16 @@ class Trip(Base):
         back_populates="trip",
         cascade="all, delete-orphan",
     )
+    place_selections = relationship(
+        "TripPlaceSelection",
+        back_populates="trip",
+        cascade="all, delete-orphan",
+    )
+    itineraries = relationship(
+        "TripItinerary",
+        back_populates="trip",
+        cascade="all, delete-orphan",
+    )
 
 
 class TripMember(Base):
@@ -82,5 +95,20 @@ class TripMember(Base):
         "TripMemberPreference",
         back_populates="trip_member",
         uselist=False,
+        cascade="all, delete-orphan",
+    )
+    place_selections = relationship(
+        "TripPlaceSelection",
+        back_populates="selected_by_member",
+        foreign_keys="TripPlaceSelection.selected_by_member_id",
+    )
+    place_votes = relationship(
+        "TripPlaceVote",
+        back_populates="trip_member",
+        cascade="all, delete-orphan",
+    )
+    itinerary_confirmations = relationship(
+        "TripConfirmation",
+        back_populates="trip_member",
         cascade="all, delete-orphan",
     )

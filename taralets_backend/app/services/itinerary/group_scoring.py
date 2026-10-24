@@ -34,23 +34,163 @@ def _get(place, key, default=None):
     return getattr(place, key, default)
 
 
+def _as_iso_time(value):
+    if value is None:
+        return None
+
+    isoformat = getattr(value, "isoformat", None)
+
+    if callable(isoformat):
+        return isoformat()
+
+    return str(value)
+
+
+def _accessibility_values(place) -> list[str]:
+    """Return accessibility labels for ORM objects or plain dicts."""
+    values = _get(place, "accessibility_pets", None)
+
+    if isinstance(values, str):
+        return [values]
+
+    if values:
+        return list(values)
+
+    labels = []
+
+    if _get(place, "wheelchair_accessible", False):
+        labels.append("Wheelchair Accessible")
+
+    if _get(place, "pet_friendly", False):
+        labels.append("Pet Friendly")
+
+    if _get(place, "good_for_children", False):
+        labels.append("Good for Children")
+
+    return labels
+
+
+ACCESSIBILITY_FIELDS = {
+    "wheelchair accessible": "wheelchair_accessible",
+    "pet friendly": "pet_friendly",
+    "good for children": "good_for_children",
+}
+
+
+def _calculate_accessibility_score(
+    place,
+    required: set[str],
+) -> float:
+    if not required:
+        return 1.0
+
+    available = _normalize(_accessibility_values(place))
+    scores = []
+
+    for preference in required:
+        if preference in available:
+            scores.append(1.0)
+            continue
+
+        field = ACCESSIBILITY_FIELDS.get(preference)
+
+        if field is None:
+            scores.append(0.0)
+            continue
+
+        value = _get(place, field, None)
+
+        if value is None:
+            # Missing accessibility data is neutral, not a hard no.
+            scores.append(0.5)
+        else:
+            scores.append(1.0 if value else 0.0)
+
+    return sum(scores) / len(scores)
+
+
+DIETARY_ALIASES = {
+    "halal": {
+        "halal",
+        "halal options",
+        "halal-friendly",
+        "halal friendly",
+    },
+    "vegan": {
+        "vegan",
+        "vegan options",
+        "vegan-friendly",
+        "vegan friendly",
+        "plant-based",
+        "plant based",
+    },
+    "vegetarian": {
+        "vegetarian",
+        "vegetarian options",
+        "vegetarian-friendly",
+        "vegetarian friendly",
+    },
+    "budget-friendly": {
+        "budget-friendly",
+        "budget friendly",
+        "budget",
+    },
+}
+
+
+def _normalize_token(value: Any) -> str:
+    """Clean a Postgres array token read from the legacy dataset."""
+    return " ".join(
+        str(value)
+        .strip()
+        .strip('{}[]"\'')
+        .replace('"', "")
+        .replace("'", "")
+        .casefold()
+        .split()
+    )
+
 
 def _normalize(values: Any) -> set[str]:
     if values is None:
         return set()
 
     if isinstance(values, str):
-        values = values.split(",")
+        values = [values]
 
     if not isinstance(values, (list, tuple, set)):
         return set()
 
+    normalized = set()
+
+    for value in values:
+        parts = (
+            str(value).split(",")
+            if isinstance(value, str)
+            else [value]
+        )
+
+        for part in parts:
+            token = _normalize_token(part)
+
+            if token and token not in {"none", "n/a", "not applicable"}:
+                normalized.add(token)
+
+    return normalized
+
+
+def _canonical_dietary(token: str) -> str:
+    for canonical, aliases in DIETARY_ALIASES.items():
+        if token in aliases:
+            return canonical
+
+    return token
+
+
+def _normalize_dietary(values: Any) -> set[str]:
     return {
-        str(value).strip().casefold()
-        for value in values
-        if str(value).strip()
-        and str(value).strip().casefold()
-        not in {"none", "n/a", "not applicable"}
+        _canonical_dietary(token)
+        for token in _normalize(values)
     }
 
 
@@ -222,8 +362,11 @@ def _clean_activity(value) -> str:
     return " ".join(
         str(value)
         .strip()
-        .casefold()
+        .strip('{}[]"\'')
+        .replace('"', "")
+        .replace("'", "")
         .replace("_", " ")
+        .casefold()
         .split()
     )
 
@@ -382,12 +525,12 @@ def calculate_member_score(
         place,
     )
 
-    dietary_required = _normalize(
+    dietary_required = _normalize_dietary(
         member.get("dietary_preferences", [])
     )
 
-    dietary_available = _normalize(
-        getattr(place, "dietary_options", None)
+    dietary_available = _normalize_dietary(
+        _get(place, "dietary_options", None)
     )
 
     if not dietary_required:
@@ -404,23 +547,10 @@ def calculate_member_score(
         member.get("accessibility_preferences", [])
     )
 
-    accessibility_available = _normalize(
-        getattr(place, "accessibility_pets", None)
+    accessibility_score = _calculate_accessibility_score(
+        place,
+        accessibility_required,
     )
-
-    if not accessibility_required:
-        accessibility_score = 1.0
-    elif accessibility_available:
-        accessibility_score = (
-            len(
-                accessibility_required.intersection(
-                    accessibility_available
-                )
-            )
-            / len(accessibility_required)
-        )
-    else:
-        accessibility_score = 0.0
 
     max_budget = member.get("max_budget")
 
@@ -429,9 +559,9 @@ def calculate_member_score(
     except (TypeError, ValueError):
         max_budget = None
 
-    min_cost = safe_cost(getattr(place, "min_cost", 0))
-    max_cost = safe_cost(getattr(place, "max_cost", 0))
-    entrance_fee = safe_cost(getattr(place, "entrance_fee", 0))
+    min_cost = safe_cost(_get(place, "min_cost", 0))
+    max_cost = safe_cost(_get(place, "max_cost", 0))
+    entrance_fee = safe_cost(_get(place, "entrance_fee", 0))
 
     # Use the higher estimated cost and numeric entrance fee.
     estimated_cost = max(min_cost, max_cost, entrance_fee)
@@ -601,44 +731,40 @@ def aggregate_group_scores(
             + 0.20 * spatial_score
         )
 
+        try:
+            reviews = int(_get(place, "reviews", 0) or 0)
+        except (TypeError, ValueError):
+            reviews = 0
+
         scored.append({
-            "id": place.id,
-            "master_id": place.master_id,
-            "name": place.name,
-            "district": place.district,
-            "category": place.category,
-            "description": place.description,
-            "image_url": place.image_url,
-            "address": place.address,
-            "latitude": place.latitude,
-            "longitude": place.longitude,
-            "activity_tags": place.activity_tags or [],
-            "dietary_options": place.dietary_options or [],
-            "entrance_fee": place.entrance_fee,
-            "min_cost": place.min_cost,
-            "max_cost": place.max_cost,
-            "sub_category_1": getattr(place, "sub_category_1", None),
-            "sub_category_2": getattr(place, "sub_category_2", None),
-            "sub_category_3": getattr(place, "sub_category_3", None),
-            "pet_friendly": getattr(place, "pet_friendly", None),
-            "wheelchair_accessible": getattr(place, "wheelchair_accessible", None),
-            "good_for_children": getattr(place, "good_for_children", None),
-            "accessibility_pets": (
-                place.accessibility_pets or []
-            ),
-            "days_open": place.days_open,
-            "open_time": (
-                place.open_time.isoformat()
-                if place.open_time
-                else None
-            ),
-            "close_time": (
-                place.close_time.isoformat()
-                if place.close_time
-                else None
-            ),
-            "rating": place.rating or 0,
-            "reviews": place.reviews or 0,
+            "id": _get(place, "id"),
+            "place_id": _get(place, "id"),
+            "master_id": _get(place, "master_id"),
+            "name": _get(place, "name", ""),
+            "district": _get(place, "district"),
+            "category": _get(place, "category"),
+            "description": _get(place, "description"),
+            "image_url": _get(place, "image_url"),
+            "address": _get(place, "address"),
+            "latitude": _get(place, "latitude"),
+            "longitude": _get(place, "longitude"),
+            "activity_tags": _get(place, "activity_tags", []) or [],
+            "dietary_options": _get(place, "dietary_options", []) or [],
+            "entrance_fee": _get(place, "entrance_fee"),
+            "min_cost": _get(place, "min_cost", 0),
+            "max_cost": _get(place, "max_cost", 0),
+            "sub_category_1": _get(place, "sub_category_1"),
+            "sub_category_2": _get(place, "sub_category_2"),
+            "sub_category_3": _get(place, "sub_category_3"),
+            "pet_friendly": _get(place, "pet_friendly"),
+            "wheelchair_accessible": _get(place, "wheelchair_accessible"),
+            "good_for_children": _get(place, "good_for_children"),
+            "accessibility_pets": _accessibility_values(place),
+            "days_open": _get(place, "days_open", []) or [],
+            "open_time": _as_iso_time(_get(place, "open_time")),
+            "close_time": _as_iso_time(_get(place, "close_time")),
+            "rating": _get(place, "rating", 0) or 0,
+            "reviews": reviews,
 
             "match_score": round(
                 final_score,
@@ -680,14 +806,8 @@ def aggregate_group_scores(
                 for score in member_scores
             ],
 
-            "is_new": (
-                (place.reviews or 0) == 0
-            ),
+            "is_new": reviews == 0,
         })
-
-    for place in candidate_places:
-        if isinstance(place, dict):
-            place = SimpleNamespace(**place)
 
     scored.sort(
         key=lambda item: item["match_score"],

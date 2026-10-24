@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from app.api import deps
 from app.models.trip import Trip, TripMember
 from app.services.recommendation import get_group_recommendations
+from app.services.trip_service import build_group_profiles
 
 router = APIRouter()
 
@@ -34,26 +35,9 @@ async def get_recommendations_for_group(
             detail="Trip not found",
         )
 
-    # Build a profile for each member who has saved preferences.
-    group_profiles = []
-
-    for member in trip.members:
-        pref = member.preferences
-
-        if pref is None:
-            continue
-
-        group_profiles.append(
-            {
-                "activity_tags": pref.activity_tags or [],
-                "dietary_preferences": pref.dietary_preferences or [],
-                "max_budget": pref.max_budget,
-                "preferred_pace": pref.preferred_pace,
-                "accessibility_preferences": (
-                    pref.accessibility_preferences or []
-                ),
-            }
-        )
+    # Build one profile per member, including members who have not
+    # saved preferences yet.
+    group_profiles = build_group_profiles(trip)
 
     if not group_profiles:
         return {"data": []}
