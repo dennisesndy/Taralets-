@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../core/router/app_routes.dart';
-import '../../../../core/utils/formatters.dart';
 import '../../../../data/manila_places.dart';
 import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
@@ -66,6 +66,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return ColoredBox(
       color: AppColors.bg,
       child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -84,58 +85,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onTap: () => context.go(AppRoutes.profile),
                         child: Avatar(name: displayName, size: 46),
                       ),
-                      const SizedBox(width: 12),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                        child: Center(
+                          child: Text.rich(
+                            TextSpan(
                               children: [
-                                Flexible(
-                                  child: Text(
-                                    '${greetingFor(DateTime.now())},',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppText.ui(
-                                      12,
-                                      FontWeight.w400,
-                                      color: AppColors.muted,
-                                    ),
+                                TextSpan(
+                                  text: 'Taralets',
+                                  style: GoogleFonts.pacifico(
+                                    fontSize: 30,
+                                    color: AppColors.brandOrange,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: '!',
+                                  style: GoogleFonts.pacifico(
+                                    fontSize: 30,
+                                    color: AppColors.navy,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 1),
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    '$displayName!',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppText.ui(
-                                      16,
-                                      FontWeight.w800,
-                                      color: AppColors.navy,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                const Icon(
-                                  Icons.waving_hand_rounded,
-                                  size: 16,
-                                  color: TicketPalette.amberLine,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 1),
-                            Text(
-                              'Ready for your next gala?',
-                              style: AppText.ui(
-                                12,
-                                FontWeight.w400,
-                                color: AppColors.muted,
-                              ),
-                            ),
-                          ],
+                            maxLines: 1,
+                            softWrap: false,
+                          ),
                         ),
                       ),
                       // NOTIFICATION BELL ICON
@@ -169,7 +142,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   Text(
                     'Explore Manila!',
                     style: AppText.ui(
@@ -224,7 +197,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // Body
             // -----------------------------------------------------------------
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 128),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

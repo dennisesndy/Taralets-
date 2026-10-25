@@ -7,15 +7,17 @@ import '../constants/app_colors.dart';
 class AppTheme {
   AppTheme._();
 
-  /// Light-only theme: white surfaces, soft blue primary, soft red for errors.
+  /// Light-only theme: white surfaces, orange primary, soft red for errors.
   static ThemeData get light {
     const scheme = ColorScheme.light(
       primary: AppColors.primary,
-      onPrimary: Colors.white,
+      onPrimary: Colors.white, // Contrast against the orange primary
       primaryContainer: AppColors.primarySoft,
       onPrimaryContainer: AppColors.navy,
       secondary: AppColors.navy,
       onSecondary: Colors.white,
+      tertiary: AppColors.orange, // Mapped new orange
+      onTertiary: Colors.white,
       surface: AppColors.card,
       onSurface: AppColors.text,
       onSurfaceVariant: AppColors.muted,

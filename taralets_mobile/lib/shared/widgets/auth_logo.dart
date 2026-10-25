@@ -1,59 +1,78 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/constants/app_colors.dart';
 
-class AuthLogo extends StatefulWidget {
-  const AuthLogo({super.key, required this.emoji, this.size = 100});
+/// Typography-only "Taralets!" wordmark in the app's script font.
+///
+/// Use [onDark] on navy surfaces (white wordmark) and leave it false on light
+/// ones (navy wordmark). The shared [heroTag] lets it glide between screens.
+/// `emoji` is accepted and ignored so OTP / forgot / reset screens still compile.
+class AuthLogo extends StatelessWidget {
+  const AuthLogo({
+    super.key,
+    this.emoji,
+    this.size = 100,
+    this.onDark = false,
+    this.heroTag = AuthLogo.defaultHeroTag,
+    this.animate = true,
+  });
 
-  final String emoji;
+  static const String defaultHeroTag = 'taralets-logo';
+
+  /// Deprecated, ignored.
+  final String? emoji;
+
+  /// 100 -> roughly 44px type.
   final double size;
-
-  @override
-  State<AuthLogo> createState() => _AuthLogoState();
-}
-
-class _AuthLogoState extends State<AuthLogo> with TickerProviderStateMixin {
-  late final AnimationController _enter =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))..forward();
-  late final AnimationController _float =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 2400))
-        ..repeat(reverse: true);
-  late final Animation<double> _scale =
-      CurvedAnimation(parent: _enter, curve: Curves.elasticOut);
-  late final Animation<double> _bob =
-      CurvedAnimation(parent: _float, curve: Curves.easeInOut);
-
-  @override
-  void dispose() {
-    _enter.dispose();
-    _float.dispose();
-    super.dispose();
-  }
+  final bool onDark;
+  final String? heroTag;
+  final bool animate;
 
   @override
   Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _scale,
-      child: AnimatedBuilder(
-        animation: _bob,
-        builder: (context, child) => Transform.translate(
-          offset: Offset(0, -7 * _bob.value),
-          child: child,
-        ),
-        child: Container(
-          width: widget.size,
-          height: widget.size,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.orangeSoft,
-            borderRadius: BorderRadius.circular(widget.size * 0.26),
-            boxShadow: const [
-              BoxShadow(color: Color(0x1F000000), blurRadius: 24, offset: Offset(0, 12)),
+    final base = GoogleFonts.pacifico(
+      fontSize: size * 0.44,
+    );
+
+    Widget logo = Material(
+      type: MaterialType.transparency,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: 'Taralets',
+                style: base.copyWith(
+                  color: onDark ? Colors.white : AppColors.navy,
+                ),
+              ),
+              TextSpan(
+                text: '!',
+                style: base.copyWith(color: AppColors.brandOrange),
+              ),
             ],
           ),
-          child: Text(widget.emoji, style: TextStyle(fontSize: widget.size * 0.5)),
+          maxLines: 1,
+          softWrap: false,
         ),
       ),
     );
+
+    if (animate) {
+      logo = TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 700),
+        curve: Curves.easeOutCubic,
+        builder: (context, t, child) => Opacity(
+          opacity: t,
+          child: Transform.scale(scale: 0.92 + 0.08 * t, child: child),
+        ),
+        child: logo,
+      );
+    }
+
+    return heroTag == null ? logo : Hero(tag: heroTag!, child: logo);
   }
 }

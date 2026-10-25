@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
@@ -9,9 +10,10 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../shared/widgets/auth_backdrop.dart';
+import '../../../../shared/widgets/auth_header.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
-import '../../../../shared/widgets/taralets_button.dart';
+import '../../../../shared/widgets/auth_button.dart';
 import '../../../../shared/widgets/taralets_text_field.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -124,64 +126,60 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: AuthBackdrop(
-        child: SafeArea(
+    final h = MediaQuery.sizeOf(context).height;
+    final headerH = (h * 0.28).clamp(220.0, 290.0);
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: AppColors.bg,
+        body: AuthBackdrop(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    FadeSlideIn(
-                      offset: const Offset(-16, 0),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: BackButtonTile(onTap: () => context.pop()),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    FadeSlideIn(
-                      delay: const Duration(milliseconds: 120),
-                      child: Text(
-                        'Create Account',
-                        style: AppText.ui(26, FontWeight.w900, color: AppColors.navy),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    FadeSlideIn(
-                      delay: const Duration(milliseconds: 220),
-                      child: Text(
-                        'Enter your details to start planning trips.',
-                        style: AppText.ui(13, FontWeight.w400, color: AppColors.muted),
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    FadeSlideIn(
-                      delay: const Duration(milliseconds: 320),
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: AppColors.border),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x14000000),
-                              blurRadius: 28,
-                              offset: Offset(0, 12),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: Column(
+              children: [
+                AuthHeader(
+                  height: headerH,
+                  logoSize: 80,
+                  leading: FadeSlideIn(
+                    offset: const Offset(-16, 0),
+                    child: BackButtonTile(onTap: () => context.pop()),
+                  ),
+                ),
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 120),
+                            child: Text(
+                              "Let's get you on board",
+                              textAlign: TextAlign.center,
+                              style: AppText.ui(24, FontWeight.w900,
+                                  color: AppColors.navy),
                             ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
+                          ),
+                          const SizedBox(height: 6),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 200),
+                            child: Text(
+                              'Create an account and start planning with your crew.',
+                              textAlign: TextAlign.center,
+                              style: AppText.ui(13, FontWeight.w400,
+                                  color: AppColors.muted),
+                            ),
+                          ),
+                          const SizedBox(height: 26),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 280),
+                            child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Expanded(
@@ -192,7 +190,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                     textInputAction: TextInputAction.next,
                                   ),
                                 ),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: 14),
                                 Expanded(
                                   child: TaraletsTextField(
                                     label: 'Last Name',
@@ -203,8 +201,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 18),
-                            TaraletsTextField(
+                          ),
+                          const SizedBox(height: 20),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 340),
+                            child: TaraletsTextField(
                               label: 'Email Address',
                               controller: _emailCtrl,
                               hint: 'you@example.com',
@@ -212,8 +213,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
                             ),
-                            const SizedBox(height: 18),
-                            TaraletsTextField(
+                          ),
+                          const SizedBox(height: 20),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 400),
+                            child: TaraletsTextField(
                               label: 'Phone Number',
                               controller: _phoneCtrl,
                               hint: '09XX XXX XXXX',
@@ -221,18 +225,25 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               keyboardType: TextInputType.phone,
                               textInputAction: TextInputAction.next,
                             ),
-                            const SizedBox(height: 18),
-                            TaraletsTextField(
+                          ),
+                          const SizedBox(height: 20),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 460),
+                            child: TaraletsTextField(
                               label: 'Password',
                               controller: _passCtrl,
                               hint: 'Create a password',
-                              helper: 'At least 8 characters, with a letter and a number.',
+                              helper:
+                                  'At least 8 characters, with a letter and a number.',
                               icon: Icons.lock_outline_rounded,
                               isPassword: true,
                               textInputAction: TextInputAction.next,
                             ),
-                            const SizedBox(height: 18),
-                            TaraletsTextField(
+                          ),
+                          const SizedBox(height: 20),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 520),
+                            child: TaraletsTextField(
                               label: 'Confirm Password',
                               controller: _confirmPasswordController,
                               hint: 'Re-type your password',
@@ -240,20 +251,47 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               isPassword: true,
                               textInputAction: TextInputAction.done,
                             ),
-                            _matchHint(),
-                            const SizedBox(height: 26),
-                            TaraletsButton.orange(
+                          ),
+                          _matchHint(),
+                          const SizedBox(height: 28),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 600),
+                            child: AuthButton(
                               label: 'Sign Up',
                               isLoading: _isLoading,
                               onPressed: _register,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 18),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Already have an account? ',
+                                style: AppText.ui(13, FontWeight.w500,
+                                    color: AppColors.muted),
+                              ),
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => context.pop(),
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8),
+                                  child: Text(
+                                    'Log In',
+                                    style: AppText.ui(13, FontWeight.w800,
+                                        color: AppColors.brandOrange),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),

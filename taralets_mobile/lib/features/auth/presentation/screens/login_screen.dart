@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,9 +8,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../shared/widgets/auth_backdrop.dart';
-import '../../../../shared/widgets/auth_logo.dart';
+import '../../../../shared/widgets/auth_header.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
-import '../../../../shared/widgets/taralets_button.dart';
+import '../../../../shared/widgets/auth_button.dart';
 import '../../../../shared/widgets/taralets_text_field.dart';
 import '../../../../repositories/auth_repository.dart';
 import '../../../../repositories/repository_providers.dart';
@@ -123,68 +124,53 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: AuthBackdrop(
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Center(child: AuthLogo(emoji: '✈️', size: 100)),
-                    const SizedBox(height: 28),
-                    FadeSlideIn(
-                      delay: const Duration(milliseconds: 150),
-                      child: Text(
-                        'Welcome to Taralets!',
-                        textAlign: TextAlign.center,
-                        style: AppText.ui(
-                          26,
-                          FontWeight.w900,
-                          color: AppColors.navy,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    FadeSlideIn(
-                      delay: const Duration(milliseconds: 250),
-                      child: Text(
-                        'Log in to plan your next group trip.',
-                        textAlign: TextAlign.center,
-                        style: AppText.ui(
-                          14,
-                          FontWeight.w400,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    FadeSlideIn(
-                      delay: const Duration(milliseconds: 350),
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: AppColors.border),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x14000000),
-                              blurRadius: 28,
-                              offset: Offset(0, 12),
+    final h = MediaQuery.sizeOf(context).height;
+    final headerH = (h * 0.32).clamp(240.0, 320.0);
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: AppColors.bg,
+        body: AuthBackdrop(
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: Column(
+              children: [
+                AuthHeader(height: headerH, logoSize: 92),
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(28, 22, 28, 32),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 150),
+                            child: Text(
+                              'Welcome back!',
+                              textAlign: TextAlign.center,
+                              style: AppText.ui(26, FontWeight.w900,
+                                  color: AppColors.navy),
                             ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            TaraletsTextField(
+                          ),
+                          const SizedBox(height: 6),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 230),
+                            child: Text(
+                              'Your crew is waiting. Log in to jump back into your trips.',
+                              textAlign: TextAlign.center,
+                              style: AppText.ui(14, FontWeight.w400,
+                                  color: AppColors.muted),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 320),
+                            child: TaraletsTextField(
                               label: 'Email Address',
                               controller: _emailCtrl,
                               hint: 'you@example.com',
@@ -192,8 +178,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
                             ),
-                            const SizedBox(height: 18),
-                            TaraletsTextField(
+                          ),
+                          const SizedBox(height: 20),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 400),
+                            child: TaraletsTextField(
                               label: 'Password',
                               controller: _passCtrl,
                               hint: 'Enter your password',
@@ -201,72 +190,65 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               isPassword: true,
                               textInputAction: TextInputAction.done,
                             ),
-                            const SizedBox(height: 26),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: GestureDetector(
-                                onTap: () =>
-                                    context.push(AppRoutes.forgotPassword),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(
-                                    top: 12,
-                                    bottom: 24,
-                                  ),
-                                  child: Text(
-                                    'Forgot Password?',
-                                    style: AppText.ui(
-                                      13,
-                                      FontWeight.w700,
-                                      color: AppColors.orange,
-                                    ),
-                                  ),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () =>
+                                  context.push(AppRoutes.forgotPassword),
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 14, bottom: 24),
+                                child: Text(
+                                  'Forgot Password?',
+                                  style: AppText.ui(13, FontWeight.w700,
+                                      color: AppColors.brandOrange),
                                 ),
                               ),
                             ),
-                            TaraletsButton.orange(
+                          ),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 480),
+                            child: AuthButton(
                               label: 'Log In',
                               isLoading: _isLoading,
                               onPressed: _login,
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    FadeSlideIn(
-                      delay: const Duration(milliseconds: 550),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            "Don't have an account? ",
-                            style: AppText.ui(
-                              13,
-                              FontWeight.w500,
-                              color: AppColors.muted,
-                            ),
                           ),
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => context.push(AppRoutes.register),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                'Sign Up',
-                                style: AppText.ui(
-                                  13,
-                                  FontWeight.w800,
-                                  color: AppColors.orange,
+                          const SizedBox(height: 22),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 560),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'New here? ',
+                                  style: AppText.ui(13, FontWeight.w500,
+                                      color: AppColors.muted),
                                 ),
-                              ),
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => context.push(AppRoutes.register),
+                                  child: Padding(
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 8),
+                                    child: Text(
+                                      'Create an account',
+                                      style: AppText.ui(13, FontWeight.w800,
+                                          color: AppColors.brandOrange),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),

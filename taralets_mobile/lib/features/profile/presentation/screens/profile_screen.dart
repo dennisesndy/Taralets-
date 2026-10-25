@@ -52,23 +52,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     final rows = <_Row>[
-      const _Row('❤️', 'Saved Places', '12 places saved'),
-
+      const _Row(Icons.bookmark_border_rounded, 'Saved Places', '12 places saved'),
       _Row(
-        '🗂️',
+        Icons.tune_rounded,
         'Travel Preferences',
         'View or edit your saved preferences',
         onTap: () => context.push(AppRoutes.preferences, extra: u.email),
       ),
-
       _Row(
-        '🗺️',
+        Icons.history_rounded,
         'Past Trips',
-        'View your gala history',
+        'View your trip history',
         onTap: () => context.go(AppRoutes.trips),
       ),
       _Row(
-        '🔔',
+        Icons.notifications_none_rounded,
         'Notifications',
         'Departure reminders & updates',
         toggle: true,
@@ -76,14 +74,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         onChanged: (v) => setState(() => _notif = v),
       ),
       _Row(
-        '📍',
+        Icons.location_on_outlined,
         'Privacy & Location',
         'Manage location sharing',
         toggle: true,
         value: _loc,
         onChanged: (v) => setState(() => _loc = v),
       ),
-      const _Row('❓', 'Help & Support', 'FAQs, contact us'),
+      const _Row(Icons.help_outline_rounded, 'Help & Support', 'FAQs and contact'),
     ];
 
     final stats = [
@@ -93,227 +91,240 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     ];
 
     return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            color: AppColors.navy,
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-            child: Row(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: AppColors.orange,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.orange.withValues(alpha: 0.4),
-                        blurRadius: 14,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    u.initials,
-                    style: AppText.ui(24, FontWeight.w800, color: Colors.white),
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 140),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: Text(
+                  'Profile',
+                  style: AppText.ui(20, FontWeight.w800, color: AppColors.navy),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Center(
+              child: Container(
+                width: 82,
+                height: 82,
+                decoration: BoxDecoration(
+                  color: AppColors.orange.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.orange.withValues(alpha: 0.18),
+                    width: 1.5,
                   ),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        u.fullName.isEmpty ? 'Taralets User' : u.fullName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.ui(
-                          20,
-                          FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '@${u.username}',
-                        style: AppText.ui(
-                          13,
-                          FontWeight.w400,
-                          color: Colors.white.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
+                alignment: Alignment.center,
+                child: Text(
+                  u.initials,
+                  style: AppText.ui(28, FontWeight.w800, color: AppColors.orange),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              u.fullName.isEmpty ? 'Taralets User' : u.fullName,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.ui(21, FontWeight.w800, color: AppColors.navy),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              u.email,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.ui(13, FontWeight.w400, color: AppColors.muted),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '@${u.username}',
+              textAlign: TextAlign.center,
+              style: AppText.ui(12, FontWeight.w600, color: AppColors.orange),
+            ),
+            const SizedBox(height: 22),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.navy.withValues(alpha: 0.04),
+                    blurRadius: 16,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  for (var i = 0; i < stats.length; i++) ...[
+                    Expanded(
+                      child: Column(
                         children: [
-                          for (final s in stats) ...[
-                            Column(
-                              children: [
-                                Text(
-                                  '${s.$1}',
-                                  style: AppText.ui(
-                                    14,
-                                    FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                Text(
-                                  s.$2,
-                                  style: AppText.ui(
-                                    10,
-                                    FontWeight.w400,
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                  ),
-                                ),
-                              ],
+                          Text(
+                            '${stats[i].$1}',
+                            style: AppText.ui(
+                              18,
+                              FontWeight.w800,
+                              color: AppColors.orange,
                             ),
-                            if (s != stats.last) const SizedBox(width: 12),
-                          ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            stats[i].$2,
+                            style: AppText.ui(
+                              11,
+                              FontWeight.w600,
+                              color: AppColors.muted,
+                            ),
+                          ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    'Edit',
-                    style: AppText.ui(12, FontWeight.w600, color: Colors.white),
-                  ),
-                ),
-              ],
+                    ),
+                    if (i < stats.length - 1)
+                      Container(width: 1, height: 34, color: AppColors.border),
+                  ],
+                ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 6,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
+            const SizedBox(height: 24),
+            Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.navy.withValues(alpha: 0.04),
+                    blurRadius: 16,
+                    offset: const Offset(0, 5),
                   ),
-                  child: Column(
-                    children: [
-                      for (var i = 0; i < rows.length; i++)
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: rows[i].onTap,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
+                ],
+              ),
+              child: Column(
+                children: [
+                  for (var i = 0; i < rows.length; i++)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: rows[i].onTap,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 13,
+                        ),
+                        decoration: BoxDecoration(
+                          border: i < rows.length - 1
+                              ? const Border(
+                                  bottom: BorderSide(color: AppColors.border),
+                                )
+                              : null,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: AppColors.orange.withValues(alpha: 0.09),
+                                borderRadius: BorderRadius.circular(11),
+                              ),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                rows[i].icon,
+                                size: 20,
+                                color: AppColors.orange,
+                              ),
                             ),
-                            decoration: BoxDecoration(
-                              border: i < rows.length - 1
-                                  ? const Border(
-                                      bottom: BorderSide(color: AppColors.bg),
-                                    )
-                                  : null,
-                            ),
-                            child: Row(
-                              children: [
-                                Text(
-                                  rows[i].icon,
-                                  style: const TextStyle(fontSize: 20),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        rows[i].label,
-                                        style: AppText.ui(14, FontWeight.w600),
-                                      ),
-                                      const SizedBox(height: 1),
-                                      Text(
-                                        rows[i].sub,
-                                        style: AppText.ui(
-                                          11,
-                                          FontWeight.w400,
-                                          color: AppColors.muted,
-                                        ),
-                                      ),
-                                    ],
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    rows[i].label,
+                                    style: AppText.ui(
+                                      14,
+                                      FontWeight.w700,
+                                      color: AppColors.navy,
+                                    ),
                                   ),
-                                ),
-                                if (rows[i].toggle)
-                                  _Switch(
-                                    on: rows[i].value,
-                                    onTap: () =>
-                                        rows[i].onChanged!(!rows[i].value),
-                                  )
-                                else
-                                  AppIcons.chevronRight(),
-                              ],
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    rows[i].sub,
+                                    style: AppText.ui(
+                                      11,
+                                      FontWeight.w400,
+                                      color: AppColors.muted,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
+                            if (rows[i].toggle)
+                              _Switch(
+                                on: rows[i].value,
+                                onTap: () =>
+                                    rows[i].onChanged!(!rows[i].value),
+                              )
+                            else
+                              AppIcons.chevronRight(),
+                          ],
                         ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Functional Logout Button
-                GestureDetector(
-                  onTap: () async {
-                    final router = GoRouter.of(context);
-                    await ref.read(authRepositoryProvider).logout();
-                    ref.invalidate(currentUserProvider);
-                    ref.invalidate(myTripsProvider);
-                    router.go(AppRoutes.login);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.errorBg,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: AppColors.errorBorder,
-                        width: 1.5,
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        AppIcons.logOut(),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Log Out',
-                          style: AppText.ui(
-                            14,
-                            FontWeight.w700,
-                            color: AppColors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () async {
+                final router = GoRouter.of(context);
+                await ref.read(authRepositoryProvider).logout();
+                ref.invalidate(currentUserProvider);
+                ref.invalidate(myTripsProvider);
+                router.go(AppRoutes.login);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                decoration: BoxDecoration(
+                  color: AppColors.orange,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.orange.withValues(alpha: 0.2),
+                      blurRadius: 14,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.logout_rounded, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Log Out',
+                      style: AppText.ui(
+                        14,
+                        FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -329,7 +340,8 @@ class _Row {
     this.onChanged,
     this.onTap,
   });
-  final String icon, label, sub;
+  final IconData icon;
+  final String label, sub;
   final bool toggle;
   final bool value;
   final ValueChanged<bool>? onChanged;

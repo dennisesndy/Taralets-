@@ -4,18 +4,18 @@ class AppColors {
   AppColors._();
 
   // ---------------------------------------------------------------------------
-  // Brand (Rose Primary)
+  // Brand
   // ---------------------------------------------------------------------------
-  static const Color navy = Color(0xFF1B2B4B); // headings / strong text
-  static const Color primary = Color(0xFFF43F5E); // main accent (Rose)
-  static const Color primaryLight = Color(0xFFFB7185); // gradient end
-  static const Color primarySoft = Color(0xFFFFE4E6); // tinted pills / tiles
-  static const Color gold = Color(0xFFF2C14E); // ratings / stars
+  static const Color navy = Color(0xFF1B2B4B);
+  static const Color primary = Color(0xFFD85C03); // Orange primary actions
+  static const Color primaryLight = Color(0xFFF39A59); // Lighter orange for gradients
+  static const Color primarySoft = Color(0xFFFFF0E5); // Soft orange tint for pills
+  static const Color gold = Color(0xFFF2C14E);
+     static const Color brandMint = Color(0xFF00FFBF);
+   static const Color brandOrange = Color(0xFFD85C03);
 
   // ---------------------------------------------------------------------------
-  // Legacy aliases.
-  // Nakaturo na ngayon ang mga orange variables sa bagong Rose primary
-  // para hindi mag-error ang ibang screens.
+  // Legacy orange aliases.
   // ---------------------------------------------------------------------------
   static const Color orange = primary; 
   static const Color orangeLight = primaryLight; 
