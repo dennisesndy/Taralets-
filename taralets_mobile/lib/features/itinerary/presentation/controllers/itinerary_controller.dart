@@ -5,7 +5,8 @@ import '../../data/models/itinerary_models.dart';
 
 class ItineraryController extends ChangeNotifier {
   ItineraryController({ItineraryPlan? plan})
-    : _plan = plan ?? mockItineraryPlan;
+    : _plan = plan ?? mockItineraryPlan,
+      _confirmed = plan?.status == ItineraryStatus.finalized;
 
   ItineraryPlan _plan;
   bool _confirmed = false;

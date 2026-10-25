@@ -55,6 +55,26 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
     }
   }
 
+  void _openRouteSelection() {
+    final plan = _controller.plan;
+    if (plan.stops.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add stops before selecting a route.'),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _RouteSelectionSheet(stop: plan.stops.first),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
@@ -103,6 +123,7 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                             onToggleReview:
                                 _controller.toggleCurrentUserReviewed,
                             onConfirm: _controller.confirm,
+                            onSelectRoute: _openRouteSelection,
                           ),
                           const SizedBox(height: 20),
                         ],
@@ -1198,12 +1219,14 @@ class _GroupReviewCard extends StatelessWidget {
     required this.confirmed,
     required this.onToggleReview,
     required this.onConfirm,
+    required this.onSelectRoute,
   });
 
   final ItineraryPlan plan;
   final bool confirmed;
   final VoidCallback onToggleReview;
   final VoidCallback onConfirm;
+  final VoidCallback onSelectRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -1224,7 +1247,7 @@ class _GroupReviewCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Group review',
+                      confirmed ? 'Group confirmed' : 'Group review',
                       style: AppText.ui(
                         14,
                         FontWeight.w800,
@@ -1233,7 +1256,9 @@ class _GroupReviewCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '$reviewed of $total members reviewed',
+                      confirmed
+                          ? 'All members reviewed. The plan is locked.'
+                          : '$reviewed of $total members reviewed',
                       style: AppText.ui(
                         11,
                         FontWeight.w500,
@@ -1260,7 +1285,7 @@ class _GroupReviewCard extends StatelessWidget {
           ],
           const SizedBox(height: 4),
           if (confirmed)
-            const _ConfirmedBanner()
+            _ConfirmedBanner(onSelectRoute: onSelectRoute)
           else if (reviewed == total)
             TaraletsButton.orange(
               label: '🔒 Confirm Final Itinerary',
@@ -1467,44 +1492,66 @@ class _WaitingBanner extends StatelessWidget {
 }
 
 class _ConfirmedBanner extends StatelessWidget {
-  const _ConfirmedBanner();
+  const _ConfirmedBanner({required this.onSelectRoute});
+
+  final VoidCallback onSelectRoute;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.greenSoft,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          const Icon(
-            Icons.lock_rounded,
-            size: 18,
-            color: AppColors.greenText,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.greenSoft,
+            borderRadius: BorderRadius.circular(12),
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Itinerary confirmed!',
-            style: AppText.ui(
-              14,
-              FontWeight.w800,
-              color: AppColors.greenText,
-            ),
+          child: Column(
+            children: [
+              const Icon(
+                Icons.lock_rounded,
+                size: 18,
+                color: AppColors.greenText,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Itinerary confirmed!',
+                style: AppText.ui(
+                  14,
+                  FontWeight.w800,
+                  color: AppColors.greenText,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Your group plan is ready for trip day.',
+                textAlign: TextAlign.center,
+                style: AppText.ui(
+                  11.5,
+                  FontWeight.w400,
+                  color: AppColors.greenDeep,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Your group plan is ready for trip day.',
-            textAlign: TextAlign.center,
-            style: AppText.ui(
-              11.5,
-              FontWeight.w400,
-              color: AppColors.greenDeep,
-            ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Review the full plan above, then choose your route.',
+          textAlign: TextAlign.center,
+          style: AppText.ui(
+            11,
+            FontWeight.w500,
+            color: AppColors.muted,
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        TaraletsButton.orange(
+          label: 'Select Route',
+          onPressed: onSelectRoute,
+        ),
+      ],
     );
   }
 }
@@ -1766,6 +1813,251 @@ class _StopDetailsSheet extends StatelessWidget {
                   const SizedBox(height: 18),
                   TaraletsButton.navy(
                     label: 'Close',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteSelectionSheet extends StatelessWidget {
+  const _RouteSelectionSheet({required this.stop});
+
+  final ItineraryStop stop;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.of(context).size.height * 0.85;
+
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Container(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(24),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 38,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppColors.primarySoft,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.route_rounded,
+                          size: 24,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Select your route',
+                              style: AppText.ui(
+                                17,
+                                FontWeight.w800,
+                                color: AppColors.navy,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Plan your departure to the first stop.',
+                              style: AppText.ui(
+                                11,
+                                FontWeight.w500,
+                                color: AppColors.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F8FA),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TaraletsCard(
+                    padding: const EdgeInsets.all(14),
+                    border: Border.all(color: AppColors.border),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            const _MetaPill(
+                              label: 'FIRST STOP',
+                              icon: Icons.flag_rounded,
+                              color: AppColors.navy,
+                              bg: AppColors.blueSoft,
+                            ),
+                            const Spacer(),
+                            Text(
+                              stop.startLabel,
+                              style: AppText.mono(
+                                11,
+                                FontWeight.w700,
+                                color: AppColors.navy,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          stop.name,
+                          style: AppText.ui(
+                            15,
+                            FontWeight.w800,
+                            color: AppColors.navy,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${stop.category} · ${stop.area}',
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w500,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _MetaPill(
+                              label: 'Target ${stop.startLabel}',
+                              icon: Icons.schedule_rounded,
+                            ),
+                            const _MetaPill(
+                              label: 'Public transport + walk',
+                              icon: Icons.directions_transit_rounded,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Route options coming next',
+                    style: AppText.ui(
+                      12,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _MetaPill(
+                        label: 'Fastest',
+                        icon: Icons.bolt_rounded,
+                        color: AppColors.primary,
+                        bg: AppColors.primarySoft,
+                      ),
+                      _MetaPill(
+                        label: 'Budget',
+                        icon: Icons.payments_outlined,
+                        color: AppColors.greenText,
+                        bg: AppColors.greenSoft,
+                      ),
+                      _MetaPill(
+                        label: 'Fewest transfers',
+                        icon: Icons.swap_horiz_rounded,
+                        color: AppColors.navy,
+                        bg: AppColors.blueSoft,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.amberSoft,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.amber.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.info_outline_rounded,
+                          size: 16,
+                          color: AppColors.amberText,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'This is the entry point for route selection. '
+                            'The Departure Schedule and route options will be '
+                            'connected in the next step.',
+                            style: AppText.ui(
+                              11.5,
+                              FontWeight.w500,
+                              color: AppColors.amberText,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  TaraletsButton.navy(
+                    label: 'Got it',
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],

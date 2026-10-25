@@ -14,6 +14,7 @@ import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/auth_motion.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../itinerary/data/models/itinerary_draft_models.dart';
+import '../../../itinerary/data/models/itinerary_models.dart';
 import '../../../itinerary/presentation/controllers/itinerary_draft_controller.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -348,11 +349,14 @@ class _GroupRecommendationsScreenState
   String _searchQuery = '';
   bool _loading = true;
   String? _error;
-  final ItineraryDraftController _draft = ItineraryDraftController();
+  final ItineraryDraftController _draft = ItineraryDraftController(
+    members: const [],
+  );
 
   @override
   void initState() {
     super.initState();
+    _loadGroupContext();
     _fetchRecommendations();
   }
 
@@ -372,8 +376,87 @@ class _GroupRecommendationsScreenState
 
   Future<void> _reviewSelected() async {
     if (_draft.selected.isEmpty) return;
+
+    if (_draft.memberCount == 0) {
+      await _loadGroupContext();
+      if (!mounted) return;
+    }
+
+    if (_draft.memberCount == 0) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not load the group members. Please try again.',
+            ),
+          ),
+        );
+      return;
+    }
+
     await context.push(AppRoutes.selectedPlaces, extra: _draft);
     if (mounted) setState(() {});
+  }
+
+  Future<void> _loadGroupContext() async {
+    if (widget.groupId.trim().isEmpty) return;
+
+    try {
+      final tripFuture = ref
+          .read(tripRepositoryProvider)
+          .getTrip(widget.groupId);
+      final meFuture = ref.read(currentUserProvider.future);
+
+      final trip = await tripFuture;
+      final me = await meFuture;
+
+      final members = <ItineraryMember>[];
+      ItineraryMember? currentMember;
+
+      for (final member in trip.members) {
+        final displayName = member.name.trim().isNotEmpty
+            ? member.name
+            : member.username.trim().isNotEmpty
+            ? member.username
+            : 'Member';
+
+        final matchesCurrentUser =
+            member.id == me.id ||
+            (member.username.isNotEmpty &&
+                member.username.toLowerCase() ==
+                    me.username.toLowerCase()) ||
+            (member.name.toLowerCase() == me.fullName.toLowerCase());
+        final isCurrentUser = matchesCurrentUser && currentMember == null;
+
+        final itineraryMember = ItineraryMember(
+          name: displayName,
+          isCurrentUser: isCurrentUser,
+        );
+        members.add(itineraryMember);
+        if (isCurrentUser) currentMember = itineraryMember;
+      }
+
+      // Keep the logged-in account visible even if the trip payload omits it.
+      if (currentMember == null) {
+        final meName = me.fullName.trim().isNotEmpty
+            ? me.fullName
+            : me.username.trim().isNotEmpty
+            ? me.username
+            : 'You';
+        currentMember = ItineraryMember(name: meName, isCurrentUser: true);
+        members.add(currentMember);
+      }
+
+      final current = currentMember;
+      if (!mounted) return;
+      _draft.updateGroupMembers(
+        members: members,
+        currentUserName: current.name,
+      );
+    } catch (e) {
+      debugPrint('GROUP CONTEXT ERROR: $e');
+    }
   }
 
   Future<void> _fetchRecommendations({bool silent = false}) async {

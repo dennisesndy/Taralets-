@@ -18,13 +18,16 @@ const List<ItineraryMember> _defaultDraftMembers = [
 class ItineraryDraftController extends ChangeNotifier {
   ItineraryDraftController({
     List<ItineraryMember>? members,
-    this.currentUserName = 'Jewelle',
+    String currentUserName = 'Jewelle',
   }) : _members = List<ItineraryMember>.of(
          members ?? _defaultDraftMembers,
-       );
+       ),
+       _currentUserName = currentUserName;
 
   final List<ItineraryMember> _members;
-  final String currentUserName;
+  String _currentUserName;
+
+  String get currentUserName => _currentUserName;
 
   final List<ItineraryCandidate> _selected = [];
   final Map<String, Set<String>> _votes = {};
@@ -33,6 +36,21 @@ class ItineraryDraftController extends ChangeNotifier {
   List<ItineraryCandidate> get selected => List.unmodifiable(_selected);
 
   int get memberCount => _members.length;
+
+  /// Replaces the preview members with the actual people who joined the trip.
+  ///
+  /// This is called after the trip is loaded so the group review card and the
+  /// "You" badge refer to the logged-in account, not the local mock names.
+  void updateGroupMembers({
+    required List<ItineraryMember> members,
+    required String currentUserName,
+  }) {
+    _members
+      ..clear()
+      ..addAll(members);
+    _currentUserName = currentUserName;
+    notifyListeners();
+  }
 
   // Only the current user can cast votes in this local mock, so one real vote
   // is enough to include a place. The other members stay display-only until
