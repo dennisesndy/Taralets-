@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
@@ -12,7 +14,6 @@ import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/app_icons.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/error_note.dart';
-import '../../../../shared/widgets/map_background.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/taralets_field.dart';
 import '../../data/meetup_presets.dart';
@@ -36,6 +37,7 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
     text: widget.trip.description,
   );
   final _query = TextEditingController();
+  final _mapController = MapController();
 
   DateTime? _date;
   late TimeOfDay _meetupTime = parseTimeOfDay(widget.trip.arrivalTarget);
@@ -44,8 +46,10 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
     fallback: const TimeOfDay(hour: 20, minute: 0),
   );
   late String _selected = widget.trip.meetupFull;
+  late LatLng _pin = LatLng(widget.trip.latitude, widget.trip.longitude);
   late final List<MeetupPreset> _options;
-  bool _pinMoved = false;
+  MeetupPreset? _selectedPreset;
+  bool _customPin = false;
 
   bool _checking = true; // leader guard still running
   bool _saving = false;
@@ -66,6 +70,7 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
         ),
       ...meetupPresets,
     ];
+    _selectedPreset = _options.where((p) => p.name == _selected).firstOrNull;
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _guard());
   }
@@ -94,9 +99,27 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
   }
 
   bool get _outOfBoundary {
-    if (_pinMoved || GeoBoundary.mentionsOutside(_query.text)) return true;
-    final p = _options.where((p) => p.name == _selected).firstOrNull;
-    return p != null && !GeoBoundary.isWithinMetroManila(p.lat, p.lng);
+    return !GeoBoundary.isWithinMetroManila(_pin.latitude, _pin.longitude);
+  }
+
+  void _selectPreset(MeetupPreset place) {
+    setState(() {
+      _selected = place.name;
+      _selectedPreset = place;
+      _pin = LatLng(place.lat, place.lng);
+      _customPin = false;
+    });
+    _mapController.move(_pin, 14.5);
+  }
+
+  void _onMapPositionChanged(MapPosition position, bool hasGesture) {
+    final center = position.center;
+    if (!hasGesture || center == null) return;
+    _pin = center;
+    _customPin = true;
+    _selected =
+        'Pinned location (${center.latitude.toStringAsFixed(5)}, ${center.longitude.toStringAsFixed(5)})';
+    if (mounted) setState(() {});
   }
 
   Future<void> _pickDate() async {
@@ -130,7 +153,8 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
   Future<void> _save() async {
     if (_saving || _outOfBoundary) return;
     final base = widget.trip;
-    final p = _options.firstWhere((p) => p.name == _selected);
+    final preset = _options.where((p) => p.name == _selected).firstOrNull;
+    final placeName = _customPin || preset == null ? _selected : preset.name;
     final title = _name.text.trim().isEmpty ? base.title : _name.text.trim();
 
     final updated = base.copyWith(
@@ -141,10 +165,12 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
       longDate: _date != null ? formatLongDate(_date!) : base.longDate,
       arrivalTarget: formatTimeOfDay(_meetupTime),
       wrapUp: formatTimeOfDay(_wrapTime),
-      meetup: p.name.split(',').first.trim(),
-      meetupFull: p.name,
-      latitude: p.lat,
-      longitude: p.lng,
+      meetup: _customPin
+          ? 'Pinned location'
+          : placeName.split(',').first.trim(),
+      meetupFull: placeName,
+      latitude: _pin.latitude,
+      longitude: _pin.longitude,
     );
 
     setState(() {
@@ -416,47 +442,65 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
           builder: (context, c) {
             return Stack(
               children: [
-                const Positioned.fill(child: MapBackground()),
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.ease,
-                  left: (_pinMoved ? 0.85 : 0.42) * c.maxWidth,
-                  top: (_pinMoved ? 0.15 : 0.35) * c.maxHeight,
-                  child: FractionalTranslation(
-                    translation: const Offset(-0.5, -0.5),
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: _pin,
+                    initialZoom: 14.5,
+                    minZoom: 10,
+                    maxZoom: 18,
+                    onPositionChanged: _onMapPositionChanged,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.taralets.app',
+                    ),
+                    RichAttributionWidget(
+                      attributions: [
+                        TextSourceAttribution('© OpenStreetMap contributors'),
+                      ],
+                    ),
+                  ],
+                ),
+                IgnorePointer(
+                  child: Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('📍', style: TextStyle(fontSize: 28)),
-                        Transform.translate(
-                          offset: const Offset(0, -4),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: out ? AppColors.redSoft : Colors.white,
-                              borderRadius: BorderRadius.circular(6),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.15),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              out
-                                  ? 'OUT OF BOUNDARY'
-                                  : _selected.split(',').first,
-                              style: AppText.ui(
-                                10,
-                                FontWeight.w700,
-                                color: out
-                                    ? AppColors.errorTitle
-                                    : AppColors.navy,
+                        Icon(
+                          Icons.location_pin,
+                          size: 42,
+                          color: out ? AppColors.errorTitle : AppColors.orange,
+                        ),
+                        Container(
+                          constraints: BoxConstraints(maxWidth: c.maxWidth * .72),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: out ? AppColors.redSoft : Colors.white,
+                            borderRadius: BorderRadius.circular(6),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: .15),
+                                blurRadius: 6,
                               ),
+                            ],
+                          ),
+                          child: Text(
+                            out
+                                ? 'OUT OF BOUNDARY'
+                                : _customPin
+                                ? 'Pinned location'
+                                : _selected.split(',').first,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.ui(
+                              10,
+                              FontWeight.w700,
+                              color: out
+                                  ? AppColors.errorTitle
+                                  : AppColors.navy,
                             ),
                           ),
                         ),
@@ -465,37 +509,69 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
                   ),
                 ),
                 Positioned(
-                  right: 8,
+                  left: 8,
                   bottom: 8,
-                  child: GestureDetector(
-                    onTap: () => setState(() => _pinMoved = !_pinMoved),
+                  child: IgnorePointer(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
+                        horizontal: 8,
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.white.withValues(alpha: 0.92),
                         borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.12),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
                       ),
                       child: Text(
-                        _pinMoved ? 'Reset pin' : 'Adjust pin',
+                        'Drag map to adjust pin',
                         style: AppText.ui(
-                          11,
+                          10,
                           FontWeight.w600,
-                          color: AppColors.orange,
+                          color: AppColors.navy,
                         ),
                       ),
                     ),
                   ),
                 ),
+                if (_customPin)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: GestureDetector(
+                      onTap: () {
+                        final place = _selectedPreset;
+                        if (place != null) {
+                          _selectPreset(place);
+                        } else {
+                          _selectPreset(meetupPresets.first);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          'Reset pin',
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w600,
+                            color: AppColors.orange,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             );
           },
@@ -530,7 +606,7 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
             for (final o in shown)
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => setState(() => _selected = o.name),
+                onTap: () => _selectPreset(o),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 2),
                   padding: const EdgeInsets.symmetric(

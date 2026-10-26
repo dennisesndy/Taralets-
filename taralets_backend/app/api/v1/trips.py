@@ -120,6 +120,11 @@ async def _serialize_trip(db: AsyncSession, trip: Trip) -> dict:
         "id": str(trip.id),
         "code": trip.code,
         "title": trip.title,
+        "created_at": (
+            trip.created_at.isoformat()
+            if getattr(trip, "created_at", None) is not None
+            else None
+        ),
         "description": trip.description,
         "date": (
             trip.date.isoformat()
@@ -159,7 +164,9 @@ async def get_my_trips(
         return []
 
     trips_result = await db.execute(
-        select(Trip).where(Trip.id.in_(trip_ids))
+        select(Trip)
+        .where(Trip.id.in_(trip_ids))
+        .order_by(Trip.created_at.desc(), Trip.id.asc())
     )
     trips = trips_result.scalars().all()
 

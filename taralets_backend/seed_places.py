@@ -1,26 +1,29 @@
 
 import asyncio
+import csv
 import re
 from datetime import datetime, time
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
-import pandas as pd
 from sqlalchemy import select, delete
 
 from app.core.database import AsyncSessionLocal
 from app.models.poi import Place
 
 
-CSV_PATH = "Dataset - final_postgres_ready_dataset_sequenced.csv"
+CSV_PATH = Path(__file__).resolve().with_name(
+    "Dataset - final_postgres_ready_dataset_sequenced.csv"
+)
 
 
 def get_text(value):
     """Return None for empty values instead of storing 'nan'."""
-    if value is None or pd.isna(value):
+    if value is None:
         return None
 
     value = str(value).strip()
-    return value if value else None
+    return value if value and value.lower() not in {"nan", "none"} else None
 
 
 def parse_array(value):
@@ -84,21 +87,23 @@ def parse_time(value):
 
 
 async def seed_places_from_csv(csv_path):
-    df = pd.read_csv(
-        csv_path,
-        encoding="utf-8-sig",
-        dtype=str,
-        keep_default_na=False,
-    )
-    df.columns = df.columns.str.strip().str.lower()
+    with open(csv_path, encoding="utf-8-sig", newline="") as dataset_file:
+        reader = csv.DictReader(dataset_file)
+        rows = [
+            {
+                (column or "").strip().lower(): value
+                for column, value in row.items()
+            }
+            for row in reader
+        ]
 
-    print(f"CSV loaded: {len(df)} rows")
+    print(f"CSV loaded: {len(rows)} rows")
 
     # Build the authoritative dataset from the CSV.
     records = {}
     skipped = 0
 
-    for _, row in df.iterrows():
+    for row in rows:
         master_id = get_text(row.get("master_id"))
 
         if not master_id:
@@ -195,7 +200,7 @@ async def seed_places_from_csv(csv_path):
             await db.commit()
 
             print("Import and cleanup complete!")
-            print(f"CSV rows: {len(df)}")
+            print(f"CSV rows: {len(rows)}")
             print(f"Unique CSV Master IDs: {len(records)}")
             print(f"Inserted: {inserted}")
             print(f"Updated: {updated}")

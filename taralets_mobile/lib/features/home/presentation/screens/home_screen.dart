@@ -14,6 +14,7 @@ import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/taralets_card.dart';
 import '../../../../shared/widgets/taralets_chip.dart';
 import '../../../../shared/widgets/ticket_card.dart';
+import '../../../discover/data/discover_places_provider.dart';
 import '../../../discover/presentation/screens/place_detail_sheet.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart'; // IMPORT PARA SA NOTIFICATIONS
 
@@ -58,10 +59,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // Binago ang logic dito: Ipakita ang unang trip (upcoming man o active)
     final displayTrip = trips.firstOrNull;
 
-    // Filter recommended places based on the selected category.
+    final placesAsync = ref.watch(discoverPlacesProvider);
+    final allPlaces = placesAsync.valueOrNull ?? const <Place>[];
+
+    // Use the same database-backed place feed as Discover.
     final filteredPlaces = _category == 'All'
-        ? manilaPlaces
-        : manilaPlaces.where((p) => p.category == _category).toList();
+        ? allPlaces
+        : allPlaces
+            .where((place) => _matchesCategory(place, _category))
+            .toList();
 
     return ColoredBox(
       color: AppColors.bg,
@@ -309,21 +315,54 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                   const SizedBox(height: 12),
 
-                  // Use the filtered list so category chips actually work.
-                  for (final p in filteredPlaces.take(4)) ...[
-                    _PlaceRow(
-                      place: p,
-                      saved: _saved.contains(p.id),
-                      onToggleSave: () => setState(() {
-                        if (!_saved.add(p.id)) {
-                          _saved.remove(p.id);
-                        }
-                      }),
-                      onTap: () => showPlaceDetail(context, p),
-                    ),
-                    if (p.id != filteredPlaces.take(4).last.id)
-                      const SizedBox(height: 14),
-                  ],
+                  if (placesAsync.isLoading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 28),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.orange,
+                        ),
+                      ),
+                    )
+                  else if (placesAsync.hasError)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Text(
+                        'Could not load places. Please try Discover again.',
+                        style: AppText.ui(
+                          13,
+                          FontWeight.w500,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    )
+                  else if (filteredPlaces.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Text(
+                        'No places found in this category yet.',
+                        style: AppText.ui(
+                          13,
+                          FontWeight.w500,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    )
+                  else
+                    for (final p in filteredPlaces.take(4)) ...[
+                      _PlaceRow(
+                        place: p,
+                        saved: _saved.contains(p.id),
+                        onToggleSave: () => setState(() {
+                          if (!_saved.add(p.id)) {
+                            _saved.remove(p.id);
+                          }
+                        }),
+                        onTap: () => showPlaceDetail(context, p),
+                      ),
+                      if (p.id != filteredPlaces.take(4).last.id)
+                        const SizedBox(height: 14),
+                    ],
                 ],
               ),
             ),
@@ -331,6 +370,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ),
     );
+  }
+
+  bool _matchesCategory(Place place, String selected) {
+    final category = place.category.toLowerCase();
+    switch (selected) {
+      case 'Heritage':
+        return category.contains('heritage') ||
+            category.contains('historical') ||
+            category.contains('church') ||
+            category.contains('religious');
+      case 'Food & Cafés':
+        return category.contains('food') ||
+            category.contains('cafe') ||
+            category.contains('restaurant') ||
+            category.contains('eatery') ||
+            category.contains('dessert') ||
+            category.contains('bakery');
+      case 'Museums':
+        return category.contains('museum');
+      case 'Parks':
+        return category.contains('park') || category.contains('nature');
+      case 'Shopping':
+        return category.contains('shopping') || category.contains('retail');
+      default:
+        return category == selected.toLowerCase();
+    }
   }
 }
 

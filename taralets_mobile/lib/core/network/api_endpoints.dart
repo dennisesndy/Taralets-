@@ -29,4 +29,7 @@ class ApiEndpoints {
   static const String login = '$apiPrefix/auth/login';
   static const String register = '$apiPrefix/auth/register';
   static const String me = '$apiPrefix/auth/me';
+
+  static String placeImage(int placeId) =>
+      '$baseUrl$apiPrefix/places/$placeId/image';
 }

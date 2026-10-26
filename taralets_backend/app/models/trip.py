@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -25,6 +26,11 @@ class Trip(Base):
     id = Column(String, primary_key=True, default=generate_uuid, index=True)
     code = Column(String, unique=True, index=True, nullable=False)
     title = Column(String, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
     description = Column(String, default="")
     status = Column(String, default="lobby")
     # NOTE: planning_status is intentionally omitted until the Step 4b

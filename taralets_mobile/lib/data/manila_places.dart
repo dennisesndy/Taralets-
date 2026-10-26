@@ -10,6 +10,8 @@ class Place {
   final double rating;
   final int reviews;
   final String price;
+  final double minCost;
+  final double maxCost;
   final String distanceLabel;
   final double distanceKm;
   final double lat;
@@ -37,6 +39,8 @@ class Place {
     required this.rating,
     this.reviews = 0,
     required this.price,
+    this.minCost = 0,
+    this.maxCost = 0,
     required this.distanceLabel,
     required this.distanceKm,
     required this.lat,
@@ -73,6 +77,8 @@ class Place {
       rating: (json['rating'] ?? 0.0).toDouble(),
       reviews: json['reviews'] ?? 0,
       price: json['entrance_fee'] != null && json['entrance_fee'].toString().isNotEmpty ? json['entrance_fee'] : 'Free', 
+      minCost: double.tryParse(json['min_cost']?.toString() ?? '') ?? 0,
+      maxCost: double.tryParse(json['max_cost']?.toString() ?? '') ?? 0,
       distanceLabel: 'Calculating...', 
       distanceKm: 0.0,
       lat: (json['lat'] ?? 0.0).toDouble(), 
@@ -117,8 +123,6 @@ class Place {
     }
   }
 }
-
-final List<Place> manilaPlaces = [];
 
 final userLocationProvider = FutureProvider<Position?>((ref) async {
   bool serviceEnabled = await Geolocator.isLocationServiceEnabled();

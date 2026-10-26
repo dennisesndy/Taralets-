@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart'; 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
@@ -8,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
+import '../../../../core/network/api_endpoints.dart';
 import '../../../../data/manila_places.dart'; 
 import '../../../../shared/widgets/app_icons.dart';
 import '../../../../shared/widgets/error_note.dart';
@@ -28,14 +30,14 @@ IconData getCategoryIcon(String category) {
   return Icons.place_outlined; 
 }
 
-class DiscoverScreen extends StatefulWidget {
+class DiscoverScreen extends ConsumerStatefulWidget {
   const DiscoverScreen({super.key});
 
   @override
-  State<DiscoverScreen> createState() => _DiscoverScreenState();
+  ConsumerState<DiscoverScreen> createState() => _DiscoverScreenState();
 }
 
-class _DiscoverScreenState extends State<DiscoverScreen> {
+class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   List<Place> _apiPlaces = [];
   bool _isLoading = true;
   bool _hasError = false; 
@@ -56,12 +58,23 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   String _query = '';
   
   // Mga idinagdag na filters
-  bool _budget = false;
+  int? _budgetLevel;
   bool _near = false;
   bool _open = false;
   bool _petFriendly = false;
   bool _kidFriendly = false;
   bool _wheelchair = false;
+  LatLng? _userLocation;
+
+  int get _activeFilterCount => [
+        _filter != 'All',
+        _budgetLevel != null,
+        _near,
+        _open,
+        _petFriendly,
+        _kidFriendly,
+        _wheelchair,
+      ].where((isActive) => isActive).length;
 
   @override
   void initState() {
@@ -114,6 +127,381 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
   }
 
+  Future<void> _showFilters(List<String> categories) async {
+    var selectedCategory = _filter;
+    int? budgetLevel = _budgetLevel;
+    var near = _near;
+    var open = _open;
+    var petFriendly = _petFriendly;
+    var kidFriendly = _kidFriendly;
+    var wheelchair = _wheelchair;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      constraints: const BoxConstraints(maxWidth: 640),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          int draftFilterCount() => [
+                selectedCategory != 'All',
+                budgetLevel != null,
+                near,
+                open,
+                petFriendly,
+                kidFriendly,
+                wheelchair,
+              ].where((isActive) => isActive).length;
+
+          Widget sectionHeading(String title, VoidCallback onReset) => Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: AppText.ui(
+                          12,
+                          FontWeight.w800,
+                          color: AppColors.navy,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: onReset,
+                      style: TextButton.styleFrom(
+                        minimumSize: Size.zero,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        'Reset',
+                        style: AppText.ui(12, FontWeight.w700, color: AppColors.orange),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+          Widget budgetOption(int level, String symbol, String range) {
+            final selected = budgetLevel == level;
+            return Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => setSheetState(
+                  () => budgetLevel = selected ? null : level,
+                ),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.orangeSoft : const Color(0xFFFAFBFD),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: selected ? AppColors.orange : AppColors.border,
+                      width: selected ? 1.4 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        symbol,
+                        style: AppText.ui(
+                          16,
+                          FontWeight.w900,
+                          color: selected ? AppColors.orange : AppColors.navy,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        range,
+                        style: AppText.ui(10, FontWeight.w500, color: AppColors.muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
+          Widget preferenceChip(
+            String label,
+            IconData icon,
+            bool selected,
+            VoidCallback onTap,
+          ) => FilterChip(
+                avatar: Icon(icon, size: 16, color: AppColors.orange),
+                label: Text(label),
+                selected: selected,
+                showCheckmark: true,
+                checkmarkColor: AppColors.orange,
+                selectedColor: AppColors.orangeSoft,
+                backgroundColor: const Color(0xFFFAFBFD),
+                side: BorderSide(
+                  color: selected ? AppColors.orange.withOpacity(0.45) : AppColors.border,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                labelStyle: AppText.ui(
+                  12,
+                  FontWeight.w600,
+                  color: selected ? AppColors.orange : AppColors.navy,
+                ),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+                onSelected: (_) => onTap(),
+              );
+
+          return Container(
+            height: MediaQuery.of(sheetContext).size.height * 0.82,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD8DCE5),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 16, 10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: AppColors.orangeSoft,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.tune_rounded,
+                          color: AppColors.orange,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Filters',
+                              style: AppText.ui(
+                                19,
+                                FontWeight.w900,
+                                color: AppColors.navy,
+                              ),
+                            ),
+                            Text(
+                              'Choose what fits your group',
+                              style: AppText.ui(
+                                12,
+                                FontWeight.w400,
+                                color: AppColors.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close filters',
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        icon: const Icon(Icons.close_rounded, color: AppColors.muted),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                    children: [
+                      sectionHeading('CATEGORY', () {
+                        setSheetState(() => selectedCategory = 'All');
+                      }),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final category in categories)
+                            TaraletsChip(
+                              label: category,
+                              selected: selectedCategory == category,
+                              onTap: () => setSheetState(
+                                () => selectedCategory = category,
+                              ),
+                              compact: true,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      const Divider(height: 1),
+                      sectionHeading('BUDGET PER PERSON', () {
+                        setSheetState(() => budgetLevel = null);
+                      }),
+                      Row(
+                        children: [
+                          budgetOption(1, '₱', 'Up to ₱300'),
+                          const SizedBox(width: 8),
+                          budgetOption(2, '₱₱', '₱301–₱800'),
+                          const SizedBox(width: 8),
+                          budgetOption(3, '₱₱₱', '₱801+'),
+                        ],
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: Divider(height: 1),
+                      ),
+                      sectionHeading('PREFERENCES', () {
+                        setSheetState(() {
+                          near = false;
+                          open = false;
+                          petFriendly = false;
+                          kidFriendly = false;
+                          wheelchair = false;
+                        });
+                      }),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 2,
+                        children: [
+                          preferenceChip(
+                            'Nearby',
+                            Icons.near_me_outlined,
+                            near,
+                            () async {
+                              final next = !near;
+                              if (next && _userLocation == null) {
+                                final position = await ref.read(
+                                  userLocationProvider.future,
+                                );
+                                if (!context.mounted) return;
+                                if (position != null && mounted) {
+                                  setState(() {
+                                    _userLocation = LatLng(
+                                      position.latitude,
+                                      position.longitude,
+                                    );
+                                  });
+                                }
+                              }
+                              setSheetState(() => near = next);
+                            },
+                          ),
+                          preferenceChip(
+                            'Open now',
+                            Icons.schedule_rounded,
+                            open,
+                            () => setSheetState(() => open = !open),
+                          ),
+                          preferenceChip(
+                            'Pet-friendly',
+                            Icons.pets_rounded,
+                            petFriendly,
+                            () => setSheetState(
+                              () => petFriendly = !petFriendly,
+                            ),
+                          ),
+                          preferenceChip(
+                            'Good for children',
+                            Icons.child_care_rounded,
+                            kidFriendly,
+                            () => setSheetState(
+                              () => kidFriendly = !kidFriendly,
+                            ),
+                          ),
+                          preferenceChip(
+                            'Wheelchair accessible',
+                            Icons.accessible_rounded,
+                            wheelchair,
+                            () => setSheetState(
+                              () => wheelchair = !wheelchair,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                SafeArea(
+                  top: false,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border(top: BorderSide(color: AppColors.border)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => setSheetState(() {
+                              selectedCategory = 'All';
+                              budgetLevel = null;
+                              near = false;
+                              open = false;
+                              petFriendly = false;
+                              kidFriendly = false;
+                              wheelchair = false;
+                            }),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.navy,
+                              side: const BorderSide(color: AppColors.border),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: const Text('Reset all'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                _filter = selectedCategory;
+                                _budgetLevel = budgetLevel;
+                                _near = near;
+                                _open = open;
+                                _petFriendly = petFriendly;
+                                _kidFriendly = kidFriendly;
+                                _wheelchair = wheelchair;
+                              });
+                              Navigator.of(sheetContext).pop();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: Text('Apply filters (${draftFilterCount()})'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   List<String> get _dynamicCategories {
     if (_apiPlaces.isEmpty) return ['All'];
     
@@ -125,15 +513,51 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final sortedCats = counts.keys.toList()
       ..sort((a, b) => counts[b]!.compareTo(counts[a]!));
       
-    final topCats = sortedCats
+    final allCats = sortedCats
         .where((c) => c.isNotEmpty && c.toLowerCase() != 'unknown')
-        .take(6)
         .toList();
         
-    return ['All', ...topCats];
+    return ['All', ...allCats];
   }
 
   bool _catMatch(String c) => _filter == 'All' || c == _filter;
+
+  bool _matchesBudgetLevel(Place place, int? level) {
+    if (level == null) return true;
+
+    var minCost = place.minCost;
+    var maxCost = place.maxCost;
+    if (minCost == 0 && maxCost == 0) {
+      final price = place.price.trim().toLowerCase();
+      if (price.contains('free')) return level == 1;
+      final amounts = RegExp(r'\d+(?:\.\d+)?')
+          .allMatches(place.price)
+          .map((match) => double.tryParse(match.group(0)!) ?? 0)
+          .toList();
+      if (amounts.isEmpty) {
+        return false; // Price bands only include places with known prices.
+      }
+      minCost = amounts.first;
+      maxCost = amounts.last;
+    }
+    if (maxCost == 0) maxCost = minCost;
+    if (maxCost < minCost) {
+      final swap = minCost;
+      minCost = maxCost;
+      maxCost = swap;
+    }
+
+    switch (level) {
+      case 1:
+        return minCost <= 300;
+      case 2:
+        return maxCost >= 301 && minCost <= 800;
+      case 3:
+        return maxCost >= 801;
+      default:
+        return true;
+    }
+  }
 
   void _focusOnMap(Place place) {
     setState(() {
@@ -164,44 +588,41 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
     final q = _query.toLowerCase();
     final outside = _outside.any(q.contains);
+    final distanceCalculator = const Distance();
     
     final results = _apiPlaces.where((p) {
       // Logic para sa mga bagong Filter Toggles
       if (_petFriendly && !p.petFriendly) return false;
       if (_kidFriendly && !p.goodForChildren) return false;
       if (_wheelchair && !p.wheelchairAccessible) return false;
+      if (_open && !p.isOpen) return false;
+      if (_near) {
+        if (_userLocation == null || p.lat == 0 || p.lng == 0) return false;
+        final distanceKm = distanceCalculator.as(
+          LengthUnit.Kilometer,
+          _userLocation!,
+          LatLng(p.lat, p.lng),
+        );
+        if (distanceKm > 0.5) return false;
+      }
 
       // Kasama na ang sub_categories sa searchable string!
       final searchableString = '${p.name} ${p.sub} ${p.category} ${p.description} ${p.subCategory1} ${p.subCategory2} ${p.subCategory3}'.toLowerCase();
 
       return _catMatch(p.category) &&
-          (!_budget || p.price.toLowerCase() == 'free' || p.price == '₱' || p.price == '₱₱') &&
-          (!_near || p.distanceKm <= 0.5) &&
+          _matchesBudgetLevel(p, _budgetLevel) &&
           (q.trim().isEmpty || outside || searchableString.contains(q));
     }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FA), 
+      backgroundColor: AppColors.bg,
       body: SafeArea(
         child: Column(
           children: [
             _PremiumHeader(
               onQuery: (v) => setState(() => _query = v),
-              budget: _budget,
-              near: _near,
-              open: _open,
-              petFriendly: _petFriendly,
-              kidFriendly: _kidFriendly,
-              wheelchair: _wheelchair,
-              onBudget: () => setState(() => _budget = !_budget),
-              onNear: () => setState(() => _near = !_near),
-              onOpen: () => setState(() => _open = !_open),
-              onPetFriendly: () => setState(() => _petFriendly = !_petFriendly),
-              onKidFriendly: () => setState(() => _kidFriendly = !_kidFriendly),
-              onWheelchair: () => setState(() => _wheelchair = !_wheelchair),
-              cats: currentCats, 
-              filter: _filter,
-              onFilter: (c) => setState(() => _filter = c),
+              onOpenFilters: () => _showFilters(currentCats),
+              activeFilterCount: _activeFilterCount,
               mapView: _mapView,
               onView: (map) {
                 setState(() {
@@ -240,8 +661,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                 ],
                               ),
                             )
+                          : results.isEmpty && !outside
+                              ? Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(24),
+                                    child: Text(
+                                      _near && _userLocation == null
+                                          ? 'Allow location access to use the nearby filter.'
+                                          : 'No places match your filters. Try changing or resetting them.',
+                                      textAlign: TextAlign.center,
+                                      style: AppText.ui(14, FontWeight.w500, color: AppColors.muted),
+                                    ),
+                                  ),
+                                )
                           : ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                              padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
                               itemCount: results.length + (outside ? 1 : 0),
                               itemBuilder: (context, index) {
                                 if (outside && index == 0) {
@@ -256,20 +690,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                 
                                 final placeIndex = outside ? index - 1 : index;
                                 
-                                if (!outside && results.isEmpty) {
-                                  return Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 40),
-                                    child: Center(
-                                      child: Text(
-                                        'No places match your filters.',
-                                        style: AppText.ui(14, FontWeight.w500, color: AppColors.muted),
-                                      ),
-                                    ),
-                                  );
-                                }
-
                                 return Padding(
-                                  padding: const EdgeInsets.only(bottom: 24),
+                                  padding: const EdgeInsets.only(bottom: 16),
                                   child: _PremiumPlaceCard(
                                     place: results[placeIndex],
                                     onViewOnMap: () => _focusOnMap(results[placeIndex]),
@@ -288,37 +710,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 class _PremiumHeader extends StatelessWidget {
   const _PremiumHeader({
     required this.onQuery,
-    required this.budget,
-    required this.near,
-    required this.open,
-    required this.petFriendly,
-    required this.kidFriendly,
-    required this.wheelchair,
-    required this.onBudget,
-    required this.onNear,
-    required this.onOpen,
-    required this.onPetFriendly,
-    required this.onKidFriendly,
-    required this.onWheelchair,
-    required this.cats,
-    required this.filter,
-    required this.onFilter,
+    required this.onOpenFilters,
+    required this.activeFilterCount,
     required this.mapView,
     required this.onView,
   });
 
   final ValueChanged<String> onQuery;
-  final bool budget, near, open, petFriendly, kidFriendly, wheelchair, mapView;
-  final VoidCallback onBudget, onNear, onOpen, onPetFriendly, onKidFriendly, onWheelchair;
-  final List<String> cats;
-  final String filter;
-  final ValueChanged<String> onFilter;
+  final VoidCallback onOpenFilters;
+  final int activeFilterCount;
+  final bool mapView;
   final ValueChanged<bool> onView;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.only(
@@ -359,7 +766,7 @@ class _PremiumHeader extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Container(
             height: 52,
             decoration: BoxDecoration(
@@ -391,34 +798,77 @@ class _PremiumHeader extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 10,
-            children: [
-              for (final c in cats)
-                TaraletsChip(label: c, selected: filter == c, onTap: () => onFilter(c), compact: true),
-            ],
-          ),
           const SizedBox(height: 12),
-          // IDINAGDAG: Mga bagong Quick Filters sa ilalim ng Categories
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                TaraletsChip(label: 'Budget', selected: budget, onTap: onBudget, compact: true),
-                const SizedBox(width: 6),
-                TaraletsChip(label: 'Distance', selected: near, onTap: onNear, compact: true),
-                const SizedBox(width: 6),
-                TaraletsChip(label: 'Open Now', selected: open, onTap: onOpen, compact: true),
-                const SizedBox(width: 6),
-                TaraletsChip(label: 'Pet Friendly', selected: petFriendly, onTap: onPetFriendly, compact: true),
-                const SizedBox(width: 6),
-                TaraletsChip(label: 'Kid Friendly', selected: kidFriendly, onTap: onKidFriendly, compact: true),
-                const SizedBox(width: 6),
-                TaraletsChip(label: 'Wheelchair', selected: wheelchair, onTap: onWheelchair, compact: true),
-              ],
-            ),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: onOpenFilters,
+                icon: const Icon(Icons.tune_rounded, size: 17),
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Filters'),
+                    if (activeFilterCount > 0) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.orange,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          '$activeFilterCount',
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: activeFilterCount > 0
+                      ? AppColors.orange
+                      : AppColors.navy,
+                  backgroundColor: activeFilterCount > 0
+                      ? AppColors.orangeSoft
+                      : Colors.white,
+                  side: BorderSide(
+                    color: activeFilterCount > 0
+                        ? AppColors.orange.withOpacity(0.35)
+                        : AppColors.border,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  activeFilterCount == 0
+                      ? 'Category · price · accessibility'
+                      : '$activeFilterCount filter${activeFilterCount == 1 ? '' : 's'} applied',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: AppText.ui(
+                    11,
+                    FontWeight.w600,
+                    color: AppColors.muted,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -465,12 +915,11 @@ class _PremiumPlaceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool hasImage = place.imageUrl.isNotEmpty && place.imageUrl.toLowerCase() != 'nan';
+    final imageUrl = place.imageUrl.trim();
+    final bool hasImage = imageUrl.isNotEmpty && imageUrl.toLowerCase() != 'nan';
     
-    final List<Color> fallbackColors = [
-      AppColors.orange, AppColors.navy, Colors.teal, Colors.purple, Colors.pink
-    ];
-    final Color clusterColor = fallbackColors[place.clusterId % fallbackColors.length];
+    final Color clusterColor = AppColors.orange;
+    final double imageHeight = hasImage ? 140 : 108;
 
     // Kunin ang mga sub-categories at tanggaling ang mga empty/null
     final List<String> subCats = [place.subCategory1, place.subCategory2, place.subCategory3]
@@ -485,21 +934,29 @@ class _PremiumPlaceCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.border),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 15, offset: const Offset(0, 6)),
+            BoxShadow(
+              color: AppColors.navy.withOpacity(0.045),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(22),
+                topRight: Radius.circular(22),
+              ),
               child: SizedBox(
-                height: 180, 
+                height: imageHeight,
                 child: hasImage
                     ? Image.network(
-                        place.imageUrl,
+                        ApiEndpoints.placeImage(place.id),
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => _buildImageFallback(clusterColor),
                       )
@@ -507,7 +964,7 @@ class _PremiumPlaceCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -617,14 +1074,22 @@ class _PremiumPlaceCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 10)]),
-            child: Icon(getCategoryIcon(place.category), size: 36, color: color),
+            width: 42,
+            height: 42,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              getCategoryIcon(place.category),
+              size: 22,
+              color: color,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Text(
             place.category,
-            style: AppText.ui(13, FontWeight.w700, color: color.withOpacity(0.8), letterSpacing: 1.2),
+            style: AppText.ui(12, FontWeight.w700, color: AppColors.navy),
           ),
         ],
       ),

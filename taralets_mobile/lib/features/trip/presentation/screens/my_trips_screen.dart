@@ -14,6 +14,23 @@ import '../../../../shared/widgets/taralets_chip.dart';
 import '../../../../shared/widgets/taralets_dialogs.dart';
 import '../../../../shared/widgets/ticket_card.dart';
 
+String _tripDateLabel(Trip trip) {
+  final date = trip.date?.toLocal();
+  if (date == null) return trip.dateLabel;
+
+  final today = DateUtils.dateOnly(DateTime.now());
+  final tripDay = DateUtils.dateOnly(date);
+  final daysUntilTrip = tripDay.difference(today).inDays;
+  if (daysUntilTrip == 0) return 'Today';
+  if (daysUntilTrip == 1) return 'Tomorrow';
+
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return '${months[date.month - 1]} ${date.day}, ${date.year}';
+}
+
 class MyTripsScreen extends ConsumerStatefulWidget {
   const MyTripsScreen({super.key});
 
@@ -387,7 +404,7 @@ class _TripCard extends ConsumerWidget {
                     const SizedBox(width: 5),
                     Flexible(
                       child: Text(
-                        trip.dateLabel,
+                        _tripDateLabel(trip),
                         overflow: TextOverflow.ellipsis,
                         style: meta,
                       ),
@@ -486,7 +503,7 @@ class _TripCard extends ConsumerWidget {
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
-                                '${trip.memberCount} members',
+                                '${trip.memberCount} ${trip.memberCount == 1 ? 'member' : 'members'}',
                                 overflow: TextOverflow.ellipsis,
                                 style: meta,
                               ),

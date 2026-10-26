@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
+import '../../../../core/network/api_endpoints.dart';
 import '../../../../data/manila_places.dart';
 import '../../../../shared/widgets/app_icons.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
@@ -58,51 +59,15 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
               alignment: Alignment.center,
               fit: StackFit.expand,
               children: [
-                p.imageUrl.isNotEmpty && p.imageUrl != 'nan'
+                p.imageUrl.trim().isNotEmpty &&
+                        p.imageUrl.trim().toLowerCase() != 'nan'
                     ? Image.network(
-                        p.imageUrl,
+                        ApiEndpoints.placeImage(p.id),
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: Colors.black.withOpacity(0.05),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(p.emoji, style: const TextStyle(fontSize: 48)),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Image unavailable',
-                                style: AppText.ui(
-                                  12,
-                                  FontWeight.w600,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        errorBuilder: (context, error, stackTrace) =>
+                            _PlaceImageFallback(category: p.category),
                       )
-                    : Container(
-                        color: Colors.black.withOpacity(0.05),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.add_photo_alternate_outlined,
-                              size: 48,
-                              color: Colors.grey,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Insert ${p.name} Photo Here',
-                              style: AppText.ui(
-                                12,
-                                FontWeight.w600,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    : _PlaceImageFallback(category: p.category),
                 Positioned(
                   top: 12,
                   left: 12,
@@ -328,6 +293,64 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PlaceImageFallback extends StatelessWidget {
+  const _PlaceImageFallback({required this.category});
+
+  final String category;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = category.toLowerCase();
+    final icon = normalized.contains('cafe') || normalized.contains('food')
+        ? Icons.local_cafe_rounded
+        : normalized.contains('museum') || normalized.contains('art')
+            ? Icons.museum_rounded
+            : normalized.contains('park') || normalized.contains('nature')
+                ? Icons.park_rounded
+                : normalized.contains('shop')
+                    ? Icons.shopping_bag_rounded
+                    : normalized.contains('church') || normalized.contains('heritage')
+                        ? Icons.church_rounded
+                        : Icons.place_rounded;
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFFFECDD), Color(0xFFFFF7F0)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: AppColors.orange, size: 34),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              category,
+              style: AppText.ui(13, FontWeight.w800, color: AppColors.orange),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Place preview',
+              style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
+            ),
+          ],
+        ),
       ),
     );
   }

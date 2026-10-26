@@ -392,9 +392,16 @@ class ApiTripRepository implements TripRepository {
         );
       }
 
+      final groupActivities = payload['group_activity_preferences'] is List
+          ? List<String>.from(payload['group_activity_preferences'])
+          : const <String>[];
+
       return (payload['data'] as List)
           .whereType<Map>()
-          .map((place) => Map<String, dynamic>.from(place))
+          .map((place) => {
+                ...Map<String, dynamic>.from(place),
+                '_group_activity_preferences': groupActivities,
+              })
           .toList();
     } on DioException catch (e) {
       throw TripException(

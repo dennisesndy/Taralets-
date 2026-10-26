@@ -5,7 +5,10 @@ from sqlalchemy.orm import selectinload
 
 from app.api import deps
 from app.models.trip import Trip, TripMember
-from app.services.recommendation import get_group_recommendations
+from app.services.recommendation import (
+    get_group_recommendations,
+    rank_group_activities,
+)
 from app.services.trip_service import build_group_profiles
 
 router = APIRouter()
@@ -56,4 +59,7 @@ async def get_recommendations_for_group(
         offset=offset,
     )
 
-    return {"data": recommendations}
+    return {
+        "data": recommendations,
+        "group_activity_preferences": rank_group_activities(group_profiles),
+    }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -73,6 +74,30 @@ List<String> _dedupe(Iterable<String> items) {
     if (i.isNotEmpty && seen.add(i.toLowerCase())) out.add(i);
   }
   return out;
+}
+
+List<String> _rankGroupActivities(Iterable members) {
+  final support = <String, int>{};
+  final firstSeen = <String, int>{};
+  var sequence = 0;
+  for (final member in members) {
+    final activities = normalizeActivityCategories(member.activityTags);
+    for (final activity in activities) {
+      final key = activity.toLowerCase();
+      firstSeen.putIfAbsent(key, () => sequence++);
+      support[key] = (support[key] ?? 0) + 1;
+    }
+  }
+  final ranked = support.keys.toList()
+    ..sort((a, b) {
+      final bySupport = (support[b] ?? 0).compareTo(support[a] ?? 0);
+      return bySupport != 0
+          ? bySupport
+          : (firstSeen[a] ?? 0).compareTo(firstSeen[b] ?? 0);
+    });
+  return ranked.map((key) => support.keys.firstWhere(
+    (activity) => activity.toLowerCase() == key,
+  )).toList();
 }
 
 List<String> _parseList(dynamic value) {
@@ -248,11 +273,13 @@ class _Place {
       ...subs,
       ...activityTags,
     ]);
-    final selectedCategoryKeys = selectedActivities
-        .map((value) => normalizeActivityCategory(value).toLowerCase())
+    final placeCategoryKeys = placeActivityCategories
+        .map((value) => value.toLowerCase())
         .toSet();
-    final locallyMatchedCategories = placeActivityCategories
-        .where((value) => selectedCategoryKeys.contains(value.toLowerCase()))
+    final locallyMatchedCategories = selectedActivities
+        .where((value) => placeCategoryKeys.contains(
+              normalizeActivityCategory(value).toLowerCase(),
+            ))
         .toList();
     final matchedCategories = selectedActivities.isEmpty
         ? backendMatchedCategories
@@ -370,9 +397,11 @@ class GroupRecommendationsScreen extends ConsumerStatefulWidget {
 class _GroupRecommendationsScreenState
     extends ConsumerState<GroupRecommendationsScreen> {
   final _searchController = TextEditingController();
+  final _categoryScrollController = ScrollController();
 
   List<_Place> _places = [];
   List<String> _selectedGroupActivities = const [];
+  int _averagePlacesPerDay = 3;
   String _selectedCategory = 'All';
   String _searchQuery = '';
   bool _loading = true;
@@ -385,6 +414,31 @@ class _GroupRecommendationsScreenState
   final int _limit = 30;
   bool _hasMore = true;
   bool _loadingMore = false;
+
+  int? get _nextRadius {
+    const radiusSteps = [3000, 5000, 8000, 10000];
+    for (final radius in radiusSteps) {
+      if (radius > _currentRadius) return radius;
+    }
+    return null;
+  }
+
+  String _radiusLabel(int meters) =>
+      meters % 1000 == 0 ? '${meters ~/ 1000} km' : '${meters} m';
+
+  String _placeKey(_Place place) =>
+      place.backendId.isNotEmpty ? place.backendId : place.id;
+
+  Future<void> _expandSearchRadius() async {
+    final nextRadius = _nextRadius;
+    if (nextRadius == null || _loadingMore) return;
+    setState(() {
+      _currentRadius = nextRadius;
+      _currentOffset = 0;
+      _hasMore = true;
+    });
+    await _fetchRecommendations(isLoadMore: true);
+  }
 
   @override
   void initState() {
@@ -399,6 +453,7 @@ class _GroupRecommendationsScreenState
   @override
   void dispose() {
     _searchController.dispose();
+    _categoryScrollController.dispose();
     _draft.dispose();
     super.dispose();
   }
@@ -445,9 +500,16 @@ class _GroupRecommendationsScreenState
       final tripFuture = ref.read(tripRepositoryProvider).getTrip(widget.groupId);
       final meFuture = ref.read(currentUserProvider.future);
       final trip = await tripFuture;
-      _selectedGroupActivities = normalizeActivityCategories(
-        trip.members.expand((member) => member.activityTags),
-      );
+      _selectedGroupActivities = _rankGroupActivities(trip.members);
+      final placeTargets = trip.members
+          .map((member) => member.desiredPlacesPerDay)
+          .whereType<int>()
+          .where((target) => target > 0)
+          .toList();
+      _averagePlacesPerDay = placeTargets.isEmpty
+          ? 3
+          : (placeTargets.reduce((a, b) => a + b) / placeTargets.length + 0.5)
+              .floor();
       final me = await meFuture;
 
       final members = <ItineraryMember>[];
@@ -494,7 +556,6 @@ class _GroupRecommendationsScreenState
     if (isLoadMore) {
       if (!_hasMore || _loadingMore) return;
       setState(() => _loadingMore = true);
-      _currentOffset += _limit;
     } else {
       setState(() {
         _loading = true;
@@ -505,37 +566,61 @@ class _GroupRecommendationsScreenState
     }
 
     try {
-      final recs = await ref.read(tripRepositoryProvider).getGroupRecommendations(
-        widget.groupId,
-        radius: _currentRadius,
-        limit: _limit,
-        offset: _currentOffset,
-      );
-      if (!mounted) return;
-      
-      final newPlaces = [
-        for (var i = 0; i < recs.length; i++)
-          _Place.from(
-            recs[i],
-            _currentOffset + i,
-            selectedActivities: _selectedGroupActivities,
-          ),
-      ];
-      final activityFilteredPlaces = _selectedGroupActivities.isEmpty
-          ? newPlaces
-          : newPlaces
-              .where((place) => place.activityCategories.isNotEmpty)
-              .toList();
+      final existingKeys = isLoadMore
+          ? _places.map(_placeKey).toSet()
+          : <String>{};
+      var addedPlaces = <_Place>[];
+      var recs = <Map<String, dynamic>>[];
+
+      do {
+        recs = await ref.read(tripRepositoryProvider).getGroupRecommendations(
+          widget.groupId,
+          radius: _currentRadius,
+          limit: _limit,
+          offset: _currentOffset,
+        );
+        if (!mounted) return;
+
+        _currentOffset += recs.length;
+        if (recs.isNotEmpty) {
+          final rankedActivities = _dedupe(
+            _parseList(recs.first['_group_activity_preferences']).map((value) {
+              final normalized = _cleanLabel(normalizeActivityCategory(value));
+              return normalized.isNotEmpty ? normalized : _titleCase(value);
+            }),
+          );
+          if (rankedActivities.isNotEmpty) {
+            _selectedGroupActivities = rankedActivities;
+          }
+        }
+
+        final newPlaces = [
+          for (var i = 0; i < recs.length; i++)
+            _Place.from(
+              recs[i],
+              _currentOffset - recs.length + i,
+              selectedActivities: _selectedGroupActivities,
+            ),
+        ];
+        final activityFilteredPlaces = _selectedGroupActivities.isEmpty
+            ? newPlaces
+            : newPlaces
+                .where((place) => place.activityCategories.isNotEmpty)
+                .toList();
+        addedPlaces = activityFilteredPlaces
+            .where((place) => existingKeys.add(_placeKey(place)))
+            .toList();
+        _hasMore = recs.length == _limit;
+      } while (isLoadMore && addedPlaces.isEmpty && _hasMore);
 
       setState(() {
         if (isLoadMore) {
-          _places.addAll(activityFilteredPlaces);
+          _places.addAll(addedPlaces);
         } else {
-          _places = activityFilteredPlaces;
+          _places = addedPlaces;
         }
         
         _error = null;
-        _hasMore = recs.length == _limit;
 
         if (_selectedCategory != 'All' &&
             !_places.any((p) => p.activityCategories.contains(_selectedCategory))) {
@@ -561,7 +646,14 @@ class _GroupRecommendationsScreenState
         counts[category] = (counts[category] ?? 0) + 1;
       }
     }
-    final sorted = counts.entries.toList()..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+    final ordered = <String>[
+      ..._selectedGroupActivities,
+      ...counts.keys.where((category) => !_selectedGroupActivities
+          .any((selected) => selected.toLowerCase() == category.toLowerCase())),
+    ];
+    final sorted = ordered
+        .map((category) => MapEntry(category, counts[category] ?? 0))
+        .toList();
     return [MapEntry('All', _places.length), ...sorted];
   }
 
@@ -630,14 +722,39 @@ class _GroupRecommendationsScreenState
     }
 
     if (_places.isEmpty) {
+      final nextRadius = _nextRadius;
       return _MessageState(
         icon: Icons.explore_outlined,
         title: 'No recommendations yet',
-        message: 'We couldn\'t find places that fit this group yet. Make sure members have saved their preferences, then refresh.',
-        action: TextButton.icon(
-          onPressed: _fetchRecommendations,
-          icon: const Icon(Icons.refresh, color: AppColors.orange),
-          label: Text('Refresh', style: AppText.ui(14, FontWeight.w800, color: AppColors.orange)),
+        message: 'We couldn\'t find places within ${_radiusLabel(_currentRadius)}. Try a wider search radius or refresh.',
+        action: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          children: [
+            TextButton.icon(
+              onPressed: _fetchRecommendations,
+              icon: const Icon(Icons.refresh, color: AppColors.orange),
+              label: Text('Refresh', style: AppText.ui(14, FontWeight.w800, color: AppColors.orange)),
+            ),
+            if (_hasMore)
+              TextButton.icon(
+                onPressed: () => _fetchRecommendations(isLoadMore: true),
+                icon: const Icon(Icons.expand_more, color: AppColors.orange),
+                label: Text(
+                  'Load More Places',
+                  style: AppText.ui(14, FontWeight.w800, color: AppColors.orange),
+                ),
+              ),
+            if (nextRadius != null)
+              TextButton.icon(
+                onPressed: _expandSearchRadius,
+                icon: const Icon(Icons.radar, color: AppColors.orange),
+                label: Text(
+                  'Expand to ${_radiusLabel(nextRadius)}',
+                  style: AppText.ui(14, FontWeight.w800, color: AppColors.orange),
+                ),
+              ),
+          ],
         ),
       );
     }
@@ -649,6 +766,21 @@ class _GroupRecommendationsScreenState
         _buildSearch(),
         _buildCategoryTabs(),
         Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
+          child: Row(
+            children: [
+              const Icon(Icons.near_me_outlined, size: 15, color: AppColors.muted),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Nearby places are prioritized and grouped to fit your group’s pace of about $_averagePlacesPerDay places per day.',
+                  style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
           padding: const EdgeInsets.fromLTRB(20, 2, 12, 0),
           child: Row(
             children: [
@@ -657,6 +789,10 @@ class _GroupRecommendationsScreenState
                   '${results.length} ${results.length == 1 ? 'place' : 'places'}${_selectedCategory != 'All' ? ' in $_selectedCategory' : ''}',
                   style: AppText.ui(12, FontWeight.w700, color: AppColors.muted),
                 ),
+              ),
+              Text(
+                'Within ${_radiusLabel(_currentRadius)}',
+                style: AppText.ui(11, FontWeight.w700, color: AppColors.muted),
               ),
               if (_filtersActive)
                 TextButton(
@@ -684,7 +820,8 @@ class _GroupRecommendationsScreenState
                     physics: const AlwaysScrollableScrollPhysics(),
                     keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-                    itemCount: results.length + (_hasMore && !_filtersActive ? 1 : 0),
+                    itemCount: results.length +
+                        ((_hasMore || _nextRadius != null) && !_filtersActive ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index == results.length) {
                         return Padding(
@@ -692,12 +829,21 @@ class _GroupRecommendationsScreenState
                           child: Center(
                             child: _loadingMore
                                 ? const CircularProgressIndicator(color: AppColors.orange)
-                                : TaraletsButton.orange(
-                                    small: true,
-                                    full: false,
-                                    label: 'Load More Places',
-                                    onPressed: () => _fetchRecommendations(isLoadMore: true),
-                                  ),
+                                : _hasMore
+                                    ? TaraletsButton.orange(
+                                        small: true,
+                                        full: false,
+                                        label: 'Load More Places',
+                                        onPressed: () => _fetchRecommendations(isLoadMore: true),
+                                      )
+                                    : _nextRadius != null
+                                        ? TaraletsButton.orange(
+                                            small: true,
+                                            full: false,
+                                            label: 'Expand search to ${_radiusLabel(_nextRadius!)}',
+                                            onPressed: _expandSearchRadius,
+                                          )
+                                        : const SizedBox.shrink(),
                           ),
                         );
                       }
@@ -763,26 +909,38 @@ class _GroupRecommendationsScreenState
   Widget _buildCategoryTabs() {
     final tabs = _categoryTabs;
     return SizedBox(
-      height: 46,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: tabs.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final tab = tabs[i];
-          return Center(
-            child: _CategoryChip(
-              label: tab.key,
-              count: tab.value,
-              selected: _selectedCategory == tab.key,
-              onTap: () {
-                HapticFeedback.selectionClick();
-                setState(() => _selectedCategory = tab.key);
-              },
-            ),
-          );
-        },
+      height: 54,
+      child: Scrollbar(
+        controller: _categoryScrollController,
+        thumbVisibility: true,
+        thickness: 3,
+        radius: const Radius.circular(99),
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            dragDevices: PointerDeviceKind.values.toSet(),
+          ),
+          child: ListView.separated(
+            controller: _categoryScrollController,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+            itemCount: tabs.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) {
+              final tab = tabs[i];
+              return Center(
+                child: _CategoryChip(
+                  label: tab.key,
+                  count: tab.value,
+                  selected: _selectedCategory == tab.key,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _selectedCategory = tab.key);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
