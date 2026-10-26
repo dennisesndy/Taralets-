@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,6 +14,9 @@ router = APIRouter()
 @router.get("/{group_id}/recommendations")
 async def get_recommendations_for_group(
     group_id: str,
+    radius: int = Query(3000, description="Max search radius in meters"),
+    limit: int = Query(30, description="Number of results to return"),
+    offset: int = Query(0, description="Number of results to skip"),
     db: AsyncSession = Depends(deps.get_db),
 ):
     # Retrieve the trip and its members with their preferences.
@@ -48,6 +51,9 @@ async def get_recommendations_for_group(
         group_profiles=group_profiles,
         origin_lat=trip.latitude,
         origin_lon=trip.longitude,
+        max_radius=radius,
+        limit=limit,
+        offset=offset,
     )
 
     return {"data": recommendations}

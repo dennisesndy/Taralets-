@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List
@@ -52,6 +51,9 @@ class PlaceSchema(BaseModel):
 class GroupRecommendPayload(BaseModel):
     group_profiles: List[UserProfileSchema]
     candidate_places: List[PlaceSchema]
+    radius: int = Field(default=3000)
+    limit: int = Field(default=30)
+    offset: int = Field(default=0)
 
 
 class GroupItineraryPayload(GroupRecommendPayload):
@@ -67,11 +69,17 @@ def get_group_recommendations(payload: GroupRecommendPayload):
         profiles = [p.model_dump() for p in payload.group_profiles]
         places = [p.model_dump() for p in payload.candidate_places]
 
-        recommendations = aggregate_group_scores(profiles, places)
+        recommendations = aggregate_group_scores(
+            group_profiles=profiles, 
+            candidate_places=places,
+            max_radius=payload.radius
+        )
+
+        sliced_recs = recommendations[payload.offset : payload.offset + payload.limit]
 
         return {
             "status": "success",
-            "data": recommendations,
+            "data": sliced_recs,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

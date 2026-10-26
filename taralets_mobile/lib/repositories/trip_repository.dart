@@ -219,7 +219,12 @@ abstract class TripRepository {
   Future<List<Trip>> getMyTrips();
   Future<Trip> createTrip(CreateTripDto dto);
   Future<GroupPreferences?> getGroupPreferences(String tripId);
-  Future<List<Map<String, dynamic>>> getGroupRecommendations(String tripId);
+  Future<List<Map<String, dynamic>>> getGroupRecommendations(
+    String tripId, {
+    int radius = 3000,
+    int limit = 30,
+    int offset = 0,
+  });
   Future<Map<String, dynamic>> generateItinerary(
     String tripId,
     List<String> placeIds, {
@@ -363,11 +368,19 @@ class ApiTripRepository implements TripRepository {
 
   @override
   Future<List<Map<String, dynamic>>> getGroupRecommendations(
-    String tripId,
-  ) async {
+    String tripId, {
+    int radius = 3000,
+    int limit = 30,
+    int offset = 0,
+  }) async {
     try {
       final response = await _dio.get(
         '${ApiEndpoints.apiPrefix}/groups/$tripId/recommendations',
+        queryParameters: {
+          'radius': radius,
+          'limit': limit,
+          'offset': offset,
+        },
       );
 
       final payload = response.data;
@@ -643,8 +656,11 @@ class MockTripRepository implements TripRepository {
 
   @override
   Future<List<Map<String, dynamic>>> getGroupRecommendations(
-    String tripId,
-  ) async {
+    String tripId, {
+    int radius = 3000,
+    int limit = 30,
+    int offset = 0,
+  }) async {
     return [];
   }
 

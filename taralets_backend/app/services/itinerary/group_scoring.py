@@ -1,6 +1,7 @@
 from math import radians, sin, cos, sqrt, atan2
 from typing import Any
 from types import SimpleNamespace
+import math
 
 
 def safe_cost(value, default=0.0):
@@ -665,6 +666,7 @@ def calculate_spatial_score(
     place,
     origin_lat: float | None,
     origin_lon: float | None,
+    max_radius: int = 3000,
 ) -> float:
 
     distance = _distance_km(
@@ -677,14 +679,19 @@ def calculate_spatial_score(
     if distance is None:
         return 0.50
 
-    # Smooth decay rather than a hard cutoff.
-    return max(
-        0.0,
-        min(
-            1.0,
-            1.0 / (1.0 + distance / 5.0),
-        ),
-    )
+    distance_meters = distance * 1000
+
+    # Dynamic limit base sa choice ng user o sa default (e.g. 3000)
+    if distance_meters > max_radius:
+        return -1.0
+
+    # Pasok sa target na 500m = perfect spatial score (1.0)
+    if distance_meters <= 500:
+        return 1.0
+
+    # Distance-Decay: Unti-unting bababa ang score mula 500m hanggang max_radius
+    decay_rate = 1000
+    return math.exp(-(distance_meters - 500) / decay_rate)
 
 
 def aggregate_group_scores(
@@ -692,9 +699,8 @@ def aggregate_group_scores(
     candidate_places: list[Any],
     origin_lat: float | None = None,
     origin_lon: float | None = None,
+    max_radius: int = 3000,
 ) -> list[dict[str, Any]]:
-
-    
 
     if not group_profiles:
         return []
@@ -705,6 +711,19 @@ def aggregate_group_scores(
         if isinstance(place, dict):
             place = SimpleNamespace(**place)
 
+        # 1. Ipasa ang dynamic radius
+        spatial_score = calculate_spatial_score(
+            place,
+            origin_lat,
+            origin_lon,
+            max_radius,
+        )
+
+        # 2. Kung nag-return ng -1, wag nang i-compute ang iba at i-skip na
+        if spatial_score < 0:
+            continue
+
+        # 3. Tuloy na ang dating computation para sa mga pumasa
         member_scores = [
             calculate_member_score(member, place)
             for member in group_profiles
@@ -713,15 +732,9 @@ def aggregate_group_scores(
         group = calculate_group_score(
             member_scores
         )
-
+        
         rating_score = calculate_rating_score(
             place
-        )
-
-        spatial_score = calculate_spatial_score(
-            place,
-            origin_lat,
-            origin_lon,
         )
 
         # Content/group consensus is dominant.

@@ -18,6 +18,9 @@ async def get_group_recommendations(
     group_profiles: list[dict],
     origin_lat: float | None = None,
     origin_lon: float | None = None,
+    max_radius: int = 3000,
+    limit: int = 30,
+    offset: int = 0,
 ):
     """
     Generate group recommendations using all member preferences.
@@ -124,6 +127,8 @@ async def get_group_recommendations(
         candidate_places=candidates,
         origin_lat=origin_lat,
         origin_lon=origin_lon,
+        max_radius=max_radius,
     )
 
-    return recommendations[:30]
+    # I-apply ang pagination
+    return recommendations[offset : offset + limit]
