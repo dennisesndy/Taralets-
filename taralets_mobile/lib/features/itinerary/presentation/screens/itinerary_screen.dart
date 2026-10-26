@@ -13,18 +13,20 @@ import '../controllers/itinerary_controller.dart';
 class ItineraryScreen extends StatefulWidget {
   const ItineraryScreen({
     super.key,
+    this.tripId,
     this.tripTitle,
     this.tripDateLabel,
     this.initialPlan,
   });
 
-  /// Optional trip context. Kept nullable so the current router entry can
-  /// keep using mock data until the itinerary is wired to a trip.
+  /// Optional trip context. Used when there is no generated plan yet so the
+  /// empty state can send the user back to the group flow.
+  final String? tripId;
   final String? tripTitle;
   final String? tripDateLabel;
 
-  /// Generated from the selected places and group votes. Falls back to the
-  /// local mock plan when the screen is opened from Home/Trips.
+  /// Real plan returned by the backend. The screen no longer falls back to
+  /// mock data when this is null.
   final ItineraryPlan? initialPlan;
 
   @override
@@ -32,18 +34,41 @@ class ItineraryScreen extends StatefulWidget {
 }
 
 class _ItineraryScreenState extends State<ItineraryScreen> {
-  late final ItineraryController _controller;
+  ItineraryController? _controller;
   bool _nearby = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = ItineraryController(plan: widget.initialPlan);
+    final plan = widget.initialPlan;
+    if (plan != null) {
+      _controller = ItineraryController(plan: plan);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ItineraryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final plan = widget.initialPlan;
+
+    if (plan == null) {
+      if (oldWidget.initialPlan != null) {
+        _controller?.dispose();
+        _controller = null;
+      }
+      return;
+    }
+
+    if (_controller == null || !identical(oldWidget.initialPlan, plan)) {
+      _controller?.dispose();
+      _controller = ItineraryController(plan: plan);
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -56,8 +81,8 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
   }
 
   void _openRouteSelection() {
-    final plan = _controller.plan;
-    if (plan.stops.isEmpty) {
+    final plan = _controller?.plan;
+    if (plan == null || plan.stops.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Add stops before selecting a route.'),
@@ -77,12 +102,21 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final controller = _controller;
+
+    if (controller == null) {
+      return _NoItineraryState(
+        tripId: widget.tripId,
+        onBack: _handleBack,
+      );
+    }
+
     return ColoredBox(
       color: AppColors.bg,
       child: ListenableBuilder(
-        listenable: _controller,
+        listenable: controller,
         builder: (context, _) {
-          final plan = _controller.plan;
+          final plan = controller.plan;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 120),
@@ -91,7 +125,7 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
               children: [
                 _Header(
                   plan: plan,
-                  status: _controller.status,
+                  status: controller.status,
                   tripTitle: widget.tripTitle,
                   tripDateLabel: widget.tripDateLabel,
                   onBack: _handleBack,
@@ -119,10 +153,10 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                           const SizedBox(height: 18),
                           _GroupReviewCard(
                             plan: plan,
-                            confirmed: _controller.confirmed,
+                            confirmed: controller.confirmed,
                             onToggleReview:
-                                _controller.toggleCurrentUserReviewed,
-                            onConfirm: _controller.confirm,
+                                controller.toggleCurrentUserReviewed,
+                            onConfirm: controller.confirm,
                             onSelectRoute: _openRouteSelection,
                           ),
                           const SizedBox(height: 20),
@@ -135,6 +169,100 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _NoItineraryState extends StatelessWidget {
+  const _NoItineraryState({
+    required this.onBack,
+    this.tripId,
+  });
+
+  final VoidCallback onBack;
+  final String? tripId;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTrip = tripId != null && tripId!.trim().isNotEmpty;
+
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 84,
+                height: 84,
+                decoration: const BoxDecoration(
+                  color: AppColors.primarySoft,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.route_outlined,
+                  size: 38,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'No itinerary yet',
+                textAlign: TextAlign.center,
+                style: AppText.ui(
+                  17,
+                  FontWeight.w800,
+                  color: AppColors.navy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Add places and vote with your group to generate an itinerary '
+                "from this trip's members, preferences, and selected places.",
+                textAlign: TextAlign.center,
+                style: AppText.ui(
+                  12.5,
+                  FontWeight.w400,
+                  color: AppColors.muted,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: 280,
+                child: TaraletsButton.orange(
+                  label: hasTrip
+                      ? 'Open Group Recommendations'
+                      : 'Go to My Trips',
+                  onPressed: () {
+                    if (hasTrip) {
+                      context.push(
+                        AppRoutes.recommendations,
+                        extra: {'groupId': tripId},
+                      );
+                    } else {
+                      context.go(AppRoutes.trips);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: onBack,
+                child: Text(
+                  'Back',
+                  style: AppText.ui(
+                    12.5,
+                    FontWeight.w700,
+                    color: AppColors.muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -823,6 +951,31 @@ class _StopCard extends StatelessWidget {
                   for (final tag in visibleTags) _TagChip(tag: tag),
                   if (hiddenTagCount > 0)
                     _OverflowTag(label: '+$hiddenTagCount'),
+                ],
+              ),
+            ],
+            if (stop.notes != null && stop.notes!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 14,
+                    color: AppColors.amberText,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      stop.notes!,
+                      style: AppText.ui(
+                        10.5,
+                        FontWeight.w500,
+                        color: AppColors.amberText,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ],

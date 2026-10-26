@@ -1,36 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../repositories/repository_providers.dart';
+import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/taralets_card.dart';
+import '../../data/itinerary_api_mapper.dart';
 import '../../data/models/itinerary_draft_models.dart';
 import '../controllers/itinerary_draft_controller.dart';
 
-class SelectedPlacesScreen extends StatefulWidget {
-  const SelectedPlacesScreen({super.key, this.draft});
+class SelectedPlacesScreen extends ConsumerStatefulWidget {
+  const SelectedPlacesScreen({
+    super.key,
+    this.draft,
+    this.tripId,
+  });
 
   /// Shared with Group Recommendations so added places and votes survive
   /// navigation between the two screens.
   final ItineraryDraftController? draft;
 
+  /// Actual trip that owns the selected places.
+  final String? tripId;
+
   @override
-  State<SelectedPlacesScreen> createState() => _SelectedPlacesScreenState();
+  ConsumerState<SelectedPlacesScreen> createState() =>
+      _SelectedPlacesScreenState();
 }
 
-class _SelectedPlacesScreenState extends State<SelectedPlacesScreen> {
+class _SelectedPlacesScreenState
+    extends ConsumerState<SelectedPlacesScreen> {
   late final ItineraryDraftController _draft;
   late final bool _ownsDraft;
+  bool _generating = false;
 
   @override
   void initState() {
     super.initState();
     _ownsDraft = widget.draft == null;
-    _draft = widget.draft ?? ItineraryDraftController();
+    _draft = widget.draft ??
+        ItineraryDraftController(tripId: widget.tripId);
   }
 
   @override
@@ -47,21 +62,73 @@ class _SelectedPlacesScreenState extends State<SelectedPlacesScreen> {
     }
   }
 
-  void _generateItinerary() {
-    final plan = _draft.generatePlan();
-    if (plan == null) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('Add and vote on at least one place first.'),
-          ),
-        );
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _generateItinerary() async {
+    if (_generating) return;
+
+    final tripId = (widget.tripId?.trim().isNotEmpty ?? false)
+        ? widget.tripId!.trim()
+        : _draft.tripId;
+
+    if (tripId == null || tripId.trim().isEmpty) {
+      _showMessage(
+        'Missing trip context. Go back to Group Recommendations and try again.',
+      );
       return;
     }
 
-    HapticFeedback.mediumImpact();
-    context.go(AppRoutes.itinerary, extra: plan);
+    final placeIds = <String>[];
+
+    for (final candidate in _draft.selected) {
+      if (!_draft.makesTheCut(candidate)) continue;
+
+      final backendId = candidate.backendId.trim();
+      if (backendId.isEmpty) {
+        _showMessage(
+          'Could not identify one of the selected places. Refresh '
+          'recommendations and try again.',
+        );
+        return;
+      }
+
+      placeIds.add(backendId);
+    }
+
+    if (placeIds.isEmpty) {
+      _showMessage('Vote on at least one place first.');
+      return;
+    }
+
+    setState(() => _generating = true);
+
+    try {
+      final data = await ref
+          .read(tripRepositoryProvider)
+          .generateItinerary(tripId, placeIds);
+      final plan = itineraryPlanFromApi(data);
+
+      if (!mounted) return;
+
+      HapticFeedback.mediumImpact();
+      context.go(AppRoutes.itinerary, extra: plan);
+    } on TripException catch (e) {
+      if (mounted) _showMessage(e.message);
+    } catch (error, stackTrace) {
+      debugPrint('ITINERARY GENERATION ERROR: $error');
+      debugPrint('$stackTrace');
+      if (mounted) {
+        _showMessage(
+          'Could not generate the itinerary. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _generating = false);
+    }
   }
 
   @override
@@ -137,32 +204,36 @@ class _SelectedPlacesScreenState extends State<SelectedPlacesScreen> {
           return Column(
             children: [
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-                  children: [
-                    _VotingSummary(draft: _draft),
-                    const SizedBox(height: 14),
-                    for (final candidate in selected) ...[
-                      _SelectedPlaceCard(
-                        candidate: candidate,
-                        draft: _draft,
-                        onRemove: () {
-                          HapticFeedback.selectionClick();
-                          _draft.remove(candidate.id);
-                        },
-                        onVote: () {
-                          HapticFeedback.selectionClick();
-                          _draft.toggleCurrentUserVote(candidate.id);
-                        },
-                      ),
-                      const SizedBox(height: 12),
+                child: IgnorePointer(
+                  ignoring: _generating,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                    children: [
+                      _VotingSummary(draft: _draft),
+                      const SizedBox(height: 14),
+                      for (final candidate in selected) ...[
+                        _SelectedPlaceCard(
+                          candidate: candidate,
+                          draft: _draft,
+                          onRemove: () {
+                            HapticFeedback.selectionClick();
+                            _draft.remove(candidate.id);
+                          },
+                          onVote: () {
+                            HapticFeedback.selectionClick();
+                            _draft.toggleCurrentUserVote(candidate.id);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
               _GenerateBar(
                 draft: _draft,
-                onGenerate: _draft.canGenerate
+                isLoading: _generating,
+                onGenerate: !_generating && _draft.canGenerate
                     ? _generateItinerary
                     : null,
               ),
@@ -686,16 +757,21 @@ class _VoteButton extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _GenerateBar extends StatelessWidget {
-  const _GenerateBar({required this.draft, required this.onGenerate});
+  const _GenerateBar({
+    required this.draft,
+    required this.onGenerate,
+    this.isLoading = false,
+  });
 
   final ItineraryDraftController draft;
   final VoidCallback? onGenerate;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     final voted = draft.currentUserVoteCount;
     final total = draft.selected.length;
-    final ready = onGenerate != null;
+    final ready = onGenerate != null || isLoading;
 
     return SafeArea(
       top: false,
@@ -728,7 +804,9 @@ class _GenerateBar extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    ready
+                    isLoading
+                        ? 'Building the real itinerary…'
+                        : ready
                         ? 'Ready to generate the final plan'
                         : 'Vote on at least one place',
                     style: AppText.ui(
@@ -744,6 +822,7 @@ class _GenerateBar extends StatelessWidget {
             TaraletsButton.orange(
               small: true,
               full: false,
+              isLoading: isLoading,
               label: 'Generate Itinerary',
               icon: const Icon(
                 Icons.auto_awesome_rounded,

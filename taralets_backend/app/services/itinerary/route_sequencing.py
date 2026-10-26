@@ -45,6 +45,8 @@ def generate_group_acs_itinerary(
     evaporation_rate: float = 0.3,
     q: float = 1.0,
     seed: int = 42,
+    origin_lat: float | None = None,
+    origin_lon: float | None = None,
 ) -> dict[str, Any]:
     """
     Generate a group itinerary using Ant Colony System principles.
@@ -74,6 +76,8 @@ def generate_group_acs_itinerary(
     ranked_places = aggregate_group_scores(
         group_profiles,
         candidate_places,
+        origin_lat=origin_lat,
+        origin_lon=origin_lon,
     )
 
     if not ranked_places:

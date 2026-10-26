@@ -11,6 +11,7 @@ class ItineraryCandidate {
     required this.budget,
     required this.groupScore,
     required this.icon,
+    this.backendId = '',
     this.address = '',
     this.description = '',
     this.imageUrl = '',
@@ -19,7 +20,12 @@ class ItineraryCandidate {
     this.accessibilityTags = const [],
   });
 
+  /// Display id used by the local draft. It may include an index suffix.
   final String id;
+
+  /// Stable database id (master id or numeric place id) used by the API.
+  final String backendId;
+
   final String name;
   final String category;
   final String area;
@@ -38,14 +44,15 @@ class ItineraryCandidate {
   final List<String> dietaryTags;
   final List<String> accessibilityTags;
 
-  int get placeId => id.hashCode & 0x7fffffff;
+  int get placeId =>
+      int.tryParse(backendId) ?? (id.hashCode & 0x7fffffff);
 
   String get locationLabel =>
       area.isEmpty ? category : '$category • $area';
 }
 
-/// Small emoji marker used in the timeline. Keeps the same visual language as
-/// the existing itinerary mock data without introducing an asset per category.
+/// Small emoji marker used in the timeline. Keeps the existing itinerary
+/// visual language without introducing an asset per category.
 String itineraryIconForCategory(String category) {
   final value = category.toLowerCase();
   if (value.contains('food') ||

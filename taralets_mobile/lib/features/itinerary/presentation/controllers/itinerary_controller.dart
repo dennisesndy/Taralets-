@@ -1,12 +1,11 @@
 import 'package:flutter/foundation.dart';
 
-import '../../data/mock_itinerary.dart';
 import '../../data/models/itinerary_models.dart';
 
 class ItineraryController extends ChangeNotifier {
-  ItineraryController({ItineraryPlan? plan})
-    : _plan = plan ?? mockItineraryPlan,
-      _confirmed = plan?.status == ItineraryStatus.finalized;
+  ItineraryController({required ItineraryPlan plan})
+    : _plan = plan,
+      _confirmed = plan.status == ItineraryStatus.finalized;
 
   ItineraryPlan _plan;
   bool _confirmed = false;
@@ -41,12 +40,6 @@ class ItineraryController extends ChangeNotifier {
 
     _confirmed = true;
     _plan = _plan.copyWith(status: ItineraryStatus.finalized);
-    notifyListeners();
-  }
-
-  void reset() {
-    _plan = mockItineraryPlan;
-    _confirmed = false;
     notifyListeners();
   }
 }

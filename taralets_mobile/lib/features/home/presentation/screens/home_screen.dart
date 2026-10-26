@@ -427,7 +427,10 @@ class _ActiveTripCard extends StatelessWidget {
     final badgeText = isUpcoming ? 'UPCOMING TRIP' : 'ACTIVE TRIP';
 
     return GestureDetector(
-      onTap: () => context.go(AppRoutes.itinerary),
+      onTap: () => context.go(
+        AppRoutes.itinerary,
+        extra: {'tripId': trip.id},
+      ),
       child: TicketCard(
         fillColor: TicketPalette.lavenderFill,
         lineColor: TicketPalette.lavenderLine,

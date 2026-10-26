@@ -220,6 +220,12 @@ abstract class TripRepository {
   Future<Trip> createTrip(CreateTripDto dto);
   Future<GroupPreferences?> getGroupPreferences(String tripId);
   Future<List<Map<String, dynamic>>> getGroupRecommendations(String tripId);
+  Future<Map<String, dynamic>> generateItinerary(
+    String tripId,
+    List<String> placeIds, {
+    String? date,
+    String? startTime,
+  });
   Future<void> updateGroupPreferences(String tripId, GroupPreferences prefs);
   Future<Trip> getTrip(String tripId);
   Future<Trip> updateTrip(Trip updatedTrip);
@@ -383,6 +389,45 @@ class ApiTripRepository implements TripRepository {
         _handleError(
           e,
           'Could not load group recommendations. Please try again.',
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> generateItinerary(
+    String tripId,
+    List<String> placeIds, {
+    String? date,
+    String? startTime,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/itinerary/generate',
+        data: {
+          'place_ids': placeIds,
+          if (date != null && date.trim().isNotEmpty) 'date': date,
+          if (startTime != null && startTime.trim().isNotEmpty)
+            'start_time': startTime,
+        },
+      );
+
+      final payload = response.data;
+
+      if (payload is! Map || payload['data'] is! Map) {
+        throw const TripException(
+          'INVALID RESPONSE',
+          'The itinerary response has an unexpected format.',
+        );
+      }
+
+      return Map<String, dynamic>.from(payload['data'] as Map);
+    } on DioException catch (e) {
+      throw TripException(
+        'ITINERARY FAILED',
+        _handleError(
+          e,
+          'Could not generate the itinerary. Please try again.',
         ),
       );
     }
@@ -601,6 +646,19 @@ class MockTripRepository implements TripRepository {
     String tripId,
   ) async {
     return [];
+  }
+
+  @override
+  Future<Map<String, dynamic>> generateItinerary(
+    String tripId,
+    List<String> placeIds, {
+    String? date,
+    String? startTime,
+  }) async {
+    throw const TripException(
+      'NOT CONNECTED',
+      'Real itinerary generation needs the live API.',
+    );
   }
 
   @override

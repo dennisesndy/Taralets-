@@ -132,6 +132,7 @@ String _fmtTime(dynamic v) {
 class _Place {
   const _Place({
     required this.id,
+    required this.backendId,
     required this.name,
     required this.category,
     required this.district,
@@ -155,6 +156,7 @@ class _Place {
   });
 
   final String id;
+  final String backendId;
   final String name;
   final String category;
   final String district;
@@ -193,6 +195,7 @@ class _Place {
 
   ItineraryCandidate toCandidate() => ItineraryCandidate(
     id: id,
+    backendId: backendId,
     name: name,
     category: category,
     area: district,
@@ -297,8 +300,14 @@ class _Place {
       description,
     ].join(' ').toLowerCase();
 
+    final masterId = _cleanText(raw['master_id'], '');
+    final rawId = _cleanText(raw['id'], '');
+    final backendId = masterId.isNotEmpty ? masterId : rawId;
+    final displayId = backendId.isNotEmpty ? backendId : name;
+
     return _Place(
-      id: '${_cleanText(raw['master_id'], name)}_$index',
+      id: '${displayId}_$index',
+      backendId: backendId,
       name: name,
       category: category,
       district: district,
@@ -349,13 +358,15 @@ class _GroupRecommendationsScreenState
   String _searchQuery = '';
   bool _loading = true;
   String? _error;
-  final ItineraryDraftController _draft = ItineraryDraftController(
-    members: const [],
-  );
+  late final ItineraryDraftController _draft;
 
   @override
   void initState() {
     super.initState();
+    _draft = ItineraryDraftController(
+      tripId: widget.groupId,
+      members: const [],
+    );
     _loadGroupContext();
     _fetchRecommendations();
   }
@@ -395,7 +406,13 @@ class _GroupRecommendationsScreenState
       return;
     }
 
-    await context.push(AppRoutes.selectedPlaces, extra: _draft);
+    await context.push(
+      AppRoutes.selectedPlaces,
+      extra: {
+        'draft': _draft,
+        'tripId': widget.groupId,
+      },
+    );
     if (mounted) setState(() {});
   }
 

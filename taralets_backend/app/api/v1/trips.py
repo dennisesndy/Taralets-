@@ -1,21 +1,30 @@
 import random
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.models.poi import Place
 from app.models.trip import Trip, TripMember
 from app.models.trip_member_preference import TripMemberPreference
 from app.models.user import User
 from app.schemas.profile import PreferenceSetupRequest
 from app.schemas.trip import (
     CreateTripRequest,
+    GenerateTripItineraryRequest,
     UpdateTripRequest,
     InviteMemberRequest,
     GroupPreferencesSchema,
 )
+from app.services.itinerary.trip_itinerary import (
+    build_trip_itinerary,
+    summarize_group_preferences,
+)
+from app.services.trip_service import build_group_profiles
 
 router = APIRouter()
 
@@ -793,3 +802,188 @@ async def update_group_preferences(
     await db.commit()
 
     return trip.group_preferences
+
+
+@router.post("/{trip_id}/itinerary/generate")
+async def generate_trip_itinerary(
+    trip_id: str,
+    payload: GenerateTripItineraryRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    trip_result = await db.execute(
+        select(Trip)
+        .options(
+            selectinload(Trip.members).selectinload(
+                TripMember.preferences
+            ),
+            selectinload(Trip.members).selectinload(TripMember.user),
+        )
+        .where(Trip.id == trip_id)
+    )
+    trip = trip_result.scalars().first()
+
+    if not trip:
+        raise HTTPException(
+            status_code=404,
+            detail="Trip not found",
+        )
+
+    if not any(
+        str(member.user_id) == str(current_user.id)
+        for member in trip.members
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You are not a member of this trip",
+        )
+
+    group_profiles = build_group_profiles(trip)
+
+    if not group_profiles:
+        raise HTTPException(
+            status_code=400,
+            detail="This trip has no members to plan for",
+        )
+
+    raw_ids = [
+        str(place_id).strip()
+        for place_id in payload.place_ids
+        if str(place_id).strip()
+    ]
+
+    if not raw_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="Select at least one place",
+        )
+
+    numeric_ids = [
+        int(place_id)
+        for place_id in raw_ids
+        if place_id.isdigit()
+    ]
+
+    conditions = [Place.master_id.in_(raw_ids)]
+
+    if numeric_ids:
+        conditions.append(Place.id.in_(numeric_ids))
+
+    places_result = await db.execute(
+        select(Place).where(or_(*conditions))
+    )
+    places = list(places_result.scalars().all())
+
+    if not places:
+        raise HTTPException(
+            status_code=404,
+            detail="None of the selected places were found",
+        )
+
+    found_ids = {
+        value
+        for place in places
+        for value in (str(place.master_id), str(place.id))
+    }
+    missing_place_ids = [
+        place_id
+        for place_id in raw_ids
+        if place_id not in found_ids
+    ]
+
+    if missing_place_ids:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Some selected places could not be found: "
+                + ", ".join(sorted(set(missing_place_ids)))
+            ),
+        )
+
+    trip_date = (
+        payload.date.date()
+        if payload.date
+        else (
+            trip.date.date()
+            if isinstance(trip.date, datetime)
+            else None
+        )
+    )
+
+    start_location = payload.start_location
+
+    if start_location is None and (
+        trip.latitude is not None and trip.longitude is not None
+    ):
+        start_location = {
+            "lat": trip.latitude,
+            "lng": trip.longitude,
+        }
+
+    itinerary = build_trip_itinerary(
+        group_profiles=group_profiles,
+        candidate_places=places,
+        trip_date=trip_date,
+        start_time=payload.start_time or trip.arrival_target,
+        start_location=start_location,
+        origin_lat=trip.latitude,
+        origin_lon=trip.longitude,
+    )
+
+    members = []
+
+    for member in sorted(
+        trip.members or [],
+        key=lambda item: (
+            not bool(item.is_leader),
+            str(item.id),
+        ),
+    ):
+        user = getattr(member, "user", None)
+        email = str(getattr(user, "email", "") or "")
+        email_prefix = email.split("@")[0] if email else "user"
+        full_name = str(getattr(user, "full_name", "") or "").strip()
+        display_name = full_name or email_prefix
+
+        members.append(
+            {
+                "member_id": str(member.id),
+                "user_id": str(member.user_id),
+                "username": email_prefix,
+                "name": display_name,
+                "is_leader": bool(member.is_leader),
+                "is_current_user": (
+                    str(member.user_id) == str(current_user.id)
+                ),
+            }
+        )
+
+    group_preferences, pace = summarize_group_preferences(
+        group_profiles
+    )
+
+    date_label = (
+        trip.long_date
+        or trip.date_label
+        or (
+            trip_date.strftime("%a, %b %d")
+            if trip_date is not None
+            else "Trip day"
+        )
+    )
+
+    return {
+        "status": "success",
+        "data": {
+            "trip_id": str(trip.id),
+            "title": trip.title,
+            "date": trip_date.isoformat() if trip_date else None,
+            "date_label": date_label,
+            "status": "review",
+            "pace": pace,
+            "group_preferences": group_preferences,
+            "members": members,
+            "missing_place_ids": missing_place_ids,
+            **itinerary,
+        },
+    }

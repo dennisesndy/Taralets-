@@ -128,6 +128,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                   final extra = state.extra;
                   return ItineraryScreen(
                     initialPlan: extra is ItineraryPlan ? extra : null,
+                    tripId: extra is Map
+                        ? extra['tripId'] as String?
+                        : null,
                   );
                 },
               ),
@@ -255,9 +258,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: AppRoutes.recommendations, // Gamitin ang variable mo
           builder: (context, state) {
-            // Kunin ang ID bilang String
-            final extra = state.extra as Map<String, dynamic>?;
-            final groupId = extra?['groupId'] as String? ?? '';
+            final extra = state.extra;
+            final groupId = extra is Map
+                ? extra['groupId'] as String? ?? ''
+                : '';
 
             return GroupRecommendationsScreen(groupId: groupId);
           },
@@ -267,9 +271,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
           final extra = state.extra;
-          return SelectedPlacesScreen(
-            draft: extra is ItineraryDraftController ? extra : null,
-          );
+          final draft = extra is ItineraryDraftController
+              ? extra
+              : extra is Map
+              ? extra['draft'] as ItineraryDraftController?
+              : null;
+          final tripId = extra is Map
+              ? extra['tripId'] as String?
+              : draft?.tripId;
+          return SelectedPlacesScreen(draft: draft, tripId: tripId);
         },
       ),
     ],

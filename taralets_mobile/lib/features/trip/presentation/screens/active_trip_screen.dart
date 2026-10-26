@@ -678,7 +678,10 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
           TaraletsButton.orange(
             small: true,
             label: 'View Recommendations',
-            onPressed: () => context.push(AppRoutes.recommendations),
+            onPressed: () => context.push(
+              AppRoutes.recommendations,
+              extra: {'groupId': _trip.id},
+            ),
           ),
         ],
       ),

@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import Dict, List, Optional
 from datetime import datetime
 from enum import Enum
 
@@ -42,3 +42,10 @@ class UpdateTripRequest(BaseModel):
     meetup_full: str
     latitude: float
     longitude: float
+
+
+class GenerateTripItineraryRequest(BaseModel):
+    place_ids: List[str] = Field(min_length=1, max_length=50)
+    date: Optional[datetime] = None
+    start_time: Optional[str] = None
+    start_location: Optional[Dict[str, float]] = None
