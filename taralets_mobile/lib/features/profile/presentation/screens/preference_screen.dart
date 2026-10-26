@@ -52,6 +52,9 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
     'Vegan',
     'Budget-Friendly',
   ];
+  final List<String> _accessibilityOptions = [
+    'Good for children', 'Pet friendly', 'Wheelchair accessible',
+  ];
 
   static const Map<String, String> _activityEmoji = {
     'Accommodations': '🏨',
@@ -88,7 +91,6 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
   bool _tagError = false;
 
   double _maxBudget = 2500.0;
-  String _preferredPace = 'Moderate';
   String _passengerType = 'Regular';
   List<String> _accessibilityPreferences = [];
 
@@ -149,8 +151,6 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
           _maxBudget =
               (preferences['max_budget'] as num?)?.toDouble() ?? 2500.0;
 
-          _preferredPace =
-              preferences['preferred_pace'] as String? ?? 'Moderate';
 
           _passengerType =
               preferences['passenger_type'] as String? ?? 'Regular';
@@ -254,7 +254,6 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
           activityTags: _selectedActivities,
           dietaryPreferences: dietaryToSave,
           maxBudget: _maxBudget,
-          preferredPace: _preferredPace,
           passengerType: _passengerType,
           accessibilityPreferences: _accessibilityPreferences,
         );
@@ -275,7 +274,6 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
         activityTags: _selectedActivities,
         dietaryPreferences: dietaryToSave,
         maxBudget: _maxBudget,
-        preferredPace: _preferredPace,
         passengerType: _passengerType,
         accessibilityPreferences: _accessibilityPreferences,
       );
@@ -487,6 +485,22 @@ class _PreferenceScreenState extends ConsumerState<PreferenceScreen>
                     FadeSlideIn(
                       delay: const Duration(milliseconds: 450),
                       child: _dietarySection(),
+                    ),
+                    const SizedBox(height: 16),
+                    _SectionCard(
+                      emoji: '♿',
+                      title: 'Accessibility',
+                      subtitle: 'Optional needs. You can update these anytime.',
+                      child: Wrap(spacing: 8, runSpacing: 8, children: _accessibilityOptions.map((option) => _SelectChip(
+                        label: option,
+                        selected: _accessibilityPreferences.contains(option),
+                        onTap: () {
+                          if (!_isEditing) return;
+                          setState(() => _accessibilityPreferences.contains(option)
+                              ? _accessibilityPreferences.remove(option)
+                              : _accessibilityPreferences.add(option));
+                        },
+                      )).toList()),
                     ),
                   ],
                 ),

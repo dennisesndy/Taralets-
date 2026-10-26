@@ -318,3 +318,28 @@ def test_string_accessibility_value_is_not_split_into_characters():
         "Wheelchair Accessible",
     ]
     assert results[0]["member_scores"][0] > 0.7
+
+
+def test_accessibility_status_separates_verified_unknown_and_negative():
+    profiles = [{"activity_tags": ["Museums"], "accessibility_preferences": ["Wheelchair accessible"]}]
+    places = [
+        {"id": 1, "name": "Verified", "wheelchair_accessible": True},
+        {"id": 2, "name": "Unknown", "wheelchair_accessible": None},
+        {"id": 3, "name": "No", "wheelchair_accessible": False},
+    ]
+    results = aggregate_group_scores(profiles, places)
+    by_name = {place["name"]: place["accessibility_match_status"] for place in results}
+    assert by_name == {"Verified": "verified", "Unknown": "unknown", "No": "does_not_meet"}
+    assert [place["name"] for place in results] == ["Verified", "Unknown", "No"]
+
+
+def test_group_accessibility_requires_all_members_needs():
+    profiles = [
+        {"accessibility_preferences": ["Wheelchair accessible"]},
+        {"accessibility_preferences": ["Pet friendly"]},
+    ]
+    result = aggregate_group_scores(profiles, [{
+        "id": 1, "name": "Partial", "wheelchair_accessible": True,
+        "pet_friendly": None,
+    }])[0]
+    assert result["accessibility_match_status"] == "unknown"

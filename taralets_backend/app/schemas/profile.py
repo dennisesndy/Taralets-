@@ -19,7 +19,6 @@ ActivityTag = Literal[
         "Others",
 ]
 DietaryTag = Literal['None', 'Halal', 'Vegan', 'Budget-Friendly']
-PaceTag = Literal['Fast', 'Moderate', 'Leisure']
 AccessibilityTag = Literal['Good for children', 'Pet friendly', 'Wheelchair accessible']
 
 class PreferenceSetupRequest(BaseModel):
@@ -29,6 +28,9 @@ class PreferenceSetupRequest(BaseModel):
     )
     dietary_preferences: List[DietaryTag]
     max_budget: float
-    preferred_pace: PaceTag
     passenger_type: str
-    accessibility_preferences: List[AccessibilityTag] = []
+    accessibility_preferences: List[AccessibilityTag] = Field(default_factory=list)
+
+
+class TripPreferenceSetupRequest(PreferenceSetupRequest):
+    desired_places_per_day: int | None = Field(default=None, ge=1)

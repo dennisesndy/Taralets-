@@ -2,13 +2,6 @@
 from typing import Any
 
 
-PACE_VALUES = {
-    "leisure": 0.0,
-    "moderate": 0.5,
-    "fast": 1.0,
-}
-
-
 def _normalize_tags(values: Any) -> list[str]:
     """Normalize tags and remove duplicates while preserving order."""
     if not isinstance(values, (list, tuple, set)):
@@ -56,11 +49,13 @@ def build_preference_vector(
     if budget < 0:
         raise ValueError("max_budget cannot be negative")
 
-    raw_pace = str(
-        profile.get("preferred_pace", "Moderate")
-    ).strip().casefold()
-
-    pace = PACE_VALUES.get(raw_pace, PACE_VALUES["moderate"])
+    raw_target = profile.get("desired_places_per_day")
+    try:
+        desired_places_per_day = int(raw_target) if raw_target is not None else None
+        if desired_places_per_day is not None and desired_places_per_day < 1:
+            desired_places_per_day = None
+    except (TypeError, ValueError):
+        desired_places_per_day = None
 
     return {
         "activities": _normalize_tags(
@@ -74,7 +69,7 @@ def build_preference_vector(
         ),
         "max_budget": budget,
         "budget_normalized": min(budget / budget_scale, 1.0),
-        "pace_normalized": pace,
+        "desired_places_per_day": desired_places_per_day,
     }
 
 

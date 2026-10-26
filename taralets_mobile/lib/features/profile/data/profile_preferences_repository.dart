@@ -35,7 +35,6 @@ class ProfilePreferencesRepository {
     required List<String> activityTags,
     required List<String> dietaryPreferences,
     double maxBudget = 2500.0,
-    String preferredPace = 'Moderate',
     String passengerType = 'Regular',
     List<String> accessibilityPreferences = const [],
   }) async {
@@ -46,7 +45,6 @@ class ProfilePreferencesRepository {
           'activity_tags': activityTags,
           'dietary_preferences': dietaryPreferences,
           'max_budget': maxBudget,
-          'preferred_pace': preferredPace,
           'passenger_type': passengerType,
           'accessibility_preferences': accessibilityPreferences,
         },
@@ -66,7 +64,6 @@ class ProfilePreferencesRepository {
     required List<String> activityTags,
     required List<String> dietaryPreferences,
     double maxBudget = 2500.0,
-    String preferredPace = 'Moderate',
     String passengerType = 'Regular',
     List<String> accessibilityPreferences = const [],
   }) async {
@@ -83,7 +80,6 @@ class ProfilePreferencesRepository {
           'activity_tags': activityTags,
           'dietary_preferences': dietaryPreferences,
           'max_budget': maxBudget,
-          'preferred_pace': preferredPace,
           'passenger_type': passengerType,
           'accessibility_preferences': accessibilityPreferences,
         },
@@ -104,7 +100,7 @@ class ProfilePreferencesRepository {
     required List<String> activityTags,
     required List<String> dietaryPreferences,
     double maxBudget = 2500.0,
-    String preferredPace = 'Moderate',
+    int? desiredPlacesPerDay,
     List<String> accessibilityPreferences = const [],
   }) async {
     try {
@@ -114,7 +110,7 @@ class ProfilePreferencesRepository {
           'activity_tags': activityTags,
           'dietary_preferences': dietaryPreferences,
           'max_budget': maxBudget,
-          'preferred_pace': preferredPace,
+          'desired_places_per_day': desiredPlacesPerDay,
           'accessibility_preferences': accessibilityPreferences,
           'passenger_type': 'Regular',
         },

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'models/itinerary_draft_models.dart';
@@ -79,7 +81,6 @@ ItineraryPlan itineraryPlanFromApi(Map<String, dynamic> data) {
           activityTags: _stringList(stop['activity_tags']),
           dietaryTags: _stringList(stop['dietary_tags']),
           accessibilityTags: _stringList(stop['accessibility_tags']),
-          pace: _text(data['pace'], 'Moderate'),
           groupScore: _double(stop['group_score']),
           notes: warning.isEmpty ? null : warning,
           latitude: _nullableDouble(stop['latitude']),
@@ -95,7 +96,7 @@ ItineraryPlan itineraryPlanFromApi(Map<String, dynamic> data) {
     status: ItineraryStatus.review,
     days: [ItineraryDay(label: 'Day 1', stops: stops)],
     members: members,
-    pace: _text(data['pace'], 'Moderate'),
+    desiredPlacesPerDay: _nullableInt(data['desired_places_per_day']),
     groupPreferences: _stringList(data['group_preferences']),
   );
 }
@@ -115,6 +116,11 @@ double _double(dynamic value, [double fallback = 0]) {
   return double.tryParse(value?.toString() ?? '') ?? fallback;
 }
 
+int? _nullableInt(dynamic value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '');
+}
+
 double? _nullableDouble(dynamic value) {
   if (value == null) return null;
   if (value is num) return value.toDouble();
@@ -122,22 +128,59 @@ double? _nullableDouble(dynamic value) {
 }
 
 List<String> _stringList(dynamic value) {
-  if (value is List) {
-    return [
-      for (final item in value)
-        if (item != null && item.toString().trim().isNotEmpty)
-          item.toString().trim(),
-    ];
+  final values = <String>[];
+  void add(dynamic item) {
+    if (item == null) return;
+    if (item is Iterable) {
+      for (final nested in item) {
+        add(nested);
+      }
+      return;
+    }
+    var text = item.toString().trim();
+    if (text.isEmpty) return;
+    if (text.startsWith('[')) {
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is List) {
+          add(decoded);
+          return;
+        }
+      } catch (_) {}
+    }
+    if (text.length >= 2 &&
+        ((text.startsWith('{') && text.endsWith('}')) ||
+            (text.startsWith('[') && text.endsWith(']')))) {
+      text = text.substring(1, text.length - 1);
+    }
+
+    final parts = <String>[];
+    final buffer = StringBuffer();
+    var quote = '';
+    for (final character in text.split('')) {
+      if ((character == '"' || character == "'") &&
+          (quote.isEmpty || quote == character)) {
+        quote = quote.isEmpty ? character : '';
+        continue;
+      }
+      if (quote.isEmpty && (character == ',' || character == ';' || character == '|')) {
+        parts.add(buffer.toString());
+        buffer.clear();
+      } else {
+        buffer.write(character);
+      }
+    }
+    parts.add(buffer.toString());
+    for (final part in parts) {
+      final label = part.trim().replaceAll(RegExp(r'''^[\s"'{}\[\]]+|[\s"'{}\[\]]+$'''), '').trim();
+      if (label.isNotEmpty && !values.any((existing) => existing.toLowerCase() == label.toLowerCase())) {
+        values.add(label);
+      }
+    }
   }
 
-  if (value is String) {
-    return [
-      for (final item in value.split(','))
-        if (item.trim().isNotEmpty) item.trim(),
-    ];
-  }
-
-  return const [];
+  add(value);
+  return values;
 }
 
 TimeOfDay _parseTime(

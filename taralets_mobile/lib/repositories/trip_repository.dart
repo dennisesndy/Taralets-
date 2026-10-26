@@ -344,7 +344,7 @@ class ApiTripRepository implements TripRepository {
           'preferences': {
             'categories': dto.preferences.categories,
             'budget': dto.preferences.budget,
-            'walking': dto.preferences.walking,
+            'desired_places_per_day': dto.preferences.desiredPlacesPerDay,
           },
         },
       );
@@ -456,7 +456,7 @@ class ApiTripRepository implements TripRepository {
       data: {
         'categories': preferences.categories,
         'budget': preferences.budget,
-        'walking': preferences.walking,
+        'desired_places_per_day': preferences.desiredPlacesPerDay,
       },
     );
   }

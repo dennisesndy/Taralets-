@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import csv
+import json
 import math
 import re
 from datetime import date as Date, datetime, time
+from io import StringIO
 from typing import Any
 
 from app.services.itinerary.route_sequencing import (
@@ -266,6 +269,7 @@ def _minutes_between(start: time, end: time) -> int:
 
 
 def _unique_strings(values: Any) -> list[str]:
+    """Flatten tags, including values serialized as Postgres array text."""
     result: list[str] = []
     seen: set[str] = set()
 
@@ -273,36 +277,65 @@ def _unique_strings(values: Any) -> list[str]:
         return result
 
     if isinstance(values, str):
-        values = [values]
+        text = values.strip()
+        if not text:
+            return result
+        if text.startswith("["):
+            try:
+                decoded = json.loads(text)
+                if isinstance(decoded, list):
+                    values = decoded
+                else:
+                    values = [text]
+            except (TypeError, ValueError):
+                values = [text]
+        else:
+            values = [text]
 
     if not isinstance(values, (list, tuple, set)):
         return result
 
     for value in values:
         text = str(value).strip()
-        if not text:
-            continue
-        key = text.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        result.append(text)
+        # CSV parsing honors quoted commas and handles the common dataset
+        # representation: {"Coffee Shop", Cafe, Food}.
+        if len(text) >= 2 and text[0] in "{[" and text[-1] in "}]":
+            text = text[1:-1].strip()
+        try:
+            parts = next(csv.reader(StringIO(text), skipinitialspace=True))
+        except (csv.Error, StopIteration):
+            parts = [text]
+        for part in parts:
+            label = part.strip().strip("\\\"'").strip()
+            if not label or label.casefold() in {"none", "null", "nan"}:
+                continue
+            key = label.casefold()
+            if key not in seen:
+                seen.add(key)
+                result.append(label)
 
     return result
 
 
 def summarize_group_preferences(
     group_profiles: list[dict[str, Any]],
-) -> tuple[list[str], str]:
+) -> tuple[list[str], int | None]:
     tags: list[str] = []
     budgets: list[float] = []
-    paces: list[str] = []
+    accessibility: list[str] = []
+    place_targets: list[int] = []
 
     for profile in group_profiles:
         tags.extend(_unique_strings(profile.get("activity_tags")))
-        pace = str(profile.get("preferred_pace") or "").strip()
-        if pace:
-            paces.append(pace)
+        accessibility.extend(_unique_strings(profile.get("accessibility_preferences")))
+        target = profile.get("desired_places_per_day")
+        try:
+            if target is not None and profile.get("has_preferences"):
+                target = int(target)
+                if target > 0:
+                    place_targets.append(target)
+        except (TypeError, ValueError):
+            pass
 
         budget = profile.get("max_budget")
         try:
@@ -316,16 +349,9 @@ def summarize_group_preferences(
 
     if budgets:
         preferences.append(f"₱{min(budgets):,.0f} / person")
-
-    pace = "Moderate"
-    if paces:
-        counts: dict[str, int] = {}
-        for item in paces:
-            key = item.casefold()
-            counts[key] = counts.get(key, 0) + 1
-        pace = max(counts, key=counts.get).title()
-
-    return preferences, pace
+    preferences.extend(f"Accessibility: {tag}" for tag in _unique_strings(accessibility))
+    target = math.floor(sum(place_targets) / len(place_targets) + 0.5) if place_targets else None
+    return preferences, target
 
 
 def build_trip_itinerary(
@@ -344,6 +370,7 @@ def build_trip_itinerary(
         start_location=start_location,
         origin_lat=origin_lat,
         origin_lon=origin_lon,
+        desired_places_per_day=summarize_group_preferences(group_profiles)[1],
     )
 
     route_items = route.get("itinerary") or []
@@ -445,6 +472,7 @@ def build_trip_itinerary(
                 "accessibility_tags": _unique_strings(
                     _get(place, "accessibility_pets", [])
                 ),
+                "accessibility_match_status": _get(place, "accessibility_match_status", "unknown"),
                 "start_time": _format_clock(cursor),
                 "end_time": _format_clock(end),
                 "duration_minutes": duration,

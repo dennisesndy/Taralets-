@@ -117,7 +117,7 @@ Base URL: `http://localhost:8000/api/v1`
     "title": "Intramuros Tour",
     "date_label": "Mon, Oct 26",
     "status": "review",
-    "pace": "Moderate",
+    "desired_places_per_day": 4,
     "group_preferences": ["Museums", "Food", "₱1,000 / person"],
     "members": [
       {

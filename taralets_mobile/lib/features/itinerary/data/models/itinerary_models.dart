@@ -44,7 +44,6 @@ class ItineraryStop {
     this.activityTags = const [],
     this.dietaryTags = const [],
     this.accessibilityTags = const [],
-    this.pace = 'Moderate',
     this.groupScore = 0,
     this.notes,
     this.latitude,
@@ -68,7 +67,6 @@ class ItineraryStop {
   final List<String> activityTags;
   final List<String> dietaryTags;
   final List<String> accessibilityTags;
-  final String pace;
   final double groupScore;
   final String? notes;
   final double? latitude;
@@ -124,7 +122,7 @@ class ItineraryPlan {
     required this.status,
     required this.days,
     required this.members,
-    required this.pace,
+    this.desiredPlacesPerDay,
     required this.groupPreferences,
   });
 
@@ -133,7 +131,7 @@ class ItineraryPlan {
   final ItineraryStatus status;
   final List<ItineraryDay> days;
   final List<ItineraryMember> members;
-  final String pace;
+  final int? desiredPlacesPerDay;
   final List<String> groupPreferences;
 
   List<ItineraryStop> get stops => [
@@ -172,7 +170,7 @@ class ItineraryPlan {
     ItineraryStatus? status,
     List<ItineraryDay>? days,
     List<ItineraryMember>? members,
-    String? pace,
+    int? desiredPlacesPerDay,
     List<String>? groupPreferences,
   }) => ItineraryPlan(
     title: title ?? this.title,
@@ -180,7 +178,7 @@ class ItineraryPlan {
     status: status ?? this.status,
     days: days ?? this.days,
     members: members ?? this.members,
-    pace: pace ?? this.pace,
+    desiredPlacesPerDay: desiredPlacesPerDay ?? this.desiredPlacesPerDay,
     groupPreferences: groupPreferences ?? this.groupPreferences,
   );
 }

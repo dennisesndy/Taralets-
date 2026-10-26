@@ -12,7 +12,7 @@ class TripStatus(str, Enum):
 class GroupPreferencesSchema(BaseModel):
     categories: List[str]
     budget: str
-    walking: str
+    desired_places_per_day: int | None = Field(default=None, ge=1)
 
 class CreateTripRequest(BaseModel):
     code: str

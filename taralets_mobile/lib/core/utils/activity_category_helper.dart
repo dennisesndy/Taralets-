@@ -70,8 +70,12 @@ String normalizeActivityCategory(String value) {
     'tourist sites': 'Historical / Tourist Site',
     'tourist attraction': 'Historical / Tourist Site',
     'tourist attractions': 'Historical / Tourist Site',
+    'tourist spot': 'Historical / Tourist Site',
+    'tourist spots': 'Historical / Tourist Site',
     'landmark': 'Historical / Tourist Site',
     'landmarks': 'Historical / Tourist Site',
+    'library': 'Museums',
+    'libraries': 'Museums',
   };
 
   return aliases[tag] ?? value.trim();

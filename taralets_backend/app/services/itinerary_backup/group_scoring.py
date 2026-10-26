@@ -89,7 +89,7 @@ def aggregate_group_scores(
                 "activity_tags",
                 "dietary_preferences",
                 "max_budget",
-                "preferred_pace",
+                "desired_places_per_day",
                 "accessibility_preferences",
             )
         )

@@ -78,6 +78,34 @@ ACCESSIBILITY_FIELDS = {
 }
 
 
+def accessibility_match_status(place, group_profiles: list[dict]) -> str:
+    required = set().union(*(
+        _normalize(profile.get("accessibility_preferences", []))
+        for profile in group_profiles
+    )) if group_profiles else set()
+    if not required:
+        return "not_requested"
+
+    states = []
+    available = _normalize(_accessibility_values(place))
+    for need in required:
+        field = ACCESSIBILITY_FIELDS.get(need)
+        value = _get(place, field, None) if field else None
+        if value is False:
+            states.append(False)
+        elif need in available:
+            states.append(True)
+        elif field is None:
+            states.append(None)
+        else:
+            states.append(value)
+    if any(value is False for value in states):
+        return "does_not_meet"
+    if all(value is True for value in states):
+        return "verified"
+    return "unknown"
+
+
 def _calculate_accessibility_score(
     place,
     required: set[str],
@@ -446,25 +474,17 @@ def _place_activity_values(place) -> set[str]:
         if (canonical := _canonical_activity(value))
     }
 
-    # Include all subcategories to recognize more specific activities.
+    # A selected activity may match a primary category or a dataset
+    # subcategory. Keep both so a place tagged with a selected subcategory is
+    # included and can be shown under that activity's recommendation tab.
     subcategory_activities = set()
-
-    for field in (
-        "sub_category_1",
-        "sub_category_2",
-        "sub_category_3",
-    ):
-        values = _activity_values(get_value(field))
-
+    for field in ("sub_category_1", "sub_category_2", "sub_category_3"):
         subcategory_activities.update(
             canonical
-            for value in values
+            for value in _activity_values(get_value(field))
             if (canonical := _canonical_activity(value))
         )
-
-    # Use category and subcategories before falling back to activity tags.
     place_activities = category_activities | subcategory_activities
-
     if place_activities:
         return place_activities
 
@@ -477,6 +497,20 @@ def _place_activity_values(place) -> set[str]:
         for value in tag_values
         if (canonical := _canonical_activity(value))
     }
+
+
+def matched_activity_categories(place, group_profiles: list[dict]) -> list[str]:
+    """Return selected activity categories this place matches, in group order."""
+    place_activities = _place_activity_values(place)
+    matched = []
+    seen = set()
+    for profile in group_profiles:
+        for value in profile.get("activity_tags") or []:
+            canonical = _canonical_activity(value)
+            if canonical and canonical in place_activities and canonical not in seen:
+                seen.add(canonical)
+                matched.append(canonical)
+    return matched
 
 
 def place_matches_activity_preferences(place, member_tags):
@@ -773,6 +807,19 @@ def aggregate_group_scores(
             "wheelchair_accessible": _get(place, "wheelchair_accessible"),
             "good_for_children": _get(place, "good_for_children"),
             "accessibility_pets": _accessibility_values(place),
+            "accessibility_match_status": accessibility_match_status(
+                place, group_profiles
+            ),
+            "activity_match": any(
+                place_matches_activity_preferences(
+                    place, profile.get("activity_tags", [])
+                )
+                for profile in group_profiles
+                if profile.get("activity_tags")
+            ),
+            "matched_activity_categories": matched_activity_categories(
+                place, group_profiles
+            ),
             "days_open": _get(place, "days_open", []) or [],
             "open_time": _as_iso_time(_get(place, "open_time")),
             "close_time": _as_iso_time(_get(place, "close_time")),
@@ -823,8 +870,11 @@ def aggregate_group_scores(
         })
 
     scored.sort(
-        key=lambda item: item["match_score"],
-        reverse=True,
+        key=lambda item: (
+            {"verified": 0, "unknown": 1, "does_not_meet": 2,
+             "not_requested": 0}[item["accessibility_match_status"]],
+            -item["match_score"],
+        ),
     )
 
     return scored

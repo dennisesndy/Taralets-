@@ -17,7 +17,7 @@ def solve_group_consensus(
 
     Budget is treated as a strict group ceiling: the smallest member
     budget is used. Categorical preferences are aggregated by support,
-    and pace uses the weighted average of normalized member values.
+    and the place target is the rounded average of saved member targets.
     """
     if not profiles:
         raise ValueError("At least one member profile is required")
@@ -57,10 +57,17 @@ def solve_group_consensus(
             for tag, value in sorted(support.items())
         }
 
-    pace = sum(
-        vector["pace_normalized"] * weight
+    place_targets = [
+        (vector["desired_places_per_day"], weight)
         for vector, weight in zip(vectors, weights)
-    ) / total_weight
+        if vector["desired_places_per_day"] is not None
+    ]
+    desired_places_per_day = (
+        int(sum(value * weight for value, weight in place_targets) /
+            sum(weight for _, weight in place_targets) + 0.5)
+        if place_targets and sum(weight for _, weight in place_targets) > 0
+        else None
+    )
 
     budget_ceiling = min(
         vector["max_budget"] for vector in vectors
@@ -73,7 +80,7 @@ def solve_group_consensus(
             "budget_normalized": min(
                 budget_ceiling / budget_scale, 1.0
             ),
-            "pace_normalized": round(pace, 4),
+            "desired_places_per_day": desired_places_per_day,
             "activity_support": weighted_tag_support("activities"),
             "dietary_support": weighted_tag_support("dietary"),
             "accessibility_support": weighted_tag_support(

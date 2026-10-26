@@ -30,7 +30,6 @@ async def save_preferences(payload: PreferenceSetupRequest, db: AsyncSession = D
         existing.activity_tags = payload.activity_tags
         existing.dietary_preferences = payload.dietary_preferences
         existing.max_budget = payload.max_budget
-        existing.preferred_pace = payload.preferred_pace
         existing.passenger_type = payload.passenger_type
         existing.accessibility_preferences = payload.accessibility_preferences
     else:
@@ -39,7 +38,6 @@ async def save_preferences(payload: PreferenceSetupRequest, db: AsyncSession = D
             activity_tags=payload.activity_tags,
             dietary_preferences=payload.dietary_preferences,
             max_budget=payload.max_budget,
-            preferred_pace=payload.preferred_pace,
             passenger_type=payload.passenger_type,
             accessibility_preferences=payload.accessibility_preferences
         )
@@ -87,7 +85,6 @@ async def save_onboarding_preferences(
         existing.activity_tags = payload.activity_tags
         existing.dietary_preferences = payload.dietary_preferences
         existing.max_budget = payload.max_budget
-        existing.preferred_pace = payload.preferred_pace
         existing.passenger_type = payload.passenger_type
         existing.accessibility_preferences = (
             payload.accessibility_preferences
@@ -99,7 +96,6 @@ async def save_onboarding_preferences(
                 activity_tags=payload.activity_tags,
                 dietary_preferences=payload.dietary_preferences,
                 max_budget=payload.max_budget,
-                preferred_pace=payload.preferred_pace,
                 passenger_type=payload.passenger_type,
                 accessibility_preferences=(
                     payload.accessibility_preferences

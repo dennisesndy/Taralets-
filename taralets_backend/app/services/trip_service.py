@@ -9,14 +9,6 @@ from app.models.trip import Trip, TripMember
 
 
 DEFAULT_MAX_BUDGET = 2500.0
-DEFAULT_PREFERRED_PACE = "Moderate"
-
-PACE_ALIASES = {
-    "fast": "Fast",
-    "moderate": "Moderate",
-    "leisure": "Leisure",
-}
-
 IGNORED_TAGS = {"none", "n/a", "not applicable"}
 
 
@@ -66,9 +58,12 @@ def _safe_budget(value: Any) -> float:
     return budget
 
 
-def _normalize_pace(value: Any) -> str:
-    pace = str(value or "").strip().casefold()
-    return PACE_ALIASES.get(pace, DEFAULT_PREFERRED_PACE)
+def _safe_place_count(value: Any) -> int | None:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return None
+    return count if count >= 1 else None
 
 
 def build_group_profiles(trip: Trip) -> list[dict]:
@@ -119,13 +114,9 @@ def build_group_profiles(trip: Trip) -> list[dict]:
             else DEFAULT_MAX_BUDGET
         )
 
-        preferred_pace = (
-            _normalize_pace(
-                getattr(preference, "preferred_pace", None)
-            )
-            if has_preferences
-            else DEFAULT_PREFERRED_PACE
-        )
+        desired_places_per_day = _safe_place_count(
+            getattr(preference, "desired_places_per_day", None)
+        ) if has_preferences else None
 
         user_id = getattr(member, "user_id", None)
 
@@ -148,7 +139,7 @@ def build_group_profiles(trip: Trip) -> list[dict]:
                 "activities": list(activity_tags),
                 "dietary_preferences": dietary_preferences,
                 "max_budget": max_budget,
-                "preferred_pace": preferred_pace,
+                "desired_places_per_day": desired_places_per_day,
                 "accessibility_preferences": (
                     accessibility_preferences
                 ),

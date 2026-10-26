@@ -12,7 +12,7 @@ from app.models.poi import Place
 from app.models.trip import Trip, TripMember
 from app.models.trip_member_preference import TripMemberPreference
 from app.models.user import User
-from app.schemas.profile import PreferenceSetupRequest
+from app.schemas.profile import TripPreferenceSetupRequest
 from app.schemas.trip import (
     CreateTripRequest,
     GenerateTripItineraryRequest,
@@ -73,8 +73,8 @@ async def _serialize_trip(db: AsyncSession, trip: Trip) -> dict:
             preferences.extend(preference.activity_tags or [])
             preferences.extend(preference.dietary_preferences or [])
 
-            if preference.preferred_pace:
-                preferences.append(preference.preferred_pace)
+            if preference.desired_places_per_day is not None:
+                preferences.append(f"{preference.desired_places_per_day} places/day")
 
             preferences.extend(
                 preference.accessibility_preferences or []
@@ -106,9 +106,8 @@ async def _serialize_trip(db: AsyncSession, trip: Trip) -> dict:
                     if (preference and preference.max_budget is not None)
                     else None
                 ),
-                "preferred_pace": (
-                    preference.preferred_pace
-                    if preference else None
+                "desired_places_per_day": (
+                    preference.desired_places_per_day if preference else None
                 ),
                 "accessibility_preferences": (
                     preference.accessibility_preferences or []
@@ -234,7 +233,7 @@ async def join_trip(
 @router.post("/{trip_id}/member-preferences")
 async def save_member_preferences(
     trip_id: str,
-    payload: PreferenceSetupRequest,
+    payload: TripPreferenceSetupRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -261,7 +260,7 @@ async def save_member_preferences(
         existing.activity_tags = payload.activity_tags
         existing.dietary_preferences = payload.dietary_preferences
         existing.max_budget = payload.max_budget
-        existing.preferred_pace = payload.preferred_pace
+        existing.desired_places_per_day = payload.desired_places_per_day
         existing.accessibility_preferences = payload.accessibility_preferences
     else:
         new_preferences = TripMemberPreference(
@@ -269,7 +268,7 @@ async def save_member_preferences(
             activity_tags=payload.activity_tags,
             dietary_preferences=payload.dietary_preferences,
             max_budget=payload.max_budget,
-            preferred_pace=payload.preferred_pace,
+            desired_places_per_day=payload.desired_places_per_day,
             accessibility_preferences=payload.accessibility_preferences,
         )
         db.add(new_preferences)
@@ -326,7 +325,7 @@ async def create_trip(
         group_preferences={
             "categories": payload.preferences.categories,
             "budget": payload.preferences.budget,
-            "walking": payload.preferences.walking,
+            "desired_places_per_day": payload.preferences.desired_places_per_day,
         },
     )
 
@@ -670,7 +669,7 @@ async def get_group_preferences(
     return trip.group_preferences or {
         "categories": [],
         "budget": "₱0",
-        "walking": "Not specified",
+        "desired_places_per_day": None,
     }
 
 @router.put("/{trip_id}/preferences")
@@ -706,7 +705,7 @@ async def update_group_preferences(
     trip.group_preferences = {
         "categories": payload.categories,
         "budget": payload.budget,
-        "walking": payload.walking,
+        "desired_places_per_day": payload.desired_places_per_day,
     }
 
     activity_options = {
@@ -769,10 +768,7 @@ async def update_group_preferences(
     except (ValueError, TypeError):
         max_budget = 2500.0
 
-    preferred_pace = payload.walking
-
-    if preferred_pace not in {"Fast", "Moderate", "Leisure"}:
-        preferred_pace = "Moderate"
+    desired_places_per_day = payload.desired_places_per_day
 
     existing_preferences = await db.scalar(
         select(TripMemberPreference).where(
@@ -784,7 +780,7 @@ async def update_group_preferences(
         existing_preferences.activity_tags = activity_tags
         existing_preferences.dietary_preferences = dietary_preferences
         existing_preferences.max_budget = max_budget
-        existing_preferences.preferred_pace = preferred_pace
+        existing_preferences.desired_places_per_day = desired_places_per_day
         existing_preferences.accessibility_preferences = (
             accessibility_preferences
         )
@@ -794,7 +790,7 @@ async def update_group_preferences(
             activity_tags=activity_tags,
             dietary_preferences=dietary_preferences,
             max_budget=max_budget,
-            preferred_pace=preferred_pace,
+            desired_places_per_day=desired_places_per_day,
             accessibility_preferences=accessibility_preferences,
         )
         db.add(leader_preferences)
@@ -958,7 +954,7 @@ async def generate_trip_itinerary(
             }
         )
 
-    group_preferences, pace = summarize_group_preferences(
+    group_preferences, desired_places_per_day = summarize_group_preferences(
         group_profiles
     )
 
@@ -980,7 +976,7 @@ async def generate_trip_itinerary(
             "date": trip_date.isoformat() if trip_date else None,
             "date_label": date_label,
             "status": "review",
-            "pace": pace,
+            "desired_places_per_day": desired_places_per_day,
             "group_preferences": group_preferences,
             "members": members,
             "missing_place_ids": missing_place_ids,

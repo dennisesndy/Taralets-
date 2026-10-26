@@ -46,8 +46,26 @@ def calculate_poi_score(user_profile: Dict[str, Any], place: Dict[str, Any]) -> 
     # 3. Budget Tier Score
     budget_score = 1.0 if place.get("budget_tier") == user_profile.get("budget", "₱₱") else 0.6
 
-    # 4. Pace & Accessibility Score
-    acc_score = 1.0 if place.get("wheelchair_accessible", True) == user_profile.get("walking_accessibility", True) else 0.7
+    # 4. Accessibility: false is a hard mismatch; missing data stays unknown.
+    fields = {
+        "wheelchair accessible": "wheelchair_accessible",
+        "pet friendly": "pet_friendly",
+        "good for children": "good_for_children",
+    }
+    required_accessibility = [
+        str(value).strip().casefold()
+        for value in user_profile.get("accessibility_preferences", [])
+    ]
+    accessibility_scores = []
+    for requirement in required_accessibility:
+        value = place.get(fields.get(requirement, ""))
+        if value is False:
+            return 0.0
+        accessibility_scores.append(1.0 if value is True else 0.5)
+    acc_score = (
+        sum(accessibility_scores) / len(accessibility_scores)
+        if accessibility_scores else 1.0
+    )
 
     return (activity_score * 0.5) + (budget_score * 0.3) + (acc_score * 0.2)
 

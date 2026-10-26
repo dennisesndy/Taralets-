@@ -150,6 +150,7 @@ class _Place {
     required this.imageUrl,
     required this.tags,
     required this.activityTags,
+    required this.activityCategories,
     required this.percent,
     required this.isNew,
     required this.searchText,
@@ -162,6 +163,8 @@ class _Place {
     this.days,
     this.dietary = const [],
     this.perks = const [],
+    this.accessibilityMatchStatus = 'not_requested',
+    this.activityMatch = false,
   });
 
   final String id;
@@ -174,6 +177,7 @@ class _Place {
   final String imageUrl;
   final List<String> tags;
   final List<String> activityTags;
+  final List<String> activityCategories;
   final int percent;
   final bool isNew;
   final String searchText;
@@ -187,6 +191,8 @@ class _Place {
   final String? days;
   final List<String> dietary;
   final List<String> perks;
+  final String accessibilityMatchStatus;
+  final bool activityMatch;
 
   bool get hasDetails =>
       hours != null ||
@@ -212,7 +218,11 @@ class _Place {
     accessibilityTags: perks,
   );
 
-  factory _Place.from(Map<String, dynamic> raw, int index) {
+  factory _Place.from(
+    Map<String, dynamic> raw,
+    int index, {
+    List<String> selectedActivities = const [],
+  }) {
     final name = _cleanText(raw['name'], 'Unnamed place');
     final rawCategory = _cleanLabel(raw['category']);
     var category = 'Other';
@@ -220,15 +230,39 @@ class _Place {
       final normalized = _cleanLabel(normalizeActivityCategory(rawCategory));
       category = normalized.isNotEmpty ? normalized : _titleCase(rawCategory);
     }
+    final backendMatchedCategories = _dedupe(
+      _parseList(raw['matched_activity_categories']).map((value) {
+        final normalized = _cleanLabel(normalizeActivityCategory(value));
+        return normalized.isNotEmpty ? normalized : _titleCase(value);
+      }),
+    );
 
-    final subs = [
+    final subs = _dedupe([
       raw['sub_category_1'],
       raw['sub_category_2'],
       raw['sub_category_3'],
-    ].map((e) => _titleCase(_cleanLabel(e))).where((e) => e.isNotEmpty);
-
-    final tags = _dedupe([if (rawCategory.isNotEmpty) category, ...subs]);
+    ].expand(_parseList).map(_titleCase).where((e) => e.isNotEmpty));
     final activityTags = _dedupe(_parseList(raw['activity_tags']).map(_titleCase));
+    final placeActivityCategories = normalizeActivityCategories([
+      if (rawCategory.isNotEmpty) rawCategory,
+      ...subs,
+      ...activityTags,
+    ]);
+    final selectedCategoryKeys = selectedActivities
+        .map((value) => normalizeActivityCategory(value).toLowerCase())
+        .toSet();
+    final locallyMatchedCategories = placeActivityCategories
+        .where((value) => selectedCategoryKeys.contains(value.toLowerCase()))
+        .toList();
+    final matchedCategories = selectedActivities.isEmpty
+        ? backendMatchedCategories
+        : locallyMatchedCategories;
+    if (matchedCategories.isNotEmpty) category = matchedCategories.first;
+    final activityCategories = selectedActivities.isEmpty
+        ? (matchedCategories.isEmpty ? [category] : matchedCategories)
+        : matchedCategories;
+
+    final tags = _dedupe([category, ...matchedCategories, ...subs]);
     final district = _cleanText(raw['district']);
     final address = _cleanText(raw['address']);
     final description = _cleanText(raw['description']);
@@ -297,6 +331,7 @@ class _Place {
       imageUrl: imageUrl,
       tags: tags,
       activityTags: activityTags,
+      activityCategories: activityCategories,
       percent: percent,
       isNew: raw['is_new'] == true,
       searchText: searchText,
@@ -309,6 +344,8 @@ class _Place {
       days: days,
       dietary: dietary,
       perks: perks,
+      accessibilityMatchStatus: raw['accessibility_match_status']?.toString() ?? 'unknown',
+      activityMatch: raw['activity_match'] == true,
     );
   }
 }
@@ -335,6 +372,7 @@ class _GroupRecommendationsScreenState
   final _searchController = TextEditingController();
 
   List<_Place> _places = [];
+  List<String> _selectedGroupActivities = const [];
   String _selectedCategory = 'All';
   String _searchQuery = '';
   bool _loading = true;
@@ -355,8 +393,7 @@ class _GroupRecommendationsScreenState
       tripId: widget.groupId,
       members: const [],
     );
-    _loadGroupContext();
-    _fetchRecommendations();
+    _loadInitialRecommendations();
   }
 
   @override
@@ -371,6 +408,11 @@ class _GroupRecommendationsScreenState
     HapticFeedback.selectionClick();
     _draft.add(place.toCandidate());
     setState(() {});
+  }
+
+  Future<void> _loadInitialRecommendations() async {
+    await _loadGroupContext();
+    if (mounted) await _fetchRecommendations();
   }
 
   Future<void> _reviewSelected() async {
@@ -403,6 +445,9 @@ class _GroupRecommendationsScreenState
       final tripFuture = ref.read(tripRepositoryProvider).getTrip(widget.groupId);
       final meFuture = ref.read(currentUserProvider.future);
       final trip = await tripFuture;
+      _selectedGroupActivities = normalizeActivityCategories(
+        trip.members.expand((member) => member.activityTags),
+      );
       final me = await meFuture;
 
       final members = <ItineraryMember>[];
@@ -469,20 +514,31 @@ class _GroupRecommendationsScreenState
       if (!mounted) return;
       
       final newPlaces = [
-        for (var i = 0; i < recs.length; i++) _Place.from(recs[i], _currentOffset + i)
+        for (var i = 0; i < recs.length; i++)
+          _Place.from(
+            recs[i],
+            _currentOffset + i,
+            selectedActivities: _selectedGroupActivities,
+          ),
       ];
+      final activityFilteredPlaces = _selectedGroupActivities.isEmpty
+          ? newPlaces
+          : newPlaces
+              .where((place) => place.activityCategories.isNotEmpty)
+              .toList();
 
       setState(() {
         if (isLoadMore) {
-          _places.addAll(newPlaces);
+          _places.addAll(activityFilteredPlaces);
         } else {
-          _places = newPlaces;
+          _places = activityFilteredPlaces;
         }
         
         _error = null;
         _hasMore = recs.length == _limit;
 
-        if (_selectedCategory != 'All' && !_places.any((p) => p.category == _selectedCategory)) {
+        if (_selectedCategory != 'All' &&
+            !_places.any((p) => p.activityCategories.contains(_selectedCategory))) {
           _selectedCategory = 'All';
         }
       });
@@ -500,7 +556,11 @@ class _GroupRecommendationsScreenState
 
   List<MapEntry<String, int>> get _categoryTabs {
     final counts = <String, int>{};
-    for (final p in _places) counts[p.category] = (counts[p.category] ?? 0) + 1;
+    for (final p in _places) {
+      for (final category in p.activityCategories.toSet()) {
+        counts[category] = (counts[category] ?? 0) + 1;
+      }
+    }
     final sorted = counts.entries.toList()..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
     return [MapEntry('All', _places.length), ...sorted];
   }
@@ -508,7 +568,8 @@ class _GroupRecommendationsScreenState
   List<_Place> get _filtered {
     final q = _searchQuery.trim().toLowerCase();
     return _places.where((p) {
-      final matchesCategory = _selectedCategory == 'All' || p.category == _selectedCategory;
+      final matchesCategory = _selectedCategory == 'All' ||
+          p.activityCategories.contains(_selectedCategory);
       final matchesSearch = q.isEmpty || p.searchText.contains(q);
       return matchesCategory && matchesSearch;
     }).toList();
@@ -1005,6 +1066,29 @@ class _PlaceCardState extends State<_PlaceCard> {
                               ),
                             ),
                           ],
+                        ),
+                      ),
+                    ],
+                    if (p.accessibilityMatchStatus != 'not_requested') ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: p.accessibilityMatchStatus == 'verified'
+                              ? Colors.green.shade50
+                              : const Color(0xFFFFF4E5),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          p.accessibilityMatchStatus == 'verified'
+                              ? 'Accessibility verified for selected group needs'
+                              : p.activityMatch
+                                  ? 'Activity match — accessibility not verified'
+                                  : 'Accessibility not verified for selected group needs',
+                          style: AppText.ui(11.5, FontWeight.w700,
+                              color: p.accessibilityMatchStatus == 'verified'
+                                  ? Colors.green.shade800
+                                  : AppColors.navy),
                         ),
                       ),
                     ],

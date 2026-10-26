@@ -368,10 +368,11 @@ class _Header extends StatelessWidget {
                       icon: Icons.directions_walk_rounded,
                       label: '${plan.totalTravelMinutes} min travel',
                     ),
-                    _SummaryChip(
-                      icon: Icons.speed_rounded,
-                      label: '${plan.pace} pace',
-                    ),
+                    if (plan.desiredPlacesPerDay != null)
+                      _SummaryChip(
+                        icon: Icons.place_outlined,
+                        label: 'Target ${plan.desiredPlacesPerDay} places/day',
+                      ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -1899,11 +1900,6 @@ class _StopDetailsSheet extends StatelessWidget {
                     value: stop.travelMinutes == 0
                         ? 'Start of route'
                         : stop.travelLabel,
-                  ),
-                  _InfoRow(
-                    icon: Icons.speed_rounded,
-                    label: 'Pace',
-                    value: stop.pace,
                   ),
                   _InfoRow(
                     icon: Icons.groups_rounded,

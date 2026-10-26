@@ -13,6 +13,20 @@ from app.services.itinerary.group_scoring import (
 )
 
 
+def filter_by_group_activities(places, group_profiles):
+    selected_activities = [
+        tag
+        for member in group_profiles
+        for tag in (member.get("activity_tags") or [])
+    ]
+    if not selected_activities:
+        return list(places)
+    return [
+        place for place in places
+        if place_matches_activity_preferences(place, selected_activities)
+    ]
+
+
 async def get_group_recommendations(
     db: AsyncSession,
     group_profiles: list[dict],
@@ -99,25 +113,25 @@ async def get_group_recommendations(
     # 4. Filter by selected group activities
     # ---------------------------------------------------------
 
-    selected_activities = [
-        tag
+    # Don't silently fall back to unrelated places when saved activity
+    # preferences have no matching dataset rows.
+    candidates = filter_by_group_activities(candidates, group_profiles)
+
+    if not candidates:
+        return []
+
+    # A confirmed failure for any participating member's selected need is
+    # never presented as a suitable recommendation. Unknown data stays eligible.
+    from app.services.itinerary.group_scoring import accessibility_match_status
+    with_accessibility_needs = any(
+        member.get("accessibility_preferences")
         for member in group_profiles
-        for tag in (member.get("activity_tags") or [])
-    ]
-
-    if selected_activities:
-        activity_matches = [
-            place
-            for place in candidates
-            if place_matches_activity_preferences(
-                place,
-                selected_activities,
-            )
+    )
+    if with_accessibility_needs:
+        candidates = [
+            place for place in candidates
+            if accessibility_match_status(place, group_profiles) != "does_not_meet"
         ]
-
-        # Keep the original candidates if no activity matches.
-        if activity_matches:
-            candidates = activity_matches
     # ---------------------------------------------------------
     # 5. Group consensus scoring
     # ---------------------------------------------------------

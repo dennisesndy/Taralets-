@@ -27,7 +27,7 @@ class Member {
     this.activityTags = const [],
     this.dietaryPreferences = const [],
     this.maxBudget,
-    this.preferredPace,
+    this.desiredPlacesPerDay,
     this.accessibilityPreferences = const [],
   });
 
@@ -42,7 +42,7 @@ class Member {
   final List<String> activityTags;
   final List<String> dietaryPreferences;
   final double? maxBudget;
-  final String? preferredPace;
+  final int? desiredPlacesPerDay;
   final List<String> accessibilityPreferences;
 
   bool get isReady => status == MemberStatus.ready;
@@ -56,7 +56,7 @@ class Member {
     List<String>? activityTags,
     List<String>? dietaryPreferences,
     double? maxBudget,
-    String? preferredPace,
+    int? desiredPlacesPerDay,
     List<String>? accessibilityPreferences,
   }) {
     return Member(
@@ -70,7 +70,7 @@ class Member {
       activityTags: activityTags ?? this.activityTags,
       dietaryPreferences: dietaryPreferences ?? this.dietaryPreferences,
       maxBudget: maxBudget ?? this.maxBudget,
-      preferredPace: preferredPace ?? this.preferredPace,
+      desiredPlacesPerDay: desiredPlacesPerDay ?? this.desiredPlacesPerDay,
       accessibilityPreferences:
           accessibilityPreferences ?? this.accessibilityPreferences,
     );
@@ -96,7 +96,7 @@ class Member {
       activityTags: _parseList(tripPreferences['activity_tags']),
       dietaryPreferences: _parseList(tripPreferences['dietary_preferences']),
       maxBudget: _parseDoubleNull(tripPreferences['max_budget']),
-      preferredPace: tripPreferences['preferred_pace']?.toString(),
+      desiredPlacesPerDay: int.tryParse('${tripPreferences['desired_places_per_day'] ?? ''}'),
       accessibilityPreferences: _parseList(
         tripPreferences['accessibility_preferences'],
       ),
@@ -115,7 +115,7 @@ class Member {
       'activity_tags': activityTags,
       'dietary_preferences': dietaryPreferences,
       'max_budget': maxBudget,
-      'preferred_pace': preferredPace,
+      'desired_places_per_day': desiredPlacesPerDay,
       'accessibility_preferences': accessibilityPreferences,
     },
   };

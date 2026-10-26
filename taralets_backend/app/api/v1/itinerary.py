@@ -1,3 +1,5 @@
+import math
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List
@@ -16,7 +18,7 @@ class UserProfileSchema(BaseModel):
     activity_tags: List[str] = Field(default_factory=list)
     dietary_preferences: List[str] = Field(default_factory=list)
     max_budget: float = 2500.0
-    preferred_pace: str = "Moderate"
+    desired_places_per_day: int | None = Field(default=None, ge=1)
     accessibility_preferences: List[str] = Field(default_factory=list)
 
 
@@ -74,6 +76,11 @@ def get_group_recommendations(payload: GroupRecommendPayload):
             candidate_places=places,
             max_radius=payload.radius
         )
+        if any(profile.get("accessibility_preferences") for profile in profiles):
+            recommendations = [
+                place for place in recommendations
+                if place.get("accessibility_match_status") != "does_not_meet"
+            ]
 
         sliced_recs = recommendations[payload.offset : payload.offset + payload.limit]
 
@@ -90,6 +97,15 @@ def get_group_itinerary(payload: GroupItineraryPayload):
     try:
         profiles = [p.model_dump() for p in payload.group_profiles]
         places = [p.model_dump() for p in payload.candidate_places]
+        targets = [
+            profile.get("desired_places_per_day")
+            for profile in profiles
+            if profile.get("desired_places_per_day") is not None
+        ]
+        desired_places_per_day = (
+            math.floor(sum(targets) / len(targets) + 0.5)
+            if targets else None
+        )
 
         result = generate_group_acs_itinerary(
             group_profiles=profiles,
@@ -98,6 +114,7 @@ def get_group_itinerary(payload: GroupItineraryPayload):
             ant_count=payload.ant_count,
             iterations=payload.iterations,
             seed=payload.seed,
+            desired_places_per_day=desired_places_per_day,
         )
 
         return {

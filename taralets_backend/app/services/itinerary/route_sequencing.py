@@ -47,6 +47,7 @@ def generate_group_acs_itinerary(
     seed: int = 42,
     origin_lat: float | None = None,
     origin_lon: float | None = None,
+    desired_places_per_day: int | None = None,
 ) -> dict[str, Any]:
     """
     Generate a group itinerary using Ant Colony System principles.
@@ -91,7 +92,10 @@ def generate_group_acs_itinerary(
     places = [
         place for place in ranked_places
         if place.get("id") is not None
+        and place.get("accessibility_match_status") != "does_not_meet"
     ]
+    if desired_places_per_day is not None and desired_places_per_day > 0:
+        places = places[:desired_places_per_day]
 
     if not places:
         return {

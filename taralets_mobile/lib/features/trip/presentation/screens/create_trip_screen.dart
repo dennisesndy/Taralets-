@@ -12,6 +12,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/geo_boundary.dart';
+import '../../../../core/utils/activity_category_helper.dart';
 import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/app_icons.dart';
@@ -84,8 +85,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     'Budget-Friendly',
   ];
 
-  final List<String> _paceOptions = ['Fast', 'Moderate', 'Leisure'];
-
   final List<String> _accessibilityOptions = [
     'Good for children',
     'Pet friendly',
@@ -116,11 +115,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     'Budget-Friendly': '💸',
   };
 
-  static const Map<String, String> _paceEmoji = {
-    'Fast': '🏃',
-    'Moderate': '👟',
-    'Leisure': '🚶',
-  };
 
   int _step = 1;
   bool _submitting = false;
@@ -151,14 +145,16 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   late List<String> _cats;
   late List<String> _dietary;
   final _budgetController = TextEditingController(text: '2500');
-  String? _pace;
+  final _placesController = TextEditingController();
   final List<String> _accessibility = [];
 
   @override
   void initState() {
     super.initState();
     final prefs = ref.read(userPreferencesProvider);
-    _cats = List.of(prefs.activityTags);
+    _cats = normalizeActivityCategories(prefs.activityTags)
+        .where(_activityOptions.contains)
+        .toList();
     _dietary = List.of(prefs.dietary);
 
     final user = ref
@@ -178,6 +174,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     _desc.dispose();
     _query.dispose();
     _username.dispose();
+    _placesController.dispose();
     _budgetController.dispose();
     super.dispose();
   }
@@ -319,7 +316,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           preferences: const GroupPreferences(
             categories: [],
             budget: '₱0',
-            walking: 'Not specified',
+            desiredPlacesPerDay: null,
           ),
         );
 
@@ -358,12 +355,19 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     try {
       final parsedBudget =
           double.tryParse(_budgetController.text.replaceAll(',', '')) ?? 2500.0;
+      final activityTagsToSave = normalizeActivityCategories(_cats)
+          .where(_activityOptions.contains)
+          .toList();
 
       // 1. I-save ang GROUP Preferences
       final groupPreferences = GroupPreferences(
-        categories: [..._cats, ..._dietary, ..._accessibility],
+        categories: [
+          ...activityTagsToSave,
+          ..._dietary,
+          ..._accessibility,
+        ],
         budget: '₱${parsedBudget.toInt()}',
-        walking: _pace ?? 'Not specified',
+        desiredPlacesPerDay: int.tryParse(_placesController.text),
       );
 
       await ref
@@ -376,10 +380,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           .read(profilePreferencesRepoProvider)
           .saveTripPreferences(
             tripId: _createdTripId!,
-            activityTags: _cats,
+            activityTags: activityTagsToSave,
             dietaryPreferences: dietaryToSave,
             maxBudget: parsedBudget,
-            preferredPace: _pace ?? 'Moderate',
+            desiredPlacesPerDay: int.tryParse(_placesController.text),
             accessibilityPreferences: _accessibility,
           );
 
@@ -1355,28 +1359,14 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       const SizedBox(height: 16),
 
       _SectionCard(
-        emoji: '🚶',
-        title: 'Trip Pace',
-        subtitle: 'How much walking is okay for the group?',
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _paceOptions
-              .map(
-                (p) => _SelectChip(
-                  emoji: _paceEmoji[p],
-                  label: p,
-                  selected: _pace == p,
-                  onTap: () => setState(() {
-                    if (_pace == p) {
-                      _pace = null;
-                    } else {
-                      _pace = p;
-                    }
-                  }),
-                ),
-              )
-              .toList(),
+        emoji: '📍',
+        title: 'Desired Number of Places to Visit',
+        subtitle: 'Your ideal number of places per day. Optional; trip members can add their own targets.',
+        child: TaraletsTextField(
+          label: 'Places per day',
+          controller: _placesController,
+          keyboardType: TextInputType.number,
+          hint: 'e.g. 4',
         ),
       ),
       const SizedBox(height: 16),
@@ -1425,7 +1415,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ..._cats,
       ..._dietary,
       '₱${parsedBudget.toInt()}',
-      if (_pace != null) _pace!,
+      if (_placesController.text.trim().isNotEmpty) '${_placesController.text.trim()} places/day',
       ..._accessibility,
     ];
 

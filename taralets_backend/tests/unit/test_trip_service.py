@@ -2,7 +2,6 @@ from types import SimpleNamespace
 
 from app.services.trip_service import (
     DEFAULT_MAX_BUDGET,
-    DEFAULT_PREFERRED_PACE,
     build_group_profiles,
 )
 
@@ -12,7 +11,7 @@ def make_preference(**overrides):
         "activity_tags": ["Museums"],
         "dietary_preferences": ["Halal"],
         "max_budget": 1800.0,
-        "preferred_pace": "Fast",
+        "desired_places_per_day": 4,
         "accessibility_preferences": ["Wheelchair accessible"],
     }
     values.update(overrides)
@@ -58,7 +57,7 @@ def test_maps_saved_preferences():
     assert profile["activities"] == ["Museums"]
     assert profile["dietary_preferences"] == ["Halal"]
     assert profile["max_budget"] == 1800.0
-    assert profile["preferred_pace"] == "Fast"
+    assert profile["desired_places_per_day"] == 4
     assert profile["accessibility_preferences"] == [
         "Wheelchair accessible",
     ]
@@ -85,7 +84,7 @@ def test_includes_member_without_preferences():
     assert default["activity_tags"] == []
     assert default["dietary_preferences"] == []
     assert default["max_budget"] == DEFAULT_MAX_BUDGET
-    assert default["preferred_pace"] == DEFAULT_PREFERRED_PACE
+    assert default["desired_places_per_day"] is None
     assert default["accessibility_preferences"] == []
 
 
@@ -107,7 +106,7 @@ def test_leader_is_first():
 def test_invalid_values_fall_back():
     preference = make_preference(
         max_budget=None,
-        preferred_pace="warp",
+        desired_places_per_day="many",
     )
     trip = make_trip(
         make_member("m1", preferences=preference)
@@ -116,7 +115,7 @@ def test_invalid_values_fall_back():
     profile = build_group_profiles(trip)[0]
 
     assert profile["max_budget"] == DEFAULT_MAX_BUDGET
-    assert profile["preferred_pace"] == DEFAULT_PREFERRED_PACE
+    assert profile["desired_places_per_day"] is None
 
 
 def test_negative_budget_falls_back():
@@ -153,15 +152,22 @@ def test_tags_are_cleaned_and_deduplicated():
     assert profile["accessibility_preferences"] == ["Pet friendly"]
 
 
-def test_pace_is_case_insensitive():
-    preference = make_preference(preferred_pace="leisure")
+def test_place_count_is_preserved():
+    preference = make_preference(desired_places_per_day=21)
     trip = make_trip(
         make_member("m1", preferences=preference)
     )
 
     profile = build_group_profiles(trip)[0]
 
-    assert profile["preferred_pace"] == "Leisure"
+    assert profile["desired_places_per_day"] == 21
+
+
+def test_invalid_place_count_is_missing():
+    profile = build_group_profiles(make_trip(
+        make_member("m1", preferences=make_preference(desired_places_per_day=0))
+    ))[0]
+    assert profile["desired_places_per_day"] is None
 
 
 def test_empty_or_missing_trip():

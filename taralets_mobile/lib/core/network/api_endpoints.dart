@@ -1,13 +1,29 @@
+import 'package:flutter/foundation.dart';
+
 /// Backend locations.
 ///
-/// 10.0.2.2 is the Android emulator's alias for your computer's localhost,
-/// so the FastAPI server running on port 8000 is reachable from the emulator.
-/// On a physical device, replace it with your computer's LAN IP
-/// (e.g. http://192.168.1.20:8000).
+/// Set TARALETS_API_BASE_URL with --dart-define for a physical device or a
+/// backend hosted somewhere other than the local development machine.
 class ApiEndpoints {
   ApiEndpoints._();
 
-  static const String baseUrl = 'http://127.0.0.1:8000';
+  static const String _configuredBaseUrl = String.fromEnvironment(
+    'TARALETS_API_BASE_URL',
+  );
+
+  static String get baseUrl {
+    if (_configuredBaseUrl.trim().isNotEmpty) {
+      return _configuredBaseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    }
+
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      // Android emulators reach the host machine through this special alias.
+      return 'http://10.0.2.2:8000';
+    }
+
+    return 'http://127.0.0.1:8000';
+  }
+
   static const String apiPrefix = '/api/v1';
 
   static const String login = '$apiPrefix/auth/login';

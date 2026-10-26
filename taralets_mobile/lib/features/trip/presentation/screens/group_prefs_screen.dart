@@ -1,36 +1,55 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../repositories/trip_repository.dart';
+import '../../../../repositories/repository_providers.dart';
 import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/ticket_card.dart'; // IDINAGDAG: TicketCard
 import '../../../../core/utils/activity_category_helper.dart';
 
-class GroupPrefsScreen extends StatefulWidget {
+class GroupPrefsScreen extends ConsumerStatefulWidget {
   final Trip trip;
 
   const GroupPrefsScreen({super.key, required this.trip});
 
   @override
-  State<GroupPrefsScreen> createState() => _GroupPrefsScreenState();
+  ConsumerState<GroupPrefsScreen> createState() => _GroupPrefsScreenState();
 }
 
-class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
+class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
   bool _showBreakdown = false;
+  late Trip _trip;
+
+  @override
+  void initState() {
+    super.initState();
+    _trip = widget.trip;
+    _loadCurrentTrip();
+  }
+
+  Future<void> _loadCurrentTrip() async {
+    try {
+      final current = await ref.read(tripRepositoryProvider).getTrip(widget.trip.id);
+      if (mounted) setState(() => _trip = current);
+    } catch (_) {
+      // Keep the supplied trip snapshot available if a refresh is unavailable.
+    }
+  }
 
   Map<String, dynamic> _summarizePreferences() {
     final activities = <String, int>{};
     final dietary = <String, int>{};
     final accessibility = <String, int>{};
-    final pace = <String, int>{};
+    final placeTargets = <int>[];
     final budgets = <double>[];
 
-    for (final member in widget.trip.members) {
+    for (final member in _trip.members) {
       for (final tag in normalizeActivityCategories(
           member.activityTags,
         )) {
@@ -46,10 +65,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
         accessibility[pref] = (accessibility[pref] ?? 0) + 1;
       }
 
-      final memberPace = member.preferredPace;
-      if (memberPace != null && memberPace.trim().isNotEmpty) {
-        pace[memberPace] = (pace[memberPace] ?? 0) + 1;
-      }
+      if (member.desiredPlacesPerDay != null) placeTargets.add(member.desiredPlacesPerDay!);
 
       if (member.maxBudget != null) {
         budgets.add(member.maxBudget!);
@@ -70,13 +86,15 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
     sortCounts(activities);
     sortCounts(dietary);
     sortCounts(accessibility);
-    sortCounts(pace);
 
     return {
       'activities': activities,
       'dietary': dietary,
       'accessibility': accessibility,
-      'pace': pace,
+      'averagePlacesPerDay': placeTargets.isEmpty
+          ? null
+          : (placeTargets.reduce((a, b) => a + b) / placeTargets.length).round(),
+      'placeTargetMemberCount': placeTargets.length,
       'budgetAverage': budgets.isEmpty
           ? null
           : budgets.reduce((a, b) => a + b) / budgets.length,
@@ -376,15 +394,15 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
   Widget _memberBreakdown() {
     return Column(
       children: [
-        for (int i = 0; i < widget.trip.members.length; i++) ...[
+        for (int i = 0; i < _trip.members.length; i++) ...[
           Builder(
             builder: (context) {
-              final member = widget.trip.members[i];
+              final member = _trip.members[i];
               final hasPreferences =
                   member.activityTags.isNotEmpty ||
                   member.dietaryPreferences.isNotEmpty ||
                   member.accessibilityPreferences.isNotEmpty ||
-                  member.preferredPace != null ||
+                  member.desiredPlacesPerDay != null ||
                   member.maxBudget != null;
 
               return Container(
@@ -514,8 +532,8 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          if (member.preferredPace != null)
-                            _tag('🚶 ${member.preferredPace}'),
+                          if (member.desiredPlacesPerDay != null)
+                            _tag('📍 ${member.desiredPlacesPerDay} places/day'),
                           if (member.maxBudget != null)
                             _tag('💳 ${_formatPeso(member.maxBudget!)}'),
                         ],
@@ -526,7 +544,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
               );
             },
           ),
-          if (i < widget.trip.members.length - 1) const SizedBox(height: 12),
+          if (i < _trip.members.length - 1) const SizedBox(height: 12),
         ],
       ],
     );
@@ -556,17 +574,17 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
     final activities = summary['activities'] as Map<String, int>;
     final dietary = summary['dietary'] as Map<String, int>;
     final accessibility = summary['accessibility'] as Map<String, int>;
-    final pace = summary['pace'] as Map<String, int>;
+    final averagePlacesPerDay = summary['averagePlacesPerDay'] as int?;
+    final placeTargetMemberCount = summary['placeTargetMemberCount'] as int;
     final budgetAverage = summary['budgetAverage'] as double?;
     final budgetMemberCount = summary['budgetMemberCount'] as int;
 
-    final memberCount = widget.trip.members.length;
-    final allConfirmed = widget.trip.everyoneReady;
+    final memberCount = _trip.members.length;
+    final allConfirmed = _trip.everyoneReady;
 
     final topActivity = activities.isEmpty ? null : activities.entries.first;
     final activityCount = topActivity?.value ?? 0;
 
-    final topPace = pace.isEmpty ? null : pace.entries.first;
 
     final budgetProgress = budgetAverage == null
         ? null
@@ -844,42 +862,21 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                           emptyText: 'No accessibility needs reported.',
                         ),
                         const SizedBox(height: 12),
-                        _needsSection(
-                          emoji: '👟',
-                          title: 'Preferred Pace',
-                          values: pace,
-                          emptyText: 'No pace preferences saved yet.',
+                        _metricCard(
+                          label: 'Average places per day',
+                          emoji: '📍',
+                          value: averagePlacesPerDay?.toString() ?? 'No target',
+                          subtitle: averagePlacesPerDay == null
+                              ? 'No members entered a target'
+                              : 'Average from $placeTargetMemberCount member${placeTargetMemberCount == 1 ? '' : 's'}; rounded to a whole place',
                         ),
-                        if (topPace != null) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: AppColors.primarySoft,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.directions_walk_rounded,
-                                  color: AppColors.primary,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    '${topPace.key} is the most selected pace (${topPace.value}/$memberCount members).',
-                                    style: AppText.ui(
-                                      12,
-                                      FontWeight.w700,
-                                      color: AppColors.navy,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                        const SizedBox(height: 10),
+                        Text(
+                          accessibility.isEmpty
+                              ? 'No accessibility requirements selected.'
+                              : 'Recommendations treat all selected member needs as group requirements: ${accessibility.keys.join(', ')}.',
+                          style: AppText.ui(12, FontWeight.w600, color: AppColors.muted),
+                        ),
                       ],
                     ),
                   ),
@@ -990,7 +987,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                               ),
                             ),
                             Text(
-                              '${widget.trip.readyCount}/${widget.trip.memberCount}',
+                              '${_trip.readyCount}/${_trip.memberCount}',
                               style: AppText.ui(
                                 14,
                                 FontWeight.w900,
@@ -1012,10 +1009,10 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(20),
                           child: LinearProgressIndicator(
-                            value: widget.trip.memberCount == 0
+                            value: _trip.memberCount == 0
                                 ? 0
-                                : (widget.trip.readyCount /
-                                          widget.trip.memberCount)
+                                : (_trip.readyCount /
+                                          _trip.memberCount)
                                       .clamp(0.0, 1.0)
                                       .toDouble(),
                             minHeight: 8,
@@ -1028,13 +1025,13 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                         const SizedBox(height: 20),
                         for (
                           int i = 0;
-                          i < widget.trip.members.length;
+                          i < _trip.members.length;
                           i++
                         ) ...[
                           Row(
                             children: [
                               Avatar(
-                                name: widget.trip.members[i].name,
+                                name: _trip.members[i].name,
                                 size: 40,
                               ),
                               const SizedBox(width: 12),
@@ -1043,14 +1040,14 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      widget.trip.members[i].name,
+                                      _trip.members[i].name,
                                       style: AppText.ui(
                                         14,
                                         FontWeight.w800,
                                         color: AppColors.navy,
                                       ),
                                     ),
-                                    if (widget.trip.members[i].isLeader)
+                                    if (_trip.members[i].isLeader)
                                       Text(
                                         'Trip leader',
                                         style: AppText.ui(
@@ -1062,10 +1059,10 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                                   ],
                                 ),
                               ),
-                              _statusPill(widget.trip.members[i].isReady),
+                              _statusPill(_trip.members[i].isReady),
                             ],
                           ),
-                          if (i < widget.trip.members.length - 1)
+                          if (i < _trip.members.length - 1)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 12),
                               child: Divider(
@@ -1117,7 +1114,7 @@ class _GroupPrefsScreenState extends State<GroupPrefsScreen> {
                       if (allConfirmed) {
                         context.push(
                           AppRoutes.recommendations,
-                          extra: {'groupId': widget.trip.id},
+                          extra: {'groupId': _trip.id},
                         );
                       }
                     },
