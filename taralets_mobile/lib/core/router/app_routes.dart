@@ -5,6 +5,7 @@ class AppRoutes {
   static const String discover = '/discover';
   static const String trips = '/trips';
   static const String itinerary = '/itinerary';
+  static const String lobbyItinerary = '/trip-itinerary';
   static const String profile = '/profile';
 
   static const String joinTrip = '/join-trip';

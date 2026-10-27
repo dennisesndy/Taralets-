@@ -256,6 +256,17 @@ final routerProvider = Provider<GoRouter>((ref) {
             GroupPrefsScreen(trip: state.extra! as Trip),
       ),
       GoRoute(
+        path: AppRoutes.lobbyItinerary,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final extra = state.extra;
+          return ItineraryScreen(
+            initialPlan: extra is ItineraryPlan ? extra : null,
+            tripId: extra is Map ? extra['tripId'] as String? : null,
+          );
+        },
+      ),
+      GoRoute(
           path: AppRoutes.recommendations, // Gamitin ang variable mo
           builder: (context, state) {
             final extra = state.extra;

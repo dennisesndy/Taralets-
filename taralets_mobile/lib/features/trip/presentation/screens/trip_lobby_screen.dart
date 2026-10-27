@@ -77,6 +77,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   bool _refreshing = false;
   bool _toggling = false;
   bool _hasItinerary = false;
+  bool _itineraryFinalized = false;
   bool _cancellingOrLeaving = false;
   String? _errorTitle;
   String? _errorMessage;
@@ -101,10 +102,23 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
 
   Future<void> _refreshItineraryAvailability() async {
     try {
-      await _repo.getItinerary(_trip.id);
-      if (mounted) setState(() => _hasItinerary = true);
+      final itinerary = await _repo.getItinerary(_trip.id);
+      if (!mounted) return;
+      final finalized =
+          itinerary['status']?.toString().toLowerCase() == 'finalized';
+      if (!_hasItinerary || _itineraryFinalized != finalized) {
+        setState(() {
+          _hasItinerary = true;
+          _itineraryFinalized = finalized;
+        });
+      }
     } on TripException {
-      if (mounted) setState(() => _hasItinerary = false);
+      if (mounted && _hasItinerary) {
+        setState(() {
+          _hasItinerary = false;
+          _itineraryFinalized = false;
+        });
+      }
     }
   }
 
@@ -195,6 +209,9 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
         ref.invalidate(myTripsProvider);
       }
       setState(() => _trip = latestTrip);
+      if (!_itineraryFinalized) {
+        await _refreshItineraryAvailability();
+      }
     } on TripException {
     } finally {
       _refreshing = false;
@@ -393,34 +410,30 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                     if (_hasItinerary) ...[
                       TaraletsButton.orange(
                         label: 'View Itinerary',
-                        onPressed: () => context.go(
-                          AppRoutes.itinerary,
+                        onPressed: () => context.push(
+                          AppRoutes.lobbyItinerary,
                           extra: {'tripId': _trip.id},
                         ),
                       ),
                       const SizedBox(height: 12),
                     ],
 
-                    if (_trip.everyoneReady) ...[
-                      TaraletsButton.orange(
-                        label: 'Find Places',
-                        onPressed: () {
-                          context.push(
-                            AppRoutes.recommendations,
-                            extra: {'groupId': widget.trip.id},
-                          );
-                        },
-                      ),
-                    ] else if (isLeader) ...[
-                      _WaitingForMembers(
-                        ready: _trip.readyCount,
-                        total: _trip.memberCount,
-                      ),
-                    ] else ...[
-                      _WaitingForMembers(
-                        ready: _trip.readyCount,
-                        total: _trip.memberCount,
-                      ),
+                    if (!_itineraryFinalized) ...[
+                      if (_trip.everyoneReady)
+                        TaraletsButton.orange(
+                          label: 'Find Places',
+                          onPressed: () {
+                            context.push(
+                              AppRoutes.recommendations,
+                              extra: {'groupId': _trip.id},
+                            );
+                          },
+                        )
+                      else
+                        _WaitingForMembers(
+                          ready: _trip.readyCount,
+                          total: _trip.memberCount,
+                        ),
                     ],
 
                     if (!isLeader && myMember != null && me != null) ...[

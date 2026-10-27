@@ -124,10 +124,11 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final d = await showDatePicker(
       context: context,
-      initialDate: _date ?? now,
-      firstDate: DateTime(now.year - 1),
+      initialDate: _date != null && !_date!.isBefore(today) ? _date! : today,
+      firstDate: today,
       lastDate: DateTime(now.year + 3),
       builder: _pickerTheme,
     );
