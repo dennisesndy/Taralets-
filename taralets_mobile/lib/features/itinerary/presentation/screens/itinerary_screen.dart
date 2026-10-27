@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
@@ -7,10 +10,13 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/taralets_card.dart';
+import '../../../../repositories/repository_providers.dart';
+import '../../../../repositories/trip_repository.dart';
+import '../../data/itinerary_api_mapper.dart';
 import '../../data/models/itinerary_models.dart';
 import '../controllers/itinerary_controller.dart';
 
-class ItineraryScreen extends StatefulWidget {
+class ItineraryScreen extends ConsumerStatefulWidget {
   const ItineraryScreen({
     super.key,
     this.tripId,
@@ -30,12 +36,16 @@ class ItineraryScreen extends StatefulWidget {
   final ItineraryPlan? initialPlan;
 
   @override
-  State<ItineraryScreen> createState() => _ItineraryScreenState();
+  ConsumerState<ItineraryScreen> createState() => _ItineraryScreenState();
 }
 
-class _ItineraryScreenState extends State<ItineraryScreen> {
+class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
   ItineraryController? _controller;
   bool _nearby = false;
+  bool _loadingPlan = false;
+  bool _savingReview = false;
+  Timer? _refreshTimer;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -44,6 +54,13 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
     if (plan != null) {
       _controller = ItineraryController(plan: plan);
     }
+    if ((widget.tripId?.isNotEmpty ?? false)) {
+      Future.microtask(_loadSavedItinerary);
+      _refreshTimer = Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => _loadSavedItinerary(),
+      );
+    }
   }
 
   @override
@@ -51,6 +68,16 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
     super.didUpdateWidget(oldWidget);
 
     final plan = widget.initialPlan;
+
+    if (oldWidget.tripId != widget.tripId &&
+        (widget.tripId?.isNotEmpty ?? false)) {
+      _loadSavedItinerary();
+      _refreshTimer?.cancel();
+      _refreshTimer = Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => _loadSavedItinerary(),
+      );
+    }
 
     if (plan == null) {
       if (oldWidget.initialPlan != null) {
@@ -68,8 +95,88 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
+    _scrollController.dispose();
     _controller?.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSavedItinerary() async {
+    final tripId = widget.tripId;
+    if (tripId == null || tripId.isEmpty || _loadingPlan || _savingReview) {
+      return;
+    }
+    _loadingPlan = true;
+    try {
+      final data = await ref.read(tripRepositoryProvider).getItinerary(tripId);
+      if (!mounted) return;
+      final plan = itineraryPlanFromApi(data);
+      if (_controller == null) {
+        _controller = ItineraryController(plan: plan);
+      } else {
+        _controller!.updatePlan(plan);
+      }
+      setState(() {});
+    } on TripException {
+      // The empty state is expected before the first itinerary is generated.
+    } finally {
+      _loadingPlan = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _reviewCurrentUser() async {
+    final tripId = widget.tripId;
+    final controller = _controller;
+    if (tripId == null || controller == null || _savingReview) return;
+    final me = controller.plan.members
+        .where((member) => member.isCurrentUser)
+        .firstOrNull;
+    if (me == null) return;
+    setState(() => _savingReview = true);
+    try {
+      final data = await ref
+          .read(tripRepositoryProvider)
+          .reviewItinerary(tripId, !me.reviewed);
+      if (!mounted) return;
+      controller.updatePlan(itineraryPlanFromApi(data));
+    } on TripException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _savingReview = false);
+    }
+  }
+
+  Future<void> _confirmItinerary() async {
+    final tripId = widget.tripId;
+    if (tripId == null) return;
+    setState(() => _savingReview = true);
+    try {
+      final data = await ref.read(tripRepositoryProvider).lockItinerary(tripId);
+      if (mounted) _controller?.updatePlan(itineraryPlanFromApi(data));
+    } on TripException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _savingReview = false);
+    }
+  }
+
+  void _viewItinerary() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   void _handleBack() {
@@ -84,9 +191,7 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
     final plan = _controller?.plan;
     if (plan == null || plan.stops.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Add stops before selecting a route.'),
-        ),
+        const SnackBar(content: Text('Add stops before selecting a route.')),
       );
       return;
     }
@@ -105,10 +210,12 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
     final controller = _controller;
 
     if (controller == null) {
-      return _NoItineraryState(
-        tripId: widget.tripId,
-        onBack: _handleBack,
-      );
+      if (_loadingPlan) {
+        return const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        );
+      }
+      return _NoItineraryState(tripId: widget.tripId, onBack: _handleBack);
     }
 
     return ColoredBox(
@@ -119,6 +226,7 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
           final plan = controller.plan;
 
           return SingleChildScrollView(
+            controller: _scrollController,
             padding: const EdgeInsets.only(bottom: 120),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -140,10 +248,8 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                         children: [
                           _ViewToggle(
                             nearby: _nearby,
-                            onTimeline: () =>
-                                setState(() => _nearby = false),
-                            onNearby: () =>
-                                setState(() => _nearby = true),
+                            onTimeline: () => setState(() => _nearby = false),
+                            onNearby: () => setState(() => _nearby = true),
                           ),
                           const SizedBox(height: 14),
                           if (_nearby)
@@ -154,10 +260,13 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
                           _GroupReviewCard(
                             plan: plan,
                             confirmed: controller.confirmed,
-                            onToggleReview:
-                                controller.toggleCurrentUserReviewed,
-                            onConfirm: controller.confirm,
+                            onToggleReview: _savingReview
+                                ? () {}
+                                : _reviewCurrentUser,
+                            onConfirm: _confirmItinerary,
                             onSelectRoute: _openRouteSelection,
+                            onViewItinerary: _viewItinerary,
+                            isSaving: _savingReview,
                           ),
                           const SizedBox(height: 20),
                         ],
@@ -175,10 +284,7 @@ class _ItineraryScreenState extends State<ItineraryScreen> {
 }
 
 class _NoItineraryState extends StatelessWidget {
-  const _NoItineraryState({
-    required this.onBack,
-    this.tripId,
-  });
+  const _NoItineraryState({required this.onBack, this.tripId});
 
   final VoidCallback onBack;
   final String? tripId;
@@ -211,11 +317,7 @@ class _NoItineraryState extends StatelessWidget {
               Text(
                 'No itinerary yet',
                 textAlign: TextAlign.center,
-                style: AppText.ui(
-                  17,
-                  FontWeight.w800,
-                  color: AppColors.navy,
-                ),
+                style: AppText.ui(17, FontWeight.w800, color: AppColors.navy),
               ),
               const SizedBox(height: 8),
               Text(
@@ -423,9 +525,7 @@ class _BackButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(11),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.12),
-          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
         ),
         child: const Icon(
           Icons.arrow_back_rounded,
@@ -455,9 +555,7 @@ class _StatusChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -495,26 +593,16 @@ class _SummaryChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 13,
-            color: Colors.white.withValues(alpha: 0.7),
-          ),
+          Icon(icon, size: 13, color: Colors.white.withValues(alpha: 0.7)),
           const SizedBox(width: 5),
           Text(
             label,
-            style: AppText.ui(
-              10.5,
-              FontWeight.w700,
-              color: Colors.white,
-            ),
+            style: AppText.ui(10.5, FontWeight.w700, color: Colors.white),
           ),
         ],
       ),
@@ -652,20 +740,12 @@ class _TimelineView extends StatelessWidget {
           children: [
             Text(
               'Your route',
-              style: AppText.ui(
-                15,
-                FontWeight.w800,
-                color: AppColors.navy,
-              ),
+              style: AppText.ui(15, FontWeight.w800, color: AppColors.navy),
             ),
             const Spacer(),
             Text(
               '${stops.length} stops',
-              style: AppText.ui(
-                11,
-                FontWeight.w500,
-                color: AppColors.muted,
-              ),
+              style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
             ),
           ],
         ),
@@ -739,26 +819,16 @@ class _PeriodHeader extends StatelessWidget {
           children: [
             Text(
               period.label,
-              style: AppText.ui(
-                12,
-                FontWeight.w800,
-                color: AppColors.navy,
-              ),
+              style: AppText.ui(12, FontWeight.w800, color: AppColors.navy),
             ),
             Text(
               '${first.startLabel} – ${last.endLabel}',
-              style: AppText.mono(
-                9.5,
-                FontWeight.w500,
-                color: AppColors.muted,
-              ),
+              style: AppText.mono(9.5, FontWeight.w500, color: AppColors.muted),
             ),
           ],
         ),
         const SizedBox(width: 10),
-        Expanded(
-          child: Container(height: 1, color: AppColors.border),
-        ),
+        Expanded(child: Container(height: 1, color: AppColors.border)),
       ],
     );
   }
@@ -871,10 +941,7 @@ class _StopCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
-                  child: Text(
-                    stop.icon,
-                    style: const TextStyle(fontSize: 20),
-                  ),
+                  child: Text(stop.icon, style: const TextStyle(fontSize: 20)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -926,9 +993,7 @@ class _StopCard extends StatelessWidget {
                   icon: stop.isMeetup
                       ? Icons.flag_rounded
                       : Icons.category_outlined,
-                  color: stop.isMeetup
-                      ? AppColors.navy
-                      : AppColors.primary,
+                  color: stop.isMeetup ? AppColors.navy : AppColors.primary,
                   bg: stop.isMeetup
                       ? AppColors.blueSoft
                       : AppColors.primarySoft,
@@ -937,10 +1002,7 @@ class _StopCard extends StatelessWidget {
                   label: stop.budgetLabel,
                   icon: Icons.payments_outlined,
                 ),
-                _MetaPill(
-                  label: stop.area,
-                  icon: Icons.place_outlined,
-                ),
+                _MetaPill(label: stop.area, icon: Icons.place_outlined),
               ],
             ),
             if (visibleTags.isNotEmpty) ...[
@@ -1092,14 +1154,7 @@ class _MetaPill extends StatelessWidget {
             Icon(icon, size: 11, color: color),
             const SizedBox(width: 4),
           ],
-          Text(
-            label,
-            style: AppText.ui(
-              9.5,
-              FontWeight.w700,
-              color: color,
-            ),
-          ),
+          Text(label, style: AppText.ui(9.5, FontWeight.w700, color: color)),
         ],
       ),
     );
@@ -1135,11 +1190,7 @@ class _WrapUpCard extends StatelessWidget {
               children: [
                 Text(
                   'Wrap-up & head home',
-                  style: AppText.ui(
-                    13,
-                    FontWeight.w800,
-                    color: AppColors.navy,
-                  ),
+                  style: AppText.ui(13, FontWeight.w800, color: AppColors.navy),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -1156,11 +1207,7 @@ class _WrapUpCard extends StatelessWidget {
           const SizedBox(width: 12),
           Text(
             endLabel,
-            style: AppText.mono(
-              11,
-              FontWeight.w700,
-              color: AppColors.muted,
-            ),
+            style: AppText.mono(11, FontWeight.w700, color: AppColors.muted),
           ),
         ],
       ),
@@ -1194,39 +1241,23 @@ class _NearbySpotsView extends StatelessWidget {
           children: [
             Text(
               'Nearby spots',
-              style: AppText.ui(
-                15,
-                FontWeight.w800,
-                color: AppColors.navy,
-              ),
+              style: AppText.ui(15, FontWeight.w800, color: AppColors.navy),
             ),
             const Spacer(),
             Text(
               '${entries.length} areas',
-              style: AppText.ui(
-                11,
-                FontWeight.w500,
-                color: AppColors.muted,
-              ),
+              style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
             ),
           ],
         ),
         const SizedBox(height: 4),
         Text(
           'Your stops, grouped by neighborhood.',
-          style: AppText.ui(
-            11,
-            FontWeight.w500,
-            color: AppColors.muted,
-          ),
+          style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
         ),
         const SizedBox(height: 12),
         for (var i = 0; i < entries.length; i++) ...[
-          _ClusterCard(
-            area: entries[i].key,
-            stops: entries[i].value,
-            index: i,
-          ),
+          _ClusterCard(area: entries[i].key, stops: entries[i].value, index: i),
           const SizedBox(height: 10),
         ],
       ],
@@ -1271,9 +1302,7 @@ class _ClusterCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: style.bg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: style.color.withValues(alpha: 0.18),
-        ),
+        border: Border.all(color: style.color.withValues(alpha: 0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1292,11 +1321,7 @@ class _ClusterCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Explore: $area',
-                  style: AppText.ui(
-                    12,
-                    FontWeight.w800,
-                    color: style.color,
-                  ),
+                  style: AppText.ui(12, FontWeight.w800, color: style.color),
                 ),
               ),
               Text(
@@ -1330,10 +1355,7 @@ class _ClusterCard extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        stop.icon,
-                        style: const TextStyle(fontSize: 13),
-                      ),
+                      Text(stop.icon, style: const TextStyle(fontSize: 13)),
                       const SizedBox(width: 5),
                       Text(
                         stop.name,
@@ -1374,6 +1396,8 @@ class _GroupReviewCard extends StatelessWidget {
     required this.onToggleReview,
     required this.onConfirm,
     required this.onSelectRoute,
+    required this.onViewItinerary,
+    required this.isSaving,
   });
 
   final ItineraryPlan plan;
@@ -1381,12 +1405,18 @@ class _GroupReviewCard extends StatelessWidget {
   final VoidCallback onToggleReview;
   final VoidCallback onConfirm;
   final VoidCallback onSelectRoute;
+  final VoidCallback onViewItinerary;
+  final bool isSaving;
 
   @override
   Widget build(BuildContext context) {
     final reviewed = plan.reviewedCount;
     final total = plan.members.length;
     final remaining = total - reviewed;
+    final currentMember = plan.members
+        .where((member) => member.isCurrentUser)
+        .firstOrNull;
+    final currentUserIsLeader = currentMember?.isLeader ?? false;
 
     return TaraletsCard(
       padding: const EdgeInsets.all(16),
@@ -1422,10 +1452,7 @@ class _GroupReviewCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _ReviewProgressPill(
-                reviewed: reviewed,
-                total: total,
-              ),
+              _ReviewProgressPill(reviewed: reviewed, total: total),
             ],
           ),
           const SizedBox(height: 14),
@@ -1439,18 +1466,59 @@ class _GroupReviewCard extends StatelessWidget {
           ],
           const SizedBox(height: 4),
           if (confirmed)
-            _ConfirmedBanner(onSelectRoute: onSelectRoute)
-          else if (reviewed == total)
-            TaraletsButton.orange(
-              label: '🔒 Confirm Final Itinerary',
-              onPressed: onConfirm,
+            _ConfirmedBanner(
+              onSelectRoute: onSelectRoute,
+              onViewItinerary: onViewItinerary,
             )
-          else
+          else if (reviewed == total && currentUserIsLeader)
+            TaraletsButton.orange(
+              label: '🔒 Lock Final Itinerary',
+              isLoading: isSaving,
+              onPressed: isSaving ? null : onConfirm,
+            )
+          else if (reviewed == total)
+            const _WaitingLeaderBanner()
+          else ...[
+            if (plan.members.any(
+              (member) => member.isCurrentUser && !member.reviewed,
+            )) ...[
+              TaraletsButton.ghost(
+                label: 'Mark itinerary as reviewed',
+                onPressed: isSaving ? null : onToggleReview,
+              ),
+              const SizedBox(height: 10),
+            ],
             _WaitingBanner(remaining: remaining),
+          ],
         ],
       ),
     );
   }
+}
+
+class _WaitingLeaderBanner extends StatelessWidget {
+  const _WaitingLeaderBanner();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(
+      color: AppColors.blueSoft,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.lock_clock_rounded, size: 17, color: AppColors.navy),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'You reviewed the plan. Waiting for the trip leader to lock the itinerary.',
+            style: AppText.ui(11, FontWeight.w600, color: AppColors.navy),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _MemberReviewRow extends StatelessWidget {
@@ -1478,11 +1546,7 @@ class _MemberReviewRow extends StatelessWidget {
                   member.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppText.ui(
-                    13,
-                    FontWeight.w700,
-                    color: AppColors.text,
-                  ),
+                  style: AppText.ui(13, FontWeight.w700, color: AppColors.text),
                 ),
               ),
               if (member.isCurrentUser) ...[
@@ -1511,7 +1575,7 @@ class _MemberReviewRow extends StatelessWidget {
         ),
         _ReviewStatusChip(
           reviewed: member.reviewed,
-          interactive: member.isCurrentUser && !confirmed,
+          interactive: false,
           onTap: onToggle,
         ),
       ],
@@ -1542,9 +1606,7 @@ class _ReviewStatusChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            reviewed
-                ? Icons.check_circle_rounded
-                : Icons.schedule_rounded,
+            reviewed ? Icons.check_circle_rounded : Icons.schedule_rounded,
             size: 12,
             color: reviewed ? AppColors.greenText : AppColors.amberText,
           ),
@@ -1575,10 +1637,7 @@ class _ReviewStatusChip extends StatelessWidget {
 }
 
 class _ReviewProgressPill extends StatelessWidget {
-  const _ReviewProgressPill({
-    required this.reviewed,
-    required this.total,
-  });
+  const _ReviewProgressPill({required this.reviewed, required this.total});
 
   final int reviewed;
   final int total;
@@ -1616,9 +1675,7 @@ class _WaitingBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.amberSoft,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.amber.withValues(alpha: 0.35),
-        ),
+        border: Border.all(color: AppColors.amber.withValues(alpha: 0.35)),
       ),
       child: Row(
         children: [
@@ -1646,9 +1703,13 @@ class _WaitingBanner extends StatelessWidget {
 }
 
 class _ConfirmedBanner extends StatelessWidget {
-  const _ConfirmedBanner({required this.onSelectRoute});
+  const _ConfirmedBanner({
+    required this.onSelectRoute,
+    required this.onViewItinerary,
+  });
 
   final VoidCallback onSelectRoute;
+  final VoidCallback onViewItinerary;
 
   @override
   Widget build(BuildContext context) {
@@ -1694,17 +1755,15 @@ class _ConfirmedBanner extends StatelessWidget {
         Text(
           'Review the full plan above, then choose your route.',
           textAlign: TextAlign.center,
-          style: AppText.ui(
-            11,
-            FontWeight.w500,
-            color: AppColors.muted,
-          ),
+          style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
         ),
         const SizedBox(height: 12),
         TaraletsButton.orange(
-          label: 'Select Route',
-          onPressed: onSelectRoute,
+          label: 'View Itinerary',
+          onPressed: onViewItinerary,
         ),
+        const SizedBox(height: 8),
+        TaraletsButton.ghost(label: 'Select Route', onPressed: onSelectRoute),
       ],
     );
   }
@@ -1740,11 +1799,7 @@ class _EmptyItinerary extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'No stops yet',
-            style: AppText.ui(
-              15,
-              FontWeight.w800,
-              color: AppColors.navy,
-            ),
+            style: AppText.ui(15, FontWeight.w800, color: AppColors.navy),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1795,9 +1850,7 @@ class _StopDetailsSheet extends StatelessWidget {
           constraints: BoxConstraints(maxHeight: maxHeight),
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(24),
-            ),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: SafeArea(
             top: false,
@@ -1920,13 +1973,10 @@ class _StopDetailsSheet extends StatelessWidget {
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
-                      children: [
-                        for (final tag in tags) _TagChip(tag: tag),
-                      ],
+                      children: [for (final tag in tags) _TagChip(tag: tag)],
                     ),
                   ],
-                  if (stop.notes != null &&
-                      stop.notes!.isNotEmpty) ...[
+                  if (stop.notes != null && stop.notes!.isNotEmpty) ...[
                     const SizedBox(height: 14),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -1991,9 +2041,7 @@ class _RouteSelectionSheet extends StatelessWidget {
           constraints: BoxConstraints(maxHeight: maxHeight),
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(24),
-            ),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: SafeArea(
             top: false,
@@ -2249,20 +2297,12 @@ class _InfoRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: AppText.ui(
-                11.5,
-                FontWeight.w500,
-                color: AppColors.muted,
-              ),
+              style: AppText.ui(11.5, FontWeight.w500, color: AppColors.muted),
             ),
           ),
           Text(
             value,
-            style: AppText.ui(
-              11.5,
-              FontWeight.w700,
-              color: AppColors.navy,
-            ),
+            style: AppText.ui(11.5, FontWeight.w700, color: AppColors.navy),
           ),
         ],
       ),
@@ -2334,11 +2374,7 @@ class _TagChip extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             tag.label,
-            style: AppText.ui(
-              9.5,
-              FontWeight.w700,
-              color: tag.color,
-            ),
+            style: AppText.ui(9.5, FontWeight.w700, color: tag.color),
           ),
         ],
       ),
@@ -2361,11 +2397,7 @@ class _OverflowTag extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: AppText.ui(
-          9.5,
-          FontWeight.w700,
-          color: AppColors.muted,
-        ),
+        style: AppText.ui(9.5, FontWeight.w700, color: AppColors.muted),
       ),
     );
   }

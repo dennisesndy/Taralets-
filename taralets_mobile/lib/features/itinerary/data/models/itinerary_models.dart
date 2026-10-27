@@ -92,16 +92,19 @@ class ItineraryMember {
     required this.name,
     this.reviewed = false,
     this.isCurrentUser = false,
+    this.isLeader = false,
   });
 
   final String name;
   final bool reviewed;
   final bool isCurrentUser;
+  final bool isLeader;
 
-  ItineraryMember copyWith({bool? reviewed}) => ItineraryMember(
+  ItineraryMember copyWith({bool? reviewed, bool? isLeader}) => ItineraryMember(
     name: name,
     reviewed: reviewed ?? this.reviewed,
     isCurrentUser: isCurrentUser,
+    isLeader: isLeader ?? this.isLeader,
   );
 }
 
@@ -124,6 +127,8 @@ class ItineraryPlan {
     required this.members,
     this.desiredPlacesPerDay,
     required this.groupPreferences,
+    this.tripId,
+    this.itineraryId,
   });
 
   final String title;
@@ -133,10 +138,10 @@ class ItineraryPlan {
   final List<ItineraryMember> members;
   final int? desiredPlacesPerDay;
   final List<String> groupPreferences;
+  final String? tripId;
+  final String? itineraryId;
 
-  List<ItineraryStop> get stops => [
-    for (final day in days) ...day.stops,
-  ];
+  List<ItineraryStop> get stops => [for (final day in days) ...day.stops];
 
   int get totalStops => stops.length;
   int get totalDurationMinutes =>
@@ -158,8 +163,7 @@ class ItineraryPlan {
   String get startLabel => stops.isEmpty ? '—' : stops.first.startLabel;
   String get endLabel => stops.isEmpty ? '—' : stops.last.endLabel;
   String get spanLabel => formatDuration(spanMinutes);
-  String get totalBudgetLabel =>
-      totalBudget == 0 ? 'Free' : '₱$totalBudget';
+  String get totalBudgetLabel => totalBudget == 0 ? 'Free' : '₱$totalBudget';
   String get totalTravelLabel => formatDuration(totalTravelMinutes);
   int get reviewedCount => members.where((member) => member.reviewed).length;
   bool get allReviewed => members.every((member) => member.reviewed);
@@ -172,6 +176,8 @@ class ItineraryPlan {
     List<ItineraryMember>? members,
     int? desiredPlacesPerDay,
     List<String>? groupPreferences,
+    String? tripId,
+    String? itineraryId,
   }) => ItineraryPlan(
     title: title ?? this.title,
     dateLabel: dateLabel ?? this.dateLabel,
@@ -180,5 +186,7 @@ class ItineraryPlan {
     members: members ?? this.members,
     desiredPlacesPerDay: desiredPlacesPerDay ?? this.desiredPlacesPerDay,
     groupPreferences: groupPreferences ?? this.groupPreferences,
+    tripId: tripId ?? this.tripId,
+    itineraryId: itineraryId ?? this.itineraryId,
   );
 }

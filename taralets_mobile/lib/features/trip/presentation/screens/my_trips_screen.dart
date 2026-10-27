@@ -25,8 +25,18 @@ String _tripDateLabel(Trip trip) {
   if (daysUntilTrip == 1) return 'Tomorrow';
 
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   return '${months[date.month - 1]} ${date.day}, ${date.year}';
 }
@@ -49,7 +59,8 @@ class _MyTripsScreenState extends ConsumerState<MyTripsScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg, // Clean white bg
       body: SafeArea(
-        bottom: false, // Hayaan nating umabot hanggang ibaba ang kulay ng container
+        bottom:
+            false, // Hayaan nating umabot hanggang ibaba ang kulay ng container
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -64,12 +75,20 @@ class _MyTripsScreenState extends ConsumerState<MyTripsScreen> {
                     children: [
                       Text(
                         'My Trips',
-                        style: AppText.ui(28, FontWeight.w900, color: AppColors.navy),
+                        style: AppText.ui(
+                          28,
+                          FontWeight.w900,
+                          color: AppColors.navy,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Manage your travel itineraries',
-                        style: AppText.ui(13, FontWeight.w500, color: AppColors.muted),
+                        style: AppText.ui(
+                          13,
+                          FontWeight.w500,
+                          color: AppColors.muted,
+                        ),
                       ),
                     ],
                   ),
@@ -109,17 +128,21 @@ class _MyTripsScreenState extends ConsumerState<MyTripsScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      AppColors.navy, 
+                      AppColors.navy,
                       Color(0xFF2A3F6D), // Lighter, elegant navy/slate blend
                     ],
                   ),
                   borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
                 ),
                 child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(32),
+                  ),
                   child: trips.when(
                     loading: () => const Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
                     ),
                     error: (e, s) => _buildErrorState(),
                     data: (items) => _buildList(items),
@@ -147,13 +170,15 @@ class _MyTripsScreenState extends ConsumerState<MyTripsScreen> {
             color: selected ? AppColors.primary : AppColors.border,
             width: 1.5,
           ),
-          boxShadow: selected ? [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            )
-          ] : [],
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [],
         ),
         child: Text(
           f,
@@ -193,7 +218,11 @@ class _MyTripsScreenState extends ConsumerState<MyTripsScreen> {
               child: Center(
                 child: Text(
                   'No $_filter trips found.',
-                  style: AppText.ui(14, FontWeight.w500, color: Colors.white.withValues(alpha: 0.7)),
+                  style: AppText.ui(
+                    14,
+                    FontWeight.w500,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
                 ),
               ),
             ),
@@ -204,18 +233,32 @@ class _MyTripsScreenState extends ConsumerState<MyTripsScreen> {
                 children: [
                   Text(
                     s.$1.toUpperCase(),
-                    style: AppText.ui(12, FontWeight.w800, color: Colors.white.withValues(alpha: 0.8), letterSpacing: 1.2),
+                    style: AppText.ui(
+                      12,
+                      FontWeight.w800,
+                      color: Colors.white.withValues(alpha: 0.8),
+                      letterSpacing: 1.2,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
-                      color: AppColors.primarySoft.withValues(alpha: 0.2), // Rose tint on navy
+                      color: AppColors.primarySoft.withValues(
+                        alpha: 0.2,
+                      ), // Rose tint on navy
                       borderRadius: BorderRadius.circular(99),
                     ),
                     child: Text(
                       '${s.$2.length}',
-                      style: AppText.ui(11, FontWeight.w800, color: AppColors.primarySoft),
+                      style: AppText.ui(
+                        11,
+                        FontWeight.w800,
+                        color: AppColors.primarySoft,
+                      ),
                     ),
                   ),
                 ],
@@ -248,7 +291,10 @@ class _MyTripsScreenState extends ConsumerState<MyTripsScreen> {
               const SizedBox(
                 height: 56,
                 child: Center(
-                  child: Icon(Icons.wifi_off_rounded, color: TicketPalette.redText),
+                  child: Icon(
+                    Icons.wifi_off_rounded,
+                    color: TicketPalette.redText,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -289,6 +335,7 @@ class _TripCard extends ConsumerWidget {
       case TripStatus.active:
         context.push(AppRoutes.activeTrip, extra: trip);
       case TripStatus.completed:
+        context.go(AppRoutes.itinerary, extra: {'tripId': trip.id});
       case TripStatus.cancelled:
         break;
     }
@@ -571,9 +618,7 @@ class _TripCard extends ConsumerWidget {
             title: actionText,
             message: dialogContent,
             confirmLabel: confirmText,
-            icon: isLeader
-                ? Icons.event_busy_rounded
-                : Icons.logout_rounded,
+            icon: isLeader ? Icons.event_busy_rounded : Icons.logout_rounded,
           );
         },
         onDismissed: (direction) async {

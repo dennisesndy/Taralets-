@@ -35,7 +35,9 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
 
   Future<void> _loadCurrentTrip() async {
     try {
-      final current = await ref.read(tripRepositoryProvider).getTrip(widget.trip.id);
+      final current = await ref
+          .read(tripRepositoryProvider)
+          .getTrip(widget.trip.id);
       if (mounted) setState(() => _trip = current);
     } catch (_) {
       // Keep the supplied trip snapshot available if a refresh is unavailable.
@@ -50,11 +52,9 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
     final budgets = <double>[];
 
     for (final member in _trip.members) {
-      for (final tag in normalizeActivityCategories(
-          member.activityTags,
-        )) {
-          activities[tag] = (activities[tag] ?? 0) + 1;
-        }
+      for (final tag in normalizeActivityCategories(member.activityTags)) {
+        activities[tag] = (activities[tag] ?? 0) + 1;
+      }
 
       for (final pref in member.dietaryPreferences.toSet()) {
         if (pref.toLowerCase() == 'none') continue;
@@ -65,7 +65,8 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
         accessibility[pref] = (accessibility[pref] ?? 0) + 1;
       }
 
-      if (member.desiredPlacesPerDay != null) placeTargets.add(member.desiredPlacesPerDay!);
+      if (member.desiredPlacesPerDay != null)
+        placeTargets.add(member.desiredPlacesPerDay!);
 
       if (member.maxBudget != null) {
         budgets.add(member.maxBudget!);
@@ -93,7 +94,8 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
       'accessibility': accessibility,
       'averagePlacesPerDay': placeTargets.isEmpty
           ? null
-          : (placeTargets.reduce((a, b) => a + b) / placeTargets.length).round(),
+          : (placeTargets.reduce((a, b) => a + b) / placeTargets.length)
+                .round(),
       'placeTargetMemberCount': placeTargets.length,
       'budgetAverage': budgets.isEmpty
           ? null
@@ -180,7 +182,9 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: darkTheme ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFF7F8FA),
+        color: darkTheme
+            ? Colors.white.withValues(alpha: 0.1)
+            : const Color(0xFFF7F8FA),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -196,7 +200,9 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                   style: AppText.ui(
                     10,
                     FontWeight.w800,
-                    color: darkTheme ? Colors.white.withValues(alpha: 0.6) : AppColors.muted,
+                    color: darkTheme
+                        ? Colors.white.withValues(alpha: 0.6)
+                        : AppColors.muted,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -208,14 +214,24 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
             value,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: AppText.ui(18, FontWeight.w900, color: darkTheme ? Colors.white : AppColors.navy),
+            style: AppText.ui(
+              18,
+              FontWeight.w900,
+              color: darkTheme ? Colors.white : AppColors.navy,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             subtitle,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: AppText.ui(11, FontWeight.w500, color: darkTheme ? Colors.white.withValues(alpha: 0.7) : AppColors.muted),
+            style: AppText.ui(
+              11,
+              FontWeight.w500,
+              color: darkTheme
+                  ? Colors.white.withValues(alpha: 0.7)
+                  : AppColors.muted,
+            ),
           ),
           if (progress != null) ...[
             const SizedBox(height: 10),
@@ -224,9 +240,13 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 6,
-                backgroundColor: darkTheme ? Colors.white.withValues(alpha: 0.2) : AppColors.border,
+                backgroundColor: darkTheme
+                    ? Colors.white.withValues(alpha: 0.2)
+                    : AppColors.border,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  darkTheme ? AppColors.primaryLight : AppColors.primary, // Rose
+                  darkTheme
+                      ? AppColors.primaryLight
+                      : AppColors.primary, // Rose
                 ),
               ),
             ),
@@ -282,7 +302,9 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                 style: AppText.ui(
                   12,
                   FontWeight.w800,
-                  color: highlighted ? AppColors.primary : AppColors.muted, // Rose
+                  color: highlighted
+                      ? AppColors.primary
+                      : AppColors.muted, // Rose
                 ),
               ),
             ],
@@ -308,7 +330,9 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: emphasized ? AppColors.primarySoft : const Color(0xFFF4F5F7), // Rose tint
+        color: emphasized
+            ? AppColors.primarySoft
+            : const Color(0xFFF4F5F7), // Rose tint
         borderRadius: BorderRadius.circular(30),
         border: Border.all(
           color: emphasized
@@ -585,7 +609,6 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
     final topActivity = activities.isEmpty ? null : activities.entries.first;
     final activityCount = topActivity?.value ?? 0;
 
-
     final budgetProgress = budgetAverage == null
         ? null
         : (budgetAverage / 10000).clamp(0.0, 1.0).toDouble();
@@ -708,7 +731,9 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                                       style: AppText.ui(
                                         11,
                                         FontWeight.w500,
-                                        color: Colors.white.withValues(alpha: 0.6),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.6,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -733,9 +758,13 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                                       subtitle: topActivity == null
                                           ? 'No activities saved'
                                           : '$activityCount of $memberCount members',
-                                      progress: topActivity == null || memberCount == 0
+                                      progress:
+                                          topActivity == null ||
+                                              memberCount == 0
                                           ? null
-                                          : (activityCount / memberCount).clamp(0.0, 1.0).toDouble(),
+                                          : (activityCount / memberCount)
+                                                .clamp(0.0, 1.0)
+                                                .toDouble(),
                                       darkTheme: true,
                                     ),
                                   ),
@@ -760,7 +789,9 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                               Container(
                                 padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.15),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 child: Row(
@@ -875,7 +906,11 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                           accessibility.isEmpty
                               ? 'No accessibility requirements selected.'
                               : 'Recommendations treat all selected member needs as group requirements: ${accessibility.keys.join(', ')}.',
-                          style: AppText.ui(12, FontWeight.w600, color: AppColors.muted),
+                          style: AppText.ui(
+                            12,
+                            FontWeight.w600,
+                            color: AppColors.muted,
+                          ),
                         ),
                       ],
                     ),
@@ -1011,8 +1046,7 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                           child: LinearProgressIndicator(
                             value: _trip.memberCount == 0
                                 ? 0
-                                : (_trip.readyCount /
-                                          _trip.memberCount)
+                                : (_trip.readyCount / _trip.memberCount)
                                       .clamp(0.0, 1.0)
                                       .toDouble(),
                             minHeight: 8,
@@ -1023,17 +1057,10 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        for (
-                          int i = 0;
-                          i < _trip.members.length;
-                          i++
-                        ) ...[
+                        for (int i = 0; i < _trip.members.length; i++) ...[
                           Row(
                             children: [
-                              Avatar(
-                                name: _trip.members[i].name,
-                                size: 40,
-                              ),
+                              Avatar(name: _trip.members[i].name, size: 40),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
@@ -1106,19 +1133,56 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  TaraletsButton.orange(
-                    label: allConfirmed
-                        ? 'Find Places'
-                        : 'Waiting for members...',
-                    onPressed: () {
-                      if (allConfirmed) {
-                        context.push(
-                          AppRoutes.recommendations,
-                          extra: {'groupId': _trip.id},
-                        );
-                      }
-                    },
-                  ),
+                  if (allConfirmed)
+                    TaraletsButton.orange(
+                      label: 'Find Places',
+                      onPressed: () => context.push(
+                        AppRoutes.recommendations,
+                        extra: {'groupId': _trip.id},
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.amberSoft,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.amber.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.hourglass_top_rounded,
+                            color: AppColors.amberText,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Waiting for everyone to be ready',
+                              style: AppText.ui(
+                                13,
+                                FontWeight.w700,
+                                color: AppColors.amberText,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${_trip.readyCount}/${_trip.memberCount} ready',
+                            style: AppText.ui(
+                              11,
+                              FontWeight.w800,
+                              color: AppColors.amberText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),

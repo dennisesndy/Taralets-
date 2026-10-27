@@ -49,3 +49,9 @@ class GenerateTripItineraryRequest(BaseModel):
     date: Optional[datetime] = None
     start_time: Optional[str] = None
     start_location: Optional[Dict[str, float]] = None
+
+class TripPlaceVoteRequest(BaseModel):
+    place_ids: List[str] = Field(default_factory=list, max_length=50)
+
+class ItineraryReviewRequest(BaseModel):
+    reviewed: bool = True

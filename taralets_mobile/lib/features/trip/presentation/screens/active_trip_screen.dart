@@ -129,6 +129,14 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                   children: [
                     _liveBanner(),
                     const SizedBox(height: 16),
+                    TaraletsButton.ghost(
+                      label: 'View Itinerary',
+                      onPressed: () => context.push(
+                        AppRoutes.itinerary,
+                        extra: {'tripId': _trip.id},
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     _presenceStrip(),
                     const SizedBox(height: 24),
                     Text(
@@ -154,7 +162,12 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                       const SizedBox(height: 24),
                       Text(
                         'Host Options',
-                        style: AppText.ui(13, FontWeight.w800, color: AppColors.muted, letterSpacing: 1),
+                        style: AppText.ui(
+                          13,
+                          FontWeight.w800,
+                          color: AppColors.muted,
+                          letterSpacing: 1,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -333,11 +346,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                   _paused
                       ? 'The host paused the trip. Hang tight.'
                       : 'Everyone is heading to the meetup location.',
-                  style: AppText.ui(
-                    12,
-                    FontWeight.w500,
-                    color: body,
-                  ),
+                  style: AppText.ui(12, FontWeight.w500, color: body),
                 ),
               ],
             ),
@@ -363,10 +372,17 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('On this trip', style: AppText.ui(14, FontWeight.w800, color: AppColors.navy)),
+              Text(
+                'On this trip',
+                style: AppText.ui(14, FontWeight.w800, color: AppColors.navy),
+              ),
               Text(
                 '${_trip.memberCount} members',
-                style: AppText.ui(12, FontWeight.w700, color: AppColors.primary),
+                style: AppText.ui(
+                  12,
+                  FontWeight.w700,
+                  color: AppColors.primary,
+                ),
               ),
             ],
           ),
@@ -439,7 +455,12 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
           children: [
             Text(
               label.toUpperCase(),
-              style: AppText.ui(9, FontWeight.w800, color: AppColors.muted, letterSpacing: 1),
+              style: AppText.ui(
+                9,
+                FontWeight.w800,
+                color: AppColors.muted,
+                letterSpacing: 1,
+              ),
             ),
             const SizedBox(height: 2),
             value,
@@ -464,7 +485,14 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(m.name, style: AppText.ui(15, FontWeight.w800, color: AppColors.navy)),
+                        Text(
+                          m.name,
+                          style: AppText.ui(
+                            15,
+                            FontWeight.w800,
+                            color: AppColors.navy,
+                          ),
+                        ),
                         StatusBadge(status: plan.status),
                       ],
                     ),
@@ -540,7 +568,11 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                const Icon(Icons.flag_circle_rounded, color: TicketPalette.skyText, size: 36),
+                const Icon(
+                  Icons.flag_circle_rounded,
+                  color: TicketPalette.skyText,
+                  size: 36,
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -548,12 +580,21 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                     children: [
                       Text(
                         'DESTINATION',
-                        style: AppText.ui(10, FontWeight.w800, color: TicketPalette.skyText, letterSpacing: 1),
+                        style: AppText.ui(
+                          10,
+                          FontWeight.w800,
+                          color: TicketPalette.skyText,
+                          letterSpacing: 1,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         _trip.meetupFull,
-                        style: AppText.ui(16, FontWeight.w800, color: AppColors.navy),
+                        style: AppText.ui(
+                          16,
+                          FontWeight.w800,
+                          color: AppColors.navy,
+                        ),
                       ),
                     ],
                   ),
@@ -572,12 +613,21 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                     children: [
                       Text(
                         'DATE',
-                        style: AppText.ui(10, FontWeight.w800, color: AppColors.muted, letterSpacing: 1),
+                        style: AppText.ui(
+                          10,
+                          FontWeight.w800,
+                          color: AppColors.muted,
+                          letterSpacing: 1,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         _trip.longDate,
-                        style: AppText.ui(14, FontWeight.w700, color: AppColors.navy),
+                        style: AppText.ui(
+                          14,
+                          FontWeight.w700,
+                          color: AppColors.navy,
+                        ),
                       ),
                     ],
                   ),
@@ -588,12 +638,21 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                     children: [
                       Text(
                         'SCHEDULE',
-                        style: AppText.ui(10, FontWeight.w800, color: AppColors.muted, letterSpacing: 1),
+                        style: AppText.ui(
+                          10,
+                          FontWeight.w800,
+                          color: AppColors.muted,
+                          letterSpacing: 1,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         '${_trip.arrivalTarget} – ${_trip.wrapUp}',
-                        style: AppText.ui(14, FontWeight.w700, color: AppColors.navy),
+                        style: AppText.ui(
+                          14,
+                          FontWeight.w700,
+                          color: AppColors.navy,
+                        ),
                       ),
                     ],
                   ),
@@ -619,17 +678,39 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: const Icon(Icons.sensors_rounded, color: AppColors.primary, size: 24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.sensors_rounded,
+              color: AppColors.primary,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Live Group Updates', style: AppText.ui(15, FontWeight.w800, color: AppColors.primary)),
+                Text(
+                  'Live Group Updates',
+                  style: AppText.ui(
+                    15,
+                    FontWeight.w800,
+                    color: AppColors.primary,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text('Check-ins and delays will appear here once tracking is active.', style: AppText.ui(12, FontWeight.w500, color: AppColors.primary.withValues(alpha: 0.8), height: 1.4)),
+                Text(
+                  'Check-ins and delays will appear here once tracking is active.',
+                  style: AppText.ui(
+                    12,
+                    FontWeight.w500,
+                    color: AppColors.primary.withValues(alpha: 0.8),
+                    height: 1.4,
+                  ),
+                ),
               ],
             ),
           ),
@@ -658,17 +739,38 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: const Icon(Icons.auto_awesome_rounded, color: AppColors.orange, size: 24),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: AppColors.orange,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Itinerary Ideas', style: AppText.ui(15, FontWeight.w800, color: AppColors.navy)),
+                    Text(
+                      'Itinerary Ideas',
+                      style: AppText.ui(
+                        15,
+                        FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text('Places picked based on your group prefs.', style: AppText.ui(12, FontWeight.w500, color: AppColors.muted)),
+                    Text(
+                      'Places picked based on your group prefs.',
+                      style: AppText.ui(
+                        12,
+                        FontWeight.w500,
+                        color: AppColors.muted,
+                      ),
+                    ),
                   ],
                 ),
               ),

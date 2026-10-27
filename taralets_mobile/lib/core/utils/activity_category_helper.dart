@@ -43,6 +43,8 @@ String normalizeActivityCategory(String value) {
     'restaurant': 'Restaurants',
     'restaurants': 'Restaurants',
     'restaurant eatery': 'Restaurants',
+    'restaurant / eatery': 'Restaurants',
+    'restaurant/eatery': 'Restaurants',
     'eatery': 'Restaurants',
     'eateries': 'Restaurants',
     'food establishment': 'Restaurants',
@@ -78,8 +80,17 @@ String normalizeActivityCategory(String value) {
     'libraries': 'Museums',
   };
 
-  return aliases[tag] ?? value.trim();
+  return aliases[tag] ?? _titleCaseCategory(value.trim());
 }
+
+String _titleCaseCategory(String value) => value
+    .splitMapJoin(
+      RegExp(r"[A-Za-z][A-Za-z'’-]*"),
+      onMatch: (match) {
+        final word = match.group(0)!;
+        return word[0].toUpperCase() + word.substring(1).toLowerCase();
+      },
+    );
 
 List<String> normalizeActivityCategories(
   Iterable<String> categories,

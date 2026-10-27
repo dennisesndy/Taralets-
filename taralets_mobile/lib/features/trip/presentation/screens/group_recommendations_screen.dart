@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/gestures.dart';
@@ -16,6 +17,7 @@ import '../../../../shared/widgets/auth_motion.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../itinerary/data/models/itinerary_draft_models.dart';
 import '../../../itinerary/data/models/itinerary_models.dart';
+import '../../../itinerary/data/itinerary_api_mapper.dart';
 import '../../../itinerary/presentation/controllers/itinerary_draft_controller.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,16 +26,23 @@ import '../../../itinerary/presentation/controllers/itinerary_draft_controller.d
 
 IconData getCategoryIcon(String category) {
   final c = category.toLowerCase();
-  if (c.contains('church') || c.contains('religious') || c.contains('heritage')) return Icons.church;
-  if (c.contains('restaurant') || c.contains('eatery') || c.contains('food')) return Icons.restaurant_menu;
-  if (c.contains('cafe') || c.contains('bakery') || c.contains('dessert')) return Icons.local_cafe;
-  if (c.contains('shopping') || c.contains('retail') || c.contains('mall')) return Icons.shopping_bag_outlined;
-  if (c.contains('health') || c.contains('wellness') || c.contains('spa')) return Icons.spa_outlined;
-  if (c.contains('accommodation') || c.contains('hotel')) return Icons.hotel_outlined;
+  if (c.contains('church') || c.contains('religious') || c.contains('heritage'))
+    return Icons.church;
+  if (c.contains('restaurant') || c.contains('eatery') || c.contains('food'))
+    return Icons.restaurant_menu;
+  if (c.contains('cafe') || c.contains('bakery') || c.contains('dessert'))
+    return Icons.local_cafe;
+  if (c.contains('shopping') || c.contains('retail') || c.contains('mall'))
+    return Icons.shopping_bag_outlined;
+  if (c.contains('health') || c.contains('wellness') || c.contains('spa'))
+    return Icons.spa_outlined;
+  if (c.contains('accommodation') || c.contains('hotel'))
+    return Icons.hotel_outlined;
   if (c.contains('park') || c.contains('nature')) return Icons.park_outlined;
   if (c.contains('museum') || c.contains('art')) return Icons.museum_outlined;
-  if (c.contains('entertainment') || c.contains('leisure')) return Icons.local_play_outlined;
-  return Icons.place_outlined; 
+  if (c.contains('entertainment') || c.contains('leisure'))
+    return Icons.local_play_outlined;
+  return Icons.place_outlined;
 }
 
 final _edgeJunk = RegExp(r'''^[\s"'\[\]{}]+|[\s"'\[\]{}]+$''');
@@ -95,9 +104,13 @@ List<String> _rankGroupActivities(Iterable members) {
           ? bySupport
           : (firstSeen[a] ?? 0).compareTo(firstSeen[b] ?? 0);
     });
-  return ranked.map((key) => support.keys.firstWhere(
-    (activity) => activity.toLowerCase() == key,
-  )).toList();
+  return ranked
+      .map(
+        (key) => support.keys.firstWhere(
+          (activity) => activity.toLowerCase() == key,
+        ),
+      )
+      .toList();
 }
 
 List<String> _parseList(dynamic value) {
@@ -142,8 +155,10 @@ bool _asBool(dynamic v) {
 
 String _peso(num n) {
   final s = n.round().toString();
-  final withCommas =
-      s.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+  final withCommas = s.replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => ',',
+  );
   return '₱$withCommas';
 }
 
@@ -262,12 +277,16 @@ class _Place {
       }),
     );
 
-    final subs = _dedupe([
-      raw['sub_category_1'],
-      raw['sub_category_2'],
-      raw['sub_category_3'],
-    ].expand(_parseList).map(_titleCase).where((e) => e.isNotEmpty));
-    final activityTags = _dedupe(_parseList(raw['activity_tags']).map(_titleCase));
+    final subs = _dedupe(
+      [
+        raw['sub_category_1'],
+        raw['sub_category_2'],
+        raw['sub_category_3'],
+      ].expand(_parseList).map(_titleCase).where((e) => e.isNotEmpty),
+    );
+    final activityTags = _dedupe(
+      _parseList(raw['activity_tags']).map(_titleCase),
+    );
     final placeActivityCategories = normalizeActivityCategories([
       if (rawCategory.isNotEmpty) rawCategory,
       ...subs,
@@ -277,9 +296,11 @@ class _Place {
         .map((value) => value.toLowerCase())
         .toSet();
     final locallyMatchedCategories = selectedActivities
-        .where((value) => placeCategoryKeys.contains(
-              normalizeActivityCategory(value).toLowerCase(),
-            ))
+        .where(
+          (value) => placeCategoryKeys.contains(
+            normalizeActivityCategory(value).toLowerCase(),
+          ),
+        )
         .toList();
     final matchedCategories = selectedActivities.isEmpty
         ? backendMatchedCategories
@@ -295,7 +316,8 @@ class _Place {
     final description = _cleanText(raw['description']);
     final imageUrl = _cleanText(raw['image_url']);
 
-    var score = (num.tryParse(_cleanText(raw['match_score'], '0')) ?? 0).toDouble();
+    var score = (num.tryParse(_cleanText(raw['match_score'], '0')) ?? 0)
+        .toDouble();
     if (score <= 1) score *= 100;
     final percent = score.round().clamp(0, 100).toInt();
 
@@ -303,31 +325,42 @@ class _Place {
     final maxCost = num.tryParse(_cleanText(raw['max_cost']));
     String? costLabel;
     if (minCost != null && maxCost != null) {
-      costLabel = minCost == maxCost ? _peso(minCost) : '${_peso(minCost)} – ${_peso(maxCost)}';
+      costLabel = minCost == maxCost
+          ? _peso(minCost)
+          : '${_peso(minCost)} – ${_peso(maxCost)}';
     } else if (minCost != null) {
       costLabel = 'From ${_peso(minCost)}';
     } else if (maxCost != null) {
       costLabel = 'Up to ${_peso(maxCost)}';
     }
-    if (minCost == 0 && (maxCost == null || maxCost == 0)) costLabel = 'Free / Not specified';
+    if (minCost == 0 && (maxCost == null || maxCost == 0))
+      costLabel = 'Free / Not specified';
 
     final fee = _cleanText(raw['entrance_fee']);
     final feeValue = num.tryParse(fee);
     String? entrance;
     if (fee.isNotEmpty) {
-      entrance = feeValue == null ? fee : (feeValue == 0 ? 'Free entrance' : 'Entrance ${_peso(feeValue)}');
+      entrance = feeValue == null
+          ? fee
+          : (feeValue == 0 ? 'Free entrance' : 'Entrance ${_peso(feeValue)}');
     }
 
-    final baseCost = (minCost != null && minCost > 0) ? minCost : (maxCost ?? 0);
+    final baseCost = (minCost != null && minCost > 0)
+        ? minCost
+        : (maxCost ?? 0);
     final budget = (baseCost + (feeValue ?? 0)).round();
 
     final ratingVal = num.tryParse(_cleanText(raw['rating']));
-    final rating = (ratingVal != null && ratingVal > 0) ? ratingVal.toDouble() : null;
+    final rating = (ratingVal != null && ratingVal > 0)
+        ? ratingVal.toDouble()
+        : null;
     final reviews = num.tryParse(_cleanText(raw['reviews']))?.toInt();
 
     final open = _fmtTime(raw['open_time']);
     final close = _fmtTime(raw['close_time']);
-    final hours = (open.isNotEmpty && close.isNotEmpty) ? '$open – $close' : null;
+    final hours = (open.isNotEmpty && close.isNotEmpty)
+        ? '$open – $close'
+        : null;
     final daysList = _parseList(raw['days_open']);
     final days = daysList.isEmpty ? null : daysList.join(', ');
 
@@ -339,7 +372,14 @@ class _Place {
     ];
 
     final searchText = [
-      name, rawCategory, category, ...subs, ...activityTags, district, address, description,
+      name,
+      rawCategory,
+      category,
+      ...subs,
+      ...activityTags,
+      district,
+      address,
+      description,
     ].join(' ').toLowerCase();
 
     final masterId = _cleanText(raw['master_id'], '');
@@ -371,7 +411,8 @@ class _Place {
       days: days,
       dietary: dietary,
       perks: perks,
-      accessibilityMatchStatus: raw['accessibility_match_status']?.toString() ?? 'unknown',
+      accessibilityMatchStatus:
+          raw['accessibility_match_status']?.toString() ?? 'unknown',
       activityMatch: raw['activity_match'] == true,
     );
   }
@@ -384,10 +425,7 @@ class _Place {
 class GroupRecommendationsScreen extends ConsumerStatefulWidget {
   final String groupId;
 
-  const GroupRecommendationsScreen({
-    super.key,
-    required this.groupId,
-  });
+  const GroupRecommendationsScreen({super.key, required this.groupId});
 
   @override
   ConsumerState<GroupRecommendationsScreen> createState() =>
@@ -413,6 +451,9 @@ class _GroupRecommendationsScreenState
   int _currentOffset = 0;
   final int _limit = 30;
   bool _hasMore = true;
+  Timer? _voteRefreshTimer;
+  bool _refreshingVoteState = false;
+  bool _votingScreenOpen = false;
   bool _loadingMore = false;
 
   int? get _nextRadius {
@@ -448,21 +489,72 @@ class _GroupRecommendationsScreenState
       members: const [],
     );
     _loadInitialRecommendations();
+    _voteRefreshTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _refreshGroupVoteState(),
+    );
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _categoryScrollController.dispose();
+    _voteRefreshTimer?.cancel();
     _draft.dispose();
     super.dispose();
   }
 
-  void _addToItinerary(_Place place) {
-    if (_draft.contains(place.id)) return;
+  Future<void> _refreshGroupVoteState() async {
+    if (_refreshingVoteState ||
+        widget.groupId.trim().isEmpty ||
+        _votingScreenOpen ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    _refreshingVoteState = true;
+    try {
+      final state = await ref
+          .read(tripRepositoryProvider)
+          .getItinerarySelections(widget.groupId);
+      if (!mounted) return;
+      final selections = (state['selections'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final members = (state['members'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      _draft.hydrateGroupVotes(
+        selections: selections,
+        members: members,
+        candidateFromApi: itineraryCandidateFromSelection,
+      );
+      setState(() {});
+    } on TripException {
+      // Keep the current recommendation list visible if the vote refresh fails.
+    } finally {
+      _refreshingVoteState = false;
+    }
+  }
+
+  Future<void> _addToItinerary(_Place place) async {
+    if (_draft.isCurrentUserAdded(place.backendId)) return;
     HapticFeedback.selectionClick();
     _draft.add(place.toCandidate());
     setState(() {});
+    try {
+      await ref.read(tripRepositoryProvider).addItinerarySelections(
+        widget.groupId,
+        [place.backendId],
+      );
+    } on TripException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
   }
 
   Future<void> _loadInitialRecommendations() async {
@@ -482,22 +574,52 @@ class _GroupRecommendationsScreenState
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(content: Text('Could not load the group members. Please try again.')),
+          const SnackBar(
+            content: Text(
+              'Could not load the group members. Please try again.',
+            ),
+          ),
         );
       return;
     }
 
-    await context.push(
-      AppRoutes.selectedPlaces,
-      extra: {'draft': _draft, 'tripId': widget.groupId},
-    );
-    if (mounted) setState(() {});
+    try {
+      final placeIds = _draft.selected
+          .map((candidate) => candidate.backendId)
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList();
+      await ref
+          .read(tripRepositoryProvider)
+          .addItinerarySelections(widget.groupId, placeIds);
+    } on TripException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(e.message)));
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() => _votingScreenOpen = true);
+    try {
+      await context.push(
+        AppRoutes.selectedPlaces,
+        extra: {'draft': _draft, 'tripId': widget.groupId},
+      );
+    } finally {
+      if (mounted) setState(() => _votingScreenOpen = false);
+    }
   }
 
   Future<void> _loadGroupContext() async {
     if (widget.groupId.trim().isEmpty) return;
     try {
-      final tripFuture = ref.read(tripRepositoryProvider).getTrip(widget.groupId);
+      final tripFuture = ref
+          .read(tripRepositoryProvider)
+          .getTrip(widget.groupId);
       final meFuture = ref.read(currentUserProvider.future);
       final trip = await tripFuture;
       _selectedGroupActivities = _rankGroupActivities(trip.members);
@@ -509,7 +631,7 @@ class _GroupRecommendationsScreenState
       _averagePlacesPerDay = placeTargets.isEmpty
           ? 3
           : (placeTargets.reduce((a, b) => a + b) / placeTargets.length + 0.5)
-              .floor();
+                .floor();
       final me = await meFuture;
 
       final members = <ItineraryMember>[];
@@ -518,26 +640,57 @@ class _GroupRecommendationsScreenState
       for (final member in trip.members) {
         final displayName = member.name.trim().isNotEmpty
             ? member.name
-            : member.username.trim().isNotEmpty ? member.username : 'Member';
+            : member.username.trim().isNotEmpty
+            ? member.username
+            : 'Member';
 
-        final matchesCurrentUser = member.id == me.id ||
-            (member.username.isNotEmpty && member.username.toLowerCase() == me.username.toLowerCase()) ||
+        final matchesCurrentUser =
+            member.id == me.id ||
+            (member.username.isNotEmpty &&
+                member.username.toLowerCase() == me.username.toLowerCase()) ||
             (member.name.toLowerCase() == me.fullName.toLowerCase());
         final isCurrentUser = matchesCurrentUser && currentMember == null;
 
-        final itineraryMember = ItineraryMember(name: displayName, isCurrentUser: isCurrentUser);
+        final itineraryMember = ItineraryMember(
+          name: displayName,
+          isCurrentUser: isCurrentUser,
+        );
         members.add(itineraryMember);
         if (isCurrentUser) currentMember = itineraryMember;
       }
 
       if (currentMember == null) {
-        final meName = me.fullName.trim().isNotEmpty ? me.fullName : me.username.trim().isNotEmpty ? me.username : 'You';
+        final meName = me.fullName.trim().isNotEmpty
+            ? me.fullName
+            : me.username.trim().isNotEmpty
+            ? me.username
+            : 'You';
         currentMember = ItineraryMember(name: meName, isCurrentUser: true);
         members.add(currentMember);
       }
 
       if (!mounted) return;
-      _draft.updateGroupMembers(members: members, currentUserName: currentMember.name);
+      _draft.updateGroupMembers(
+        members: members,
+        currentUserName: currentMember.name,
+      );
+      final voteState = await ref
+          .read(tripRepositoryProvider)
+          .getItinerarySelections(widget.groupId);
+      if (!mounted) return;
+      final selections = (voteState['selections'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final voteMembers = (voteState['members'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      _draft.hydrateGroupVotes(
+        selections: selections,
+        members: voteMembers,
+        candidateFromApi: itineraryCandidateFromSelection,
+      );
     } catch (e) {
       debugPrint('GROUP CONTEXT ERROR: $e');
     }
@@ -573,12 +726,14 @@ class _GroupRecommendationsScreenState
       var recs = <Map<String, dynamic>>[];
 
       do {
-        recs = await ref.read(tripRepositoryProvider).getGroupRecommendations(
-          widget.groupId,
-          radius: _currentRadius,
-          limit: _limit,
-          offset: _currentOffset,
-        );
+        recs = await ref
+            .read(tripRepositoryProvider)
+            .getGroupRecommendations(
+              widget.groupId,
+              radius: _currentRadius,
+              limit: _limit,
+              offset: _currentOffset,
+            );
         if (!mounted) return;
 
         _currentOffset += recs.length;
@@ -605,8 +760,8 @@ class _GroupRecommendationsScreenState
         final activityFilteredPlaces = _selectedGroupActivities.isEmpty
             ? newPlaces
             : newPlaces
-                .where((place) => place.activityCategories.isNotEmpty)
-                .toList();
+                  .where((place) => place.activityCategories.isNotEmpty)
+                  .toList();
         addedPlaces = activityFilteredPlaces
             .where((place) => existingKeys.add(_placeKey(place)))
             .toList();
@@ -619,23 +774,29 @@ class _GroupRecommendationsScreenState
         } else {
           _places = addedPlaces;
         }
-        
+
         _error = null;
 
         if (_selectedCategory != 'All' &&
-            !_places.any((p) => p.activityCategories.contains(_selectedCategory))) {
+            !_places.any(
+              (p) => p.activityCategories.contains(_selectedCategory),
+            )) {
           _selectedCategory = 'All';
         }
       });
     } on TripException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
-      if (mounted) setState(() => _error = 'Unable to load recommendations. Please try again.');
+      if (mounted)
+        setState(
+          () => _error = 'Unable to load recommendations. Please try again.',
+        );
     } finally {
-      if (mounted) setState(() { 
-        _loading = false; 
-        _loadingMore = false; 
-      });
+      if (mounted)
+        setState(() {
+          _loading = false;
+          _loadingMore = false;
+        });
     }
   }
 
@@ -643,13 +804,17 @@ class _GroupRecommendationsScreenState
     final counts = <String, int>{};
     for (final p in _places) {
       for (final category in p.activityCategories.toSet()) {
-        counts[category] = (counts[category] ?? 0) + 1;
+        final displayCategory = normalizeActivityCategory(category);
+        counts[displayCategory] = (counts[displayCategory] ?? 0) + 1;
       }
     }
     final ordered = <String>[
       ..._selectedGroupActivities,
-      ...counts.keys.where((category) => !_selectedGroupActivities
-          .any((selected) => selected.toLowerCase() == category.toLowerCase())),
+      ...counts.keys.where(
+        (category) => !_selectedGroupActivities.any(
+          (selected) => selected.toLowerCase() == category.toLowerCase(),
+        ),
+      ),
     ];
     final sorted = ordered
         .map((category) => MapEntry(category, counts[category] ?? 0))
@@ -660,18 +825,23 @@ class _GroupRecommendationsScreenState
   List<_Place> get _filtered {
     final q = _searchQuery.trim().toLowerCase();
     return _places.where((p) {
-      final matchesCategory = _selectedCategory == 'All' ||
+      final matchesCategory =
+          _selectedCategory == 'All' ||
           p.activityCategories.contains(_selectedCategory);
       final matchesSearch = q.isEmpty || p.searchText.contains(q);
       return matchesCategory && matchesSearch;
     }).toList();
   }
 
-  bool get _filtersActive => _selectedCategory != 'All' || _searchQuery.trim().isNotEmpty;
+  bool get _filtersActive =>
+      _selectedCategory != 'All' || _searchQuery.trim().isNotEmpty;
 
   void _resetFilters() {
     _searchController.clear();
-    setState(() { _selectedCategory = 'All'; _searchQuery = ''; });
+    setState(() {
+      _selectedCategory = 'All';
+      _searchQuery = '';
+    });
   }
 
   @override
@@ -698,7 +868,10 @@ class _GroupRecommendationsScreenState
       body: _buildBody(),
       bottomNavigationBar: _draft.selected.isEmpty
           ? null
-          : _ReviewSelectedBar(count: _draft.selected.length, onReview: _reviewSelected),
+          : _ReviewSelectedBar(
+              count: _draft.currentUserAddedCount,
+              onReview: _reviewSelected,
+            ),
     );
   }
 
@@ -726,7 +899,8 @@ class _GroupRecommendationsScreenState
       return _MessageState(
         icon: Icons.explore_outlined,
         title: 'No recommendations yet',
-        message: 'We couldn\'t find places within ${_radiusLabel(_currentRadius)}. Try a wider search radius or refresh.',
+        message:
+            'We couldn\'t find places within ${_radiusLabel(_currentRadius)}. Try a wider search radius or refresh.',
         action: Wrap(
           alignment: WrapAlignment.center,
           spacing: 8,
@@ -734,7 +908,10 @@ class _GroupRecommendationsScreenState
             TextButton.icon(
               onPressed: _fetchRecommendations,
               icon: const Icon(Icons.refresh, color: AppColors.orange),
-              label: Text('Refresh', style: AppText.ui(14, FontWeight.w800, color: AppColors.orange)),
+              label: Text(
+                'Refresh',
+                style: AppText.ui(14, FontWeight.w800, color: AppColors.orange),
+              ),
             ),
             if (_hasMore)
               TextButton.icon(
@@ -742,7 +919,11 @@ class _GroupRecommendationsScreenState
                 icon: const Icon(Icons.expand_more, color: AppColors.orange),
                 label: Text(
                   'Load More Places',
-                  style: AppText.ui(14, FontWeight.w800, color: AppColors.orange),
+                  style: AppText.ui(
+                    14,
+                    FontWeight.w800,
+                    color: AppColors.orange,
+                  ),
                 ),
               ),
             if (nextRadius != null)
@@ -751,7 +932,11 @@ class _GroupRecommendationsScreenState
                 icon: const Icon(Icons.radar, color: AppColors.orange),
                 label: Text(
                   'Expand to ${_radiusLabel(nextRadius)}',
-                  style: AppText.ui(14, FontWeight.w800, color: AppColors.orange),
+                  style: AppText.ui(
+                    14,
+                    FontWeight.w800,
+                    color: AppColors.orange,
+                  ),
                 ),
               ),
           ],
@@ -769,12 +954,20 @@ class _GroupRecommendationsScreenState
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
           child: Row(
             children: [
-              const Icon(Icons.near_me_outlined, size: 15, color: AppColors.muted),
+              const Icon(
+                Icons.near_me_outlined,
+                size: 15,
+                color: AppColors.muted,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   'Nearby places are prioritized and grouped to fit your group’s pace of about $_averagePlacesPerDay places per day.',
-                  style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
+                  style: AppText.ui(
+                    11,
+                    FontWeight.w500,
+                    color: AppColors.muted,
+                  ),
                 ),
               ),
             ],
@@ -787,7 +980,11 @@ class _GroupRecommendationsScreenState
               Expanded(
                 child: Text(
                   '${results.length} ${results.length == 1 ? 'place' : 'places'}${_selectedCategory != 'All' ? ' in $_selectedCategory' : ''}',
-                  style: AppText.ui(12, FontWeight.w700, color: AppColors.muted),
+                  style: AppText.ui(
+                    12,
+                    FontWeight.w700,
+                    color: AppColors.muted,
+                  ),
                 ),
               ),
               Text(
@@ -797,7 +994,14 @@ class _GroupRecommendationsScreenState
               if (_filtersActive)
                 TextButton(
                   onPressed: _resetFilters,
-                  child: Text('Reset', style: AppText.ui(12, FontWeight.w800, color: AppColors.orange)),
+                  child: Text(
+                    'Reset',
+                    style: AppText.ui(
+                      12,
+                      FontWeight.w800,
+                      color: AppColors.orange,
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -810,7 +1014,14 @@ class _GroupRecommendationsScreenState
                   message: 'Try another category or search term.',
                   action: TextButton(
                     onPressed: _resetFilters,
-                    child: Text('Show all places', style: AppText.ui(14, FontWeight.w800, color: AppColors.orange)),
+                    child: Text(
+                      'Show all places',
+                      style: AppText.ui(
+                        14,
+                        FontWeight.w800,
+                        color: AppColors.orange,
+                      ),
+                    ),
                   ),
                 )
               : RefreshIndicator(
@@ -818,32 +1029,40 @@ class _GroupRecommendationsScreenState
                   onRefresh: () => _fetchRecommendations(),
                   child: ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-                    itemCount: results.length +
-                        ((_hasMore || _nextRadius != null) && !_filtersActive ? 1 : 0),
+                    itemCount:
+                        results.length +
+                        ((_hasMore || _nextRadius != null) && !_filtersActive
+                            ? 1
+                            : 0),
                     itemBuilder: (context, index) {
                       if (index == results.length) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 24),
                           child: Center(
                             child: _loadingMore
-                                ? const CircularProgressIndicator(color: AppColors.orange)
+                                ? const CircularProgressIndicator(
+                                    color: AppColors.orange,
+                                  )
                                 : _hasMore
-                                    ? TaraletsButton.orange(
-                                        small: true,
-                                        full: false,
-                                        label: 'Load More Places',
-                                        onPressed: () => _fetchRecommendations(isLoadMore: true),
-                                      )
-                                    : _nextRadius != null
-                                        ? TaraletsButton.orange(
-                                            small: true,
-                                            full: false,
-                                            label: 'Expand search to ${_radiusLabel(_nextRadius!)}',
-                                            onPressed: _expandSearchRadius,
-                                          )
-                                        : const SizedBox.shrink(),
+                                ? TaraletsButton.orange(
+                                    small: true,
+                                    full: false,
+                                    label: 'Load More Places',
+                                    onPressed: () =>
+                                        _fetchRecommendations(isLoadMore: true),
+                                  )
+                                : _nextRadius != null
+                                ? TaraletsButton.orange(
+                                    small: true,
+                                    full: false,
+                                    label:
+                                        'Expand search to ${_radiusLabel(_nextRadius!)}',
+                                    onPressed: _expandSearchRadius,
+                                  )
+                                : const SizedBox.shrink(),
                           ),
                         );
                       }
@@ -852,11 +1071,13 @@ class _GroupRecommendationsScreenState
                       return AuthReveal(
                         key: ValueKey(place.id),
                         offset: 14,
-                        delay: Duration(milliseconds: (index < 5 ? index : 0) * 70),
+                        delay: Duration(
+                          milliseconds: (index < 5 ? index : 0) * 70,
+                        ),
                         child: _PlaceCard(
                           place: place,
                           query: _searchQuery,
-                          added: _draft.contains(place.id),
+                          added: _draft.isCurrentUserAdded(place.backendId),
                           onAdd: () => _addToItinerary(place),
                         ),
                       );
@@ -877,7 +1098,11 @@ class _GroupRecommendationsScreenState
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.grey.withOpacity(0.2)),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2)),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
           ],
         ),
         child: TextField(
@@ -888,10 +1113,17 @@ class _GroupRecommendationsScreenState
           decoration: InputDecoration(
             hintText: 'Search places, activities, or categories…',
             hintStyle: AppText.ui(14, FontWeight.w400, color: AppColors.muted),
-            prefixIcon: const Icon(Icons.search_rounded, color: AppColors.muted),
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              color: AppColors.muted,
+            ),
             suffixIcon: _searchQuery.isNotEmpty
                 ? IconButton(
-                    icon: const Icon(Icons.close_rounded, color: AppColors.muted, size: 20),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: AppColors.muted,
+                      size: 20,
+                    ),
                     onPressed: () {
                       _searchController.clear();
                       setState(() => _searchQuery = '');
@@ -916,9 +1148,9 @@ class _GroupRecommendationsScreenState
         thickness: 3,
         radius: const Radius.circular(99),
         child: ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(
-            dragDevices: PointerDeviceKind.values.toSet(),
-          ),
+          behavior: ScrollConfiguration.of(
+            context,
+          ).copyWith(dragDevices: PointerDeviceKind.values.toSet()),
           child: ListView.separated(
             controller: _categoryScrollController,
             scrollDirection: Axis.horizontal,
@@ -929,7 +1161,9 @@ class _GroupRecommendationsScreenState
               final tab = tabs[i];
               return Center(
                 child: _CategoryChip(
-                  label: tab.key,
+                  label: tab.key == 'All'
+                      ? tab.key
+                      : normalizeActivityCategory(tab.key),
                   count: tab.value,
                   selected: _selectedCategory == tab.key,
                   onTap: () {
@@ -974,7 +1208,9 @@ class _CategoryChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? AppColors.orange : Colors.white,
           borderRadius: BorderRadius.circular(99),
-          border: Border.all(color: selected ? AppColors.orange : Colors.grey.withOpacity(0.3)),
+          border: Border.all(
+            color: selected ? AppColors.orange : Colors.grey.withOpacity(0.3),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1039,7 +1275,8 @@ class _PlaceCardState extends State<_PlaceCard> {
     final q = widget.query.trim().toLowerCase();
     if (q.isEmpty) return null;
     final p = widget.place;
-    final visible = p.name.toLowerCase().contains(q) ||
+    final visible =
+        p.name.toLowerCase().contains(q) ||
         p.tags.any((t) => t.toLowerCase().contains(q));
     if (visible) return null;
     for (final t in p.activityTags) {
@@ -1052,7 +1289,10 @@ class _PlaceCardState extends State<_PlaceCard> {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.orange.withOpacity(0.15), AppColors.orange.withOpacity(0.05)],
+          colors: [
+            AppColors.orange.withOpacity(0.15),
+            AppColors.orange.withOpacity(0.05),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -1063,16 +1303,30 @@ class _PlaceCardState extends State<_PlaceCard> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white, 
-              shape: BoxShape.circle, 
-              boxShadow: [BoxShadow(color: AppColors.orange.withOpacity(0.1), blurRadius: 10)]
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.orange.withOpacity(0.1),
+                  blurRadius: 10,
+                ),
+              ],
             ),
-            child: Icon(getCategoryIcon(widget.place.category), size: 36, color: AppColors.orange),
+            child: Icon(
+              getCategoryIcon(widget.place.category),
+              size: 36,
+              color: AppColors.orange,
+            ),
           ),
           const SizedBox(height: 12),
           Text(
-            widget.place.category,
-            style: AppText.ui(13, FontWeight.w700, color: AppColors.orange.withOpacity(0.8), letterSpacing: 1.2),
+            normalizeActivityCategory(widget.place.category),
+            style: AppText.ui(
+              13,
+              FontWeight.w700,
+              color: AppColors.orange.withOpacity(0.8),
+              letterSpacing: 1.2,
+            ),
           ),
         ],
       ),
@@ -1083,10 +1337,13 @@ class _PlaceCardState extends State<_PlaceCard> {
   Widget build(BuildContext context) {
     final p = widget.place;
     final hit = _activityHit();
-    final bool hasImage = p.imageUrl.isNotEmpty && p.imageUrl.toLowerCase() != 'nan';
-    
+    final bool hasImage =
+        p.imageUrl.isNotEmpty && p.imageUrl.toLowerCase() != 'nan';
+
     // Alisin ang pangkalahatang kategorya sa tag list para maiwasan ang redundancy sa UI
-    final List<String> subCats = p.tags.where((t) => t.toLowerCase() != p.category.toLowerCase()).toList();
+    final List<String> subCats = p.tags
+        .where((t) => t.toLowerCase() != p.category.toLowerCase())
+        .toList();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
@@ -1094,7 +1351,11 @@ class _PlaceCardState extends State<_PlaceCard> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 15, offset: const Offset(0, 6)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 15,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
       child: Material(
@@ -1113,15 +1374,19 @@ class _PlaceCardState extends State<_PlaceCard> {
               Stack(
                 children: [
                   ClipRRect(
-                    borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(24),
+                      topRight: Radius.circular(24),
+                    ),
                     child: SizedBox(
-                      height: 180, 
+                      height: 180,
                       width: double.infinity,
                       child: hasImage
                           ? Image.network(
                               p.imageUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => _buildImageFallback(),
+                              errorBuilder: (context, error, stackTrace) =>
+                                  _buildImageFallback(),
                             )
                           : _buildImageFallback(),
                     ),
@@ -1131,14 +1396,31 @@ class _PlaceCardState extends State<_PlaceCard> {
                       top: 12,
                       left: 12,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(99)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.gold,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.auto_awesome, size: 12, color: AppColors.navy),
+                            const Icon(
+                              Icons.auto_awesome,
+                              size: 12,
+                              color: AppColors.navy,
+                            ),
                             const SizedBox(width: 4),
-                            Text('Hidden Gem', style: AppText.ui(11, FontWeight.w800, color: AppColors.navy)),
+                            Text(
+                              'Hidden Gem',
+                              style: AppText.ui(
+                                11,
+                                FontWeight.w800,
+                                color: AppColors.navy,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -1159,7 +1441,11 @@ class _PlaceCardState extends State<_PlaceCard> {
                         Expanded(
                           child: Text(
                             p.name,
-                            style: AppText.ui(18, FontWeight.w800, color: AppColors.navy),
+                            style: AppText.ui(
+                              18,
+                              FontWeight.w800,
+                              color: AppColors.navy,
+                            ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -1168,37 +1454,66 @@ class _PlaceCardState extends State<_PlaceCard> {
                         if (p.rating != null)
                           Row(
                             children: [
-                              const Icon(Icons.star_rounded, size: 18, color: Colors.amber),
+                              const Icon(
+                                Icons.star_rounded,
+                                size: 18,
+                                color: Colors.amber,
+                              ),
                               const SizedBox(width: 4),
                               Text(
-                                p.reviews != null ? '${p.rating!.toStringAsFixed(1)}' : p.rating!.toStringAsFixed(1), 
-                                style: AppText.ui(14, FontWeight.w800, color: AppColors.navy)
+                                p.reviews != null
+                                    ? '${p.rating!.toStringAsFixed(1)}'
+                                    : p.rating!.toStringAsFixed(1),
+                                style: AppText.ui(
+                                  14,
+                                  FontWeight.w800,
+                                  color: AppColors.navy,
+                                ),
                               ),
                             ],
                           ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    
+
                     // Category and Price Row
                     Row(
                       children: [
-                        Icon(getCategoryIcon(p.category), size: 14, color: AppColors.orange),
+                        Icon(
+                          getCategoryIcon(p.category),
+                          size: 14,
+                          color: AppColors.orange,
+                        ),
                         const SizedBox(width: 6),
                         Text(
-                          p.category,
-                          style: AppText.ui(13, FontWeight.w600, color: AppColors.orange),
+                          normalizeActivityCategory(p.category),
+                          style: AppText.ui(
+                            13,
+                            FontWeight.w600,
+                            color: AppColors.orange,
+                          ),
                         ),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text("•", style: TextStyle(color: Colors.grey)),
+                          child: Text(
+                            "•",
+                            style: TextStyle(color: Colors.grey),
+                          ),
                         ),
-                        Icon(Icons.payments_outlined, size: 14, color: AppColors.muted),
+                        Icon(
+                          Icons.payments_outlined,
+                          size: 14,
+                          color: AppColors.muted,
+                        ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            p.costLabel ?? 'Free / Not specified', 
-                            style: AppText.ui(13, FontWeight.w500, color: AppColors.muted),
+                            p.costLabel ?? 'Free / Not specified',
+                            style: AppText.ui(
+                              13,
+                              FontWeight.w500,
+                              color: AppColors.muted,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -1209,18 +1524,32 @@ class _PlaceCardState extends State<_PlaceCard> {
                     if (hit != null) ...[
                       const SizedBox(height: 10),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                        decoration: BoxDecoration(color: AppColors.orangeSoft, borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.orangeSoft,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.auto_awesome, size: 14, color: AppColors.orange),
+                            const Icon(
+                              Icons.auto_awesome,
+                              size: 14,
+                              color: AppColors.orange,
+                            ),
                             const SizedBox(width: 6),
                             Flexible(
                               child: Text(
                                 'Matches activity: $hit',
                                 overflow: TextOverflow.ellipsis,
-                                style: AppText.ui(11.5, FontWeight.w700, color: AppColors.navy),
+                                style: AppText.ui(
+                                  11.5,
+                                  FontWeight.w700,
+                                  color: AppColors.navy,
+                                ),
                               ),
                             ),
                           ],
@@ -1230,7 +1559,10 @@ class _PlaceCardState extends State<_PlaceCard> {
                     if (p.accessibilityMatchStatus != 'not_requested') ...[
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
                         decoration: BoxDecoration(
                           color: p.accessibilityMatchStatus == 'verified'
                               ? Colors.green.shade50
@@ -1241,12 +1573,15 @@ class _PlaceCardState extends State<_PlaceCard> {
                           p.accessibilityMatchStatus == 'verified'
                               ? 'Accessibility verified for selected group needs'
                               : p.activityMatch
-                                  ? 'Activity match — accessibility not verified'
-                                  : 'Accessibility not verified for selected group needs',
-                          style: AppText.ui(11.5, FontWeight.w700,
-                              color: p.accessibilityMatchStatus == 'verified'
-                                  ? Colors.green.shade800
-                                  : AppColors.navy),
+                              ? 'Activity match — accessibility not verified'
+                              : 'Accessibility not verified for selected group needs',
+                          style: AppText.ui(
+                            11.5,
+                            FontWeight.w700,
+                            color: p.accessibilityMatchStatus == 'verified'
+                                ? Colors.green.shade800
+                                : AppColors.navy,
+                          ),
                         ),
                       ),
                     ],
@@ -1257,12 +1592,20 @@ class _PlaceCardState extends State<_PlaceCard> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.location_on_rounded, size: 16, color: Colors.grey),
+                          const Icon(
+                            Icons.location_on_rounded,
+                            size: 16,
+                            color: Colors.grey,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               p.address,
-                              style: AppText.ui(13, FontWeight.w400, color: Colors.grey.shade600),
+                              style: AppText.ui(
+                                13,
+                                FontWeight.w400,
+                                color: Colors.grey.shade600,
+                              ),
                               maxLines: _expanded ? 3 : 2,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1277,22 +1620,33 @@ class _PlaceCardState extends State<_PlaceCard> {
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
-                        children: subCats.map((s) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF0F2F5),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            s, 
-                            style: AppText.ui(11, FontWeight.w600, color: Colors.grey.shade700)
-                          ),
-                        )).toList(),
+                        children: subCats
+                            .map(
+                              (s) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF0F2F5),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  s,
+                                  style: AppText.ui(
+                                    11,
+                                    FontWeight.w600,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
                       ),
                     ],
 
                     const SizedBox(height: 16),
-                    
+
                     // Group Match Ring & Action Button Row
                     Row(
                       children: [
@@ -1304,7 +1658,11 @@ class _PlaceCardState extends State<_PlaceCard> {
                               : TaraletsButton.orange(
                                   small: true,
                                   label: 'Add to Itinerary',
-                                  icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
+                                  icon: const Icon(
+                                    Icons.add_rounded,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
                                   onPressed: widget.onAdd,
                                 ),
                         ),
@@ -1323,25 +1681,64 @@ class _PlaceCardState extends State<_PlaceCard> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Divider(height: 1, color: AppColors.border),
+                                  const Divider(
+                                    height: 1,
+                                    color: AppColors.border,
+                                  ),
                                   const SizedBox(height: 12),
-                                  
+
                                   if (p.description.isNotEmpty) ...[
                                     Text(
                                       p.description,
-                                      style: AppText.ui(13, FontWeight.w400, color: AppColors.muted, height: 1.45),
+                                      style: AppText.ui(
+                                        13,
+                                        FontWeight.w400,
+                                        color: AppColors.muted,
+                                        height: 1.45,
+                                      ),
                                     ),
                                     const SizedBox(height: 12),
                                   ],
 
                                   if (!p.hasDetails && p.description.isEmpty)
-                                    Text('No additional details available.', style: AppText.ui(12, FontWeight.w500, color: AppColors.muted)),
-                                    
-                                  if (p.hours != null) _InfoRow(icon: Icons.schedule_outlined, text: p.hours!),
-                                  if (p.days != null) ...[const SizedBox(height: 8), _InfoRow(icon: Icons.calendar_today_outlined, text: p.days!, maxLines: 2)],
-                                  if (p.entranceLabel != null) ...[const SizedBox(height: 8), _InfoRow(icon: Icons.confirmation_number_outlined, text: p.entranceLabel!)],
-                                  if (p.dietary.isNotEmpty) ...[const SizedBox(height: 8), _InfoRow(icon: Icons.restaurant_menu_outlined, text: p.dietary.join(', '), maxLines: 2)],
-                                  
+                                    Text(
+                                      'No additional details available.',
+                                      style: AppText.ui(
+                                        12,
+                                        FontWeight.w500,
+                                        color: AppColors.muted,
+                                      ),
+                                    ),
+
+                                  if (p.hours != null)
+                                    _InfoRow(
+                                      icon: Icons.schedule_outlined,
+                                      text: p.hours!,
+                                    ),
+                                  if (p.days != null) ...[
+                                    const SizedBox(height: 8),
+                                    _InfoRow(
+                                      icon: Icons.calendar_today_outlined,
+                                      text: p.days!,
+                                      maxLines: 2,
+                                    ),
+                                  ],
+                                  if (p.entranceLabel != null) ...[
+                                    const SizedBox(height: 8),
+                                    _InfoRow(
+                                      icon: Icons.confirmation_number_outlined,
+                                      text: p.entranceLabel!,
+                                    ),
+                                  ],
+                                  if (p.dietary.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    _InfoRow(
+                                      icon: Icons.restaurant_menu_outlined,
+                                      text: p.dietary.join(', '),
+                                      maxLines: 2,
+                                    ),
+                                  ],
+
                                   if (p.perks.isNotEmpty) ...[
                                     const SizedBox(height: 12),
                                     Wrap(
@@ -1350,14 +1747,32 @@ class _PlaceCardState extends State<_PlaceCard> {
                                       children: [
                                         for (final perk in p.perks)
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                                            decoration: BoxDecoration(color: AppColors.greenSoft, borderRadius: BorderRadius.circular(99)),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 9,
+                                              vertical: 5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.greenSoft,
+                                              borderRadius:
+                                                  BorderRadius.circular(99),
+                                            ),
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                const Icon(Icons.check_rounded, size: 13, color: AppColors.greenText),
+                                                const Icon(
+                                                  Icons.check_rounded,
+                                                  size: 13,
+                                                  color: AppColors.greenText,
+                                                ),
                                                 const SizedBox(width: 4),
-                                                Text(perk, style: AppText.ui(11, FontWeight.w700, color: AppColors.greenText)),
+                                                Text(
+                                                  perk,
+                                                  style: AppText.ui(
+                                                    11,
+                                                    FontWeight.w700,
+                                                    color: AppColors.greenText,
+                                                  ),
+                                                ),
                                               ],
                                             ),
                                           ),
@@ -1374,11 +1789,22 @@ class _PlaceCardState extends State<_PlaceCard> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(_expanded ? 'Show less' : 'Details', style: AppText.ui(12, FontWeight.w800, color: AppColors.orange)),
+                          Text(
+                            _expanded ? 'Show less' : 'Details',
+                            style: AppText.ui(
+                              12,
+                              FontWeight.w800,
+                              color: AppColors.orange,
+                            ),
+                          ),
                           AnimatedRotation(
                             turns: _expanded ? 0.5 : 0,
                             duration: const Duration(milliseconds: 250),
-                            child: const Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: AppColors.orange),
+                            child: const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 20,
+                              color: AppColors.orange,
+                            ),
                           ),
                         ],
                       ),
@@ -1409,9 +1835,16 @@ class _AddedToItineraryBanner extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.check_circle_rounded, size: 16, color: AppColors.greenText),
+          const Icon(
+            Icons.check_circle_rounded,
+            size: 16,
+            color: AppColors.greenText,
+          ),
           const SizedBox(width: 6),
-          Text('Added to itinerary', style: AppText.ui(12, FontWeight.w800, color: AppColors.greenText)),
+          Text(
+            'Added to itinerary',
+            style: AppText.ui(12, FontWeight.w800, color: AppColors.greenText),
+          ),
         ],
       ),
     );
@@ -1432,15 +1865,28 @@ class _ReviewSelectedBar extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           border: const Border(top: BorderSide(color: AppColors.border)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, -4))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 16,
+              offset: const Offset(0, -4),
+            ),
+          ],
         ),
         child: Row(
           children: [
             Container(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(color: AppColors.primarySoft, borderRadius: BorderRadius.circular(11)),
-              child: const Icon(Icons.playlist_add_check_rounded, size: 20, color: AppColors.primary),
+              decoration: BoxDecoration(
+                color: AppColors.primarySoft,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: const Icon(
+                Icons.playlist_add_check_rounded,
+                size: 20,
+                color: AppColors.primary,
+              ),
             ),
             const SizedBox(width: 11),
             Expanded(
@@ -1448,9 +1894,23 @@ class _ReviewSelectedBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('$count ${count == 1 ? 'place' : 'places'} added', style: AppText.ui(12.5, FontWeight.w800, color: AppColors.navy)),
+                  Text(
+                    'Your picks: $count ${count == 1 ? 'place' : 'places'}',
+                    style: AppText.ui(
+                      12.5,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
                   const SizedBox(height: 1),
-                  Text('Review and vote with the group', style: AppText.ui(10.5, FontWeight.w500, color: AppColors.muted)),
+                  Text(
+                    'Review and vote with the group',
+                    style: AppText.ui(
+                      10.5,
+                      FontWeight.w500,
+                      color: AppColors.muted,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1461,7 +1921,11 @@ class _ReviewSelectedBar extends StatelessWidget {
                 small: true,
                 full: false,
                 label: 'Review',
-                icon: const Icon(Icons.how_to_vote_rounded, size: 15, color: Colors.white),
+                icon: const Icon(
+                  Icons.how_to_vote_rounded,
+                  size: 15,
+                  color: Colors.white,
+                ),
                 onPressed: onReview,
               ),
             ),
@@ -1473,7 +1937,12 @@ class _ReviewSelectedBar extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.text, this.maxLines = 1, this.bold = false});
+  const _InfoRow({
+    required this.icon,
+    required this.text,
+    this.maxLines = 1,
+    this.bold = false,
+  });
   final IconData icon;
   final String text;
   final int maxLines;
@@ -1491,7 +1960,12 @@ class _InfoRow extends StatelessWidget {
             text,
             maxLines: maxLines,
             overflow: TextOverflow.ellipsis,
-            style: AppText.ui(12.5, bold ? FontWeight.w800 : FontWeight.w500, color: bold ? AppColors.navy : AppColors.muted, height: 1.35),
+            style: AppText.ui(
+              12.5,
+              bold ? FontWeight.w800 : FontWeight.w500,
+              color: bold ? AppColors.navy : AppColors.muted,
+              height: 1.35,
+            ),
           ),
         ),
       ],
@@ -1523,15 +1997,31 @@ class _MatchRing extends StatelessWidget {
                 duration: const Duration(milliseconds: 900),
                 curve: Curves.easeOutCubic,
                 builder: (_, v, __) => SizedBox.expand(
-                  child: CircularProgressIndicator(value: v, strokeWidth: 4.5, backgroundColor: track, valueColor: AlwaysStoppedAnimation(color)),
+                  child: CircularProgressIndicator(
+                    value: v,
+                    strokeWidth: 4.5,
+                    backgroundColor: track,
+                    valueColor: AlwaysStoppedAnimation(color),
+                  ),
                 ),
               ),
-              Text('$percent%', style: AppText.ui(11, FontWeight.w900, color: color)),
+              Text(
+                '$percent%',
+                style: AppText.ui(11, FontWeight.w900, color: color),
+              ),
             ],
           ),
         ),
         const SizedBox(width: 8),
-        Text('Group\nmatch', style: AppText.ui(9, FontWeight.w700, color: AppColors.muted, height: 1.2)),
+        Text(
+          'Group\nmatch',
+          style: AppText.ui(
+            9,
+            FontWeight.w700,
+            color: AppColors.muted,
+            height: 1.2,
+          ),
+        ),
       ],
     );
   }
@@ -1542,7 +2032,12 @@ class _MatchRing extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _MessageState extends StatelessWidget {
-  const _MessageState({required this.icon, required this.title, required this.message, this.action});
+  const _MessageState({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.action,
+  });
   final IconData icon;
   final String title;
   final String message;
@@ -1559,13 +2054,29 @@ class _MessageState extends StatelessWidget {
             Container(
               width: 84,
               height: 84,
-              decoration: const BoxDecoration(color: AppColors.orangeSoft, shape: BoxShape.circle),
+              decoration: const BoxDecoration(
+                color: AppColors.orangeSoft,
+                shape: BoxShape.circle,
+              ),
               child: Icon(icon, size: 38, color: AppColors.orange),
             ),
             const SizedBox(height: 18),
-            Text(title, textAlign: TextAlign.center, style: AppText.ui(17, FontWeight.w800, color: AppColors.navy)),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: AppText.ui(17, FontWeight.w800, color: AppColors.navy),
+            ),
             const SizedBox(height: 8),
-            Text(message, textAlign: TextAlign.center, style: AppText.ui(13, FontWeight.w400, color: AppColors.muted, height: 1.5)),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: AppText.ui(
+                13,
+                FontWeight.w400,
+                color: AppColors.muted,
+                height: 1.5,
+              ),
+            ),
             if (action != null) ...[const SizedBox(height: 20), action!],
           ],
         ),
@@ -1581,45 +2092,104 @@ class _SkeletonList extends StatefulWidget {
   State<_SkeletonList> createState() => _SkeletonListState();
 }
 
-class _SkeletonListState extends State<_SkeletonList> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+class _SkeletonListState extends State<_SkeletonList>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
 
   @override
-  void dispose() { _c.dispose(); super.dispose(); }
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
 
-  Widget _bar(double w, double h) => Container(width: w, height: h, decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(8)));
+  Widget _bar(double w, double h) => Container(
+    width: w,
+    height: h,
+    decoration: BoxDecoration(
+      color: const Color(0xFFE7EBF2),
+      borderRadius: BorderRadius.circular(8),
+    ),
+  );
 
   Widget _card() => Container(
-        margin: const EdgeInsets.only(bottom: 24),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColors.border)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(height: 180, decoration: const BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.vertical(top: Radius.circular(24)))),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _bar(190, 18),
-                  const SizedBox(height: 10),
-                  _bar(120, 12),
-                  const SizedBox(height: 14),
-                  _bar(double.infinity, 12),
-                  const SizedBox(height: 8),
-                  _bar(240, 12),
-                ],
-              ),
+    margin: const EdgeInsets.only(bottom: 24),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: 124,
+          decoration: const BoxDecoration(
+            color: Color(0xFFF0F3F8),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.place_outlined,
+              size: 34,
+              color: Color(0xFFCAD2E0),
             ),
-          ],
+          ),
         ),
-      );
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _bar(190, 18),
+              const SizedBox(height: 10),
+              _bar(120, 12),
+              const SizedBox(height: 14),
+              _bar(double.infinity, 12),
+              const SizedBox(height: 8),
+              _bar(240, 12),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
-      opacity: Tween(begin: 0.45, end: 1.0).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
-      child: ListView(physics: const NeverScrollableScrollPhysics(), padding: const EdgeInsets.fromLTRB(20, 20, 20, 0), children: [_card(), _card()]),
+      opacity: Tween(
+        begin: 0.45,
+        end: 1.0,
+      ).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+        children: [
+          Row(
+            children: [
+              const SizedBox(
+                width: 17,
+                height: 17,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  valueColor: AlwaysStoppedAnimation(AppColors.orange),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Finding places for your group…',
+                style: AppText.ui(13, FontWeight.w700, color: AppColors.navy),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _card(),
+          _card(),
+        ],
+      ),
     );
   }
 }

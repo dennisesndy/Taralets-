@@ -23,16 +23,29 @@ class ItineraryDraftController extends ChangeNotifier {
 
   final List<ItineraryMember> _members;
   String _currentUserName;
+  String? _currentUserMemberId;
+  final Map<String, String> _voteNamesById = {};
 
   String get currentUserName => _currentUserName;
 
   final List<ItineraryCandidate> _selected = [];
   final Map<String, Set<String>> _votes = {};
+  final Set<String> _hiddenBackendIds = {};
+  final Set<String> _currentUserAddedBackendIds = {};
+  int _votedMemberCount = 0;
+  int? _serverMemberCount;
+  bool _serverVoteProgressKnown = false;
 
   List<ItineraryMember> get members => List.unmodifiable(_members);
   List<ItineraryCandidate> get selected => List.unmodifiable(_selected);
 
-  int get memberCount => _members.length;
+  int get memberCount => _serverMemberCount ?? _members.length;
+  int get currentUserAddedCount => _currentUserAddedBackendIds.length;
+  int get votedMemberCount => _votedMemberCount;
+  bool get allMembersVoted =>
+      memberCount > 0 &&
+      _serverVoteProgressKnown &&
+      votedMemberCount >= memberCount;
 
   /// Replaces the preview members with the actual people who joined the trip.
   ///
@@ -45,58 +58,156 @@ class ItineraryDraftController extends ChangeNotifier {
     _members
       ..clear()
       ..addAll(members);
+    _serverMemberCount = members.length;
     _currentUserName = currentUserName;
     notifyListeners();
   }
 
-  // Only the current user can cast votes until Step 4b adds real member votes.
-  // One current-user vote is enough to include a place for now.
+  // One positive group vote is enough for a place to be considered. Itinerary
+  // generation itself waits until every trip member has cast at least one vote.
   int get requiredVotes => 1;
 
-  bool contains(String id) =>
-      _selected.any((candidate) => candidate.id == id);
+  bool contains(String id) => _selected.any((candidate) => candidate.id == id);
+
+  bool isCurrentUserAdded(String backendId) =>
+      _currentUserAddedBackendIds.contains(backendId);
 
   void add(ItineraryCandidate candidate) {
-    if (contains(candidate.id)) return;
+    if (candidate.backendId.isNotEmpty && contains(candidate.id)) {
+      _currentUserAddedBackendIds.add(candidate.backendId);
+      notifyListeners();
+      return;
+    }
 
+    final existing = _selected
+        .where((item) => item.backendId == candidate.backendId)
+        .firstOrNull;
+    if (existing != null) {
+      _currentUserAddedBackendIds.add(candidate.backendId);
+      notifyListeners();
+      return;
+    }
+
+    if (candidate.backendId.isNotEmpty) {
+      _hiddenBackendIds.remove(candidate.backendId);
+      _currentUserAddedBackendIds.add(candidate.backendId);
+    }
     _selected.add(candidate);
     notifyListeners();
   }
 
   void remove(String id) {
+    final candidate = _selected.where((item) => item.id == id).firstOrNull;
+    final hadVote = currentUserVoted(id);
     _selected.removeWhere((candidate) => candidate.id == id);
     _votes.remove(id);
-    notifyListeners();
-  }
-
-  Set<String> votesFor(String id) =>
-      Set.unmodifiable(_votes[id] ?? const <String>{});
-
-  int voteCountFor(String id) => _votes[id]?.length ?? 0;
-
-  bool currentUserVoted(String id) =>
-      _votes[id]?.contains(currentUserName) ?? false;
-
-  bool makesTheCut(ItineraryCandidate candidate) =>
-      voteCountFor(candidate.id) >= requiredVotes;
-
-  int get currentUserVoteCount => _selected
-      .where((candidate) => currentUserVoted(candidate.id))
-      .length;
-
-  bool get canGenerate =>
-      _selected.isNotEmpty && currentUserVoteCount > 0;
-
-  void toggleCurrentUserVote(String id) {
-    if (!contains(id)) return;
-
-    final votes = _votes.putIfAbsent(id, () => <String>{});
-    if (votes.contains(currentUserName)) {
-      votes.remove(currentUserName);
-    } else {
-      votes.add(currentUserName);
+    if (candidate != null && candidate.backendId.isNotEmpty) {
+      _hiddenBackendIds.add(candidate.backendId);
+      _currentUserAddedBackendIds.remove(candidate.backendId);
+    }
+    if (hadVote && currentUserVoteCount == 0) {
+      _votedMemberCount = (_votedMemberCount - 1).clamp(0, memberCount).toInt();
     }
     notifyListeners();
   }
 
+  Set<String> votesFor(String id) {
+    final votes = _votes[id] ?? const <String>{};
+    return Set.unmodifiable(
+      votes.map((voter) => _voteNamesById[voter] ?? voter),
+    );
+  }
+
+  int voteCountFor(String id) => _votes[id]?.length ?? 0;
+
+  bool currentUserVoted(String id) =>
+      _votes[id]?.contains(_currentUserMemberId ?? currentUserName) ?? false;
+
+  bool makesTheCut(ItineraryCandidate candidate) =>
+      voteCountFor(candidate.id) >= requiredVotes;
+
+  int get currentUserVoteCount =>
+      _selected.where((candidate) => currentUserVoted(candidate.id)).length;
+
+  int get currentUserVotePlaceCount => _selected.length;
+
+  bool get canGenerate =>
+      _selected.isNotEmpty && _selected.any(makesTheCut) && allMembersVoted;
+
+  void hydrateGroupVotes({
+    required List<Map<String, dynamic>> selections,
+    required List<Map<String, dynamic>> members,
+    required ItineraryCandidate Function(Map<String, dynamic>) candidateFromApi,
+  }) {
+    final candidatesByBackendId = <String, ItineraryCandidate>{};
+    for (final existing in _selected) {
+      if (existing.backendId.isNotEmpty) {
+        candidatesByBackendId[existing.backendId] = existing;
+      }
+    }
+    _votes.clear();
+    _voteNamesById.clear();
+    _currentUserMemberId = members
+        .where((member) => member['is_current_user'] == true)
+        .map((member) => member['member_id']?.toString())
+        .firstOrNull;
+    for (final member in members) {
+      final id = member['member_id']?.toString() ?? '';
+      final name = member['name']?.toString() ?? '';
+      if (id.isNotEmpty && name.isNotEmpty) _voteNamesById[id] = name;
+    }
+    for (final row in selections) {
+      final candidate = candidateFromApi(row);
+      if (_hiddenBackendIds.contains(candidate.backendId)) continue;
+      if (row['selected_by_current_user'] == true) {
+        _currentUserAddedBackendIds.add(candidate.backendId);
+      }
+      final existing = candidatesByBackendId[candidate.backendId];
+      final canonical = existing ?? candidate;
+      if (!_selected.any((item) => item.id == canonical.id)) {
+        _selected.add(canonical);
+      }
+      final voteNames = <String>{};
+      final rawVotes = row['votes'];
+      if (rawVotes is List) {
+        for (final rawVote in rawVotes) {
+          if (rawVote is Map && rawVote['vote']?.toString() != 'skip') {
+            final voterId = rawVote['member_id']?.toString() ?? '';
+            final name = rawVote['name']?.toString().trim() ?? '';
+            if (voterId.isNotEmpty) {
+              voteNames.add(voterId);
+              if (name.isNotEmpty) _voteNamesById[voterId] = name;
+            }
+          }
+        }
+      }
+      _votes[canonical.id] = voteNames;
+    }
+    _votedMemberCount = members
+        .where((member) => member['has_voted'] == true)
+        .length;
+    _serverMemberCount = members.length;
+    _serverVoteProgressKnown = true;
+    notifyListeners();
+  }
+
+  void toggleCurrentUserVote(String id) {
+    if (!contains(id)) return;
+
+    final hadAnyVotes = currentUserVoteCount > 0;
+    final currentVoter = _currentUserMemberId ?? currentUserName;
+    final votes = _votes.putIfAbsent(id, () => <String>{});
+    if (votes.contains(currentVoter)) {
+      votes.remove(currentVoter);
+    } else {
+      votes.add(currentVoter);
+    }
+    final hasAnyVotes = currentUserVoteCount > 0;
+    if (hadAnyVotes != hasAnyVotes) {
+      _votedMemberCount = (_votedMemberCount + (hasAnyVotes ? 1 : -1))
+          .clamp(0, memberCount)
+          .toInt();
+    }
+    notifyListeners();
+  }
 }

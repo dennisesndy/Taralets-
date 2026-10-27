@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,16 +13,12 @@ import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/taralets_card.dart';
-import '../../data/itinerary_api_mapper.dart';
 import '../../data/models/itinerary_draft_models.dart';
+import '../../data/itinerary_api_mapper.dart';
 import '../controllers/itinerary_draft_controller.dart';
 
 class SelectedPlacesScreen extends ConsumerStatefulWidget {
-  const SelectedPlacesScreen({
-    super.key,
-    this.draft,
-    this.tripId,
-  });
+  const SelectedPlacesScreen({super.key, this.draft, this.tripId});
 
   /// Shared with Group Recommendations so added places and votes survive
   /// navigation between the two screens.
@@ -34,22 +32,29 @@ class SelectedPlacesScreen extends ConsumerStatefulWidget {
       _SelectedPlacesScreenState();
 }
 
-class _SelectedPlacesScreenState
-    extends ConsumerState<SelectedPlacesScreen> {
+class _SelectedPlacesScreenState extends ConsumerState<SelectedPlacesScreen> {
   late final ItineraryDraftController _draft;
   late final bool _ownsDraft;
   bool _generating = false;
+  bool _savingVote = false;
+  bool _loadingVotes = false;
+  Timer? _voteRefreshTimer;
+  int _voteStateRevision = 0;
 
   @override
   void initState() {
     super.initState();
     _ownsDraft = widget.draft == null;
-    _draft = widget.draft ??
-        ItineraryDraftController(tripId: widget.tripId);
+    _draft = widget.draft ?? ItineraryDraftController(tripId: widget.tripId);
+    Future.microtask(_loadGroupVotes);
+    _voteRefreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!_savingVote && !_generating) _loadGroupVotes();
+    });
   }
 
   @override
   void dispose() {
+    _voteRefreshTimer?.cancel();
     if (_ownsDraft) _draft.dispose();
     super.dispose();
   }
@@ -68,8 +73,127 @@ class _SelectedPlacesScreenState
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  String? get _tripId => (widget.tripId?.trim().isNotEmpty ?? false)
+      ? widget.tripId!.trim()
+      : _draft.tripId;
+
+  Future<void> _loadGroupVotes() async {
+    final tripId = _tripId;
+    if (_loadingVotes || tripId == null || tripId.isEmpty) return;
+    _loadingVotes = true;
+    final revision = _voteStateRevision;
+    try {
+      final response = await ref
+          .read(tripRepositoryProvider)
+          .getItinerarySelections(tripId);
+      final selections = (response['selections'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final members = (response['members'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      if (!mounted || revision != _voteStateRevision) return;
+      _draft.hydrateGroupVotes(
+        selections: selections,
+        members: members,
+        candidateFromApi: itineraryCandidateFromSelection,
+      );
+    } on TripException {
+      // Loading errors are surfaced when the member votes or generates.
+    } finally {
+      _loadingVotes = false;
+    }
+  }
+
+  Future<void> _toggleVote(String id) async {
+    if (_savingVote || _generating) return;
+    final revision = ++_voteStateRevision;
+    _draft.toggleCurrentUserVote(id);
+    final tripId = _tripId;
+    if (tripId == null || tripId.isEmpty) return;
+    final votedIds = _draft.selected
+        .where((candidate) => _draft.currentUserVoted(candidate.id))
+        .map((candidate) => candidate.backendId)
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    setState(() => _savingVote = true);
+    try {
+      final response = await ref
+          .read(tripRepositoryProvider)
+          .saveItineraryVotes(tripId, votedIds);
+      final selections = (response['selections'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final members = (response['members'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      if (mounted && revision == _voteStateRevision) {
+        _draft.hydrateGroupVotes(
+          selections: selections,
+          members: members,
+          candidateFromApi: itineraryCandidateFromSelection,
+        );
+      }
+    } on TripException catch (e) {
+      if (mounted) {
+        _draft.toggleCurrentUserVote(id);
+        _showMessage(e.message);
+      }
+      await _loadGroupVotes();
+    } finally {
+      if (mounted) setState(() => _savingVote = false);
+    }
+  }
+
+  Future<void> _removeCandidate(String id) async {
+    ++_voteStateRevision;
+    _draft.remove(id);
+    final tripId = _tripId;
+    if (tripId == null || tripId.isEmpty) return;
+    final votedIds = _draft.selected
+        .where((candidate) => _draft.currentUserVoted(candidate.id))
+        .map((candidate) => candidate.backendId)
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    try {
+      final response = await ref
+          .read(tripRepositoryProvider)
+          .saveItineraryVotes(tripId, votedIds);
+      final selections = (response['selections'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final members = (response['members'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      if (mounted) {
+        _draft.hydrateGroupVotes(
+          selections: selections,
+          members: members,
+          candidateFromApi: itineraryCandidateFromSelection,
+        );
+      }
+    } on TripException catch (e) {
+      if (mounted) _showMessage(e.message);
+    }
+  }
+
   Future<void> _generateItinerary() async {
     if (_generating) return;
+
+    if (!_draft.canGenerate) {
+      _showMessage(
+        'Everyone in the trip must vote before generating the itinerary.',
+      );
+      return;
+    }
 
     final tripId = (widget.tripId?.trim().isNotEmpty ?? false)
         ? widget.tripId!.trim()
@@ -107,24 +231,20 @@ class _SelectedPlacesScreenState
     setState(() => _generating = true);
 
     try {
-      final data = await ref
+      await ref
           .read(tripRepositoryProvider)
           .generateItinerary(tripId, placeIds);
-      final plan = itineraryPlanFromApi(data);
-
       if (!mounted) return;
 
       HapticFeedback.mediumImpact();
-      context.go(AppRoutes.itinerary, extra: plan);
+      context.go(AppRoutes.itinerary, extra: {'tripId': tripId});
     } on TripException catch (e) {
       if (mounted) _showMessage(e.message);
     } catch (error, stackTrace) {
       debugPrint('ITINERARY GENERATION ERROR: $error');
       debugPrint('$stackTrace');
       if (mounted) {
-        _showMessage(
-          'Could not generate the itinerary. Please try again.',
-        );
+        _showMessage('Could not generate the itinerary. Please try again.');
       }
     } finally {
       if (mounted) setState(() => _generating = false);
@@ -168,10 +288,7 @@ class _SelectedPlacesScreenState
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 9,
-                  vertical: 5,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(99),
@@ -217,11 +334,11 @@ class _SelectedPlacesScreenState
                           draft: _draft,
                           onRemove: () {
                             HapticFeedback.selectionClick();
-                            _draft.remove(candidate.id);
+                            _removeCandidate(candidate.id);
                           },
                           onVote: () {
                             HapticFeedback.selectionClick();
-                            _draft.toggleCurrentUserVote(candidate.id);
+                            _toggleVote(candidate.id);
                           },
                         ),
                         const SizedBox(height: 12),
@@ -256,10 +373,11 @@ class _VotingSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selected = draft.selected;
-    final voted = draft.currentUserVoteCount;
-    final total = selected.length;
-    final progress = total == 0 ? 0.0 : (voted / total).clamp(0.0, 1.0);
+    final personalVoteCount = draft.currentUserVoteCount;
+    final personalPlaceCount = draft.currentUserVotePlaceCount;
+    final progress = personalPlaceCount == 0
+        ? 0.0
+        : (personalVoteCount / personalPlaceCount).clamp(0.0, 1.0);
 
     return TaraletsCard(
       padding: const EdgeInsets.all(16),
@@ -290,13 +408,16 @@ class _VotingSummary extends StatelessWidget {
                   children: [
                     Text(
                       'Group voting is open',
-                      style: AppText.ui(15, FontWeight.w800,
-                          color: AppColors.navy),
+                      style: AppText.ui(
+                        15,
+                        FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Places with ${draft.requiredVotes}+ votes make the '
-                      'final cut. Vote for your favorites.',
+                      'Vote for places your group wants to visit. Everyone '
+                      'needs to vote before the itinerary can be generated.',
                       style: AppText.ui(
                         11.5,
                         FontWeight.w500,
@@ -308,22 +429,19 @@ class _VotingSummary extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _VoteProgressPill(voted: voted, total: total),
+              _VoteProgressPill(
+                voted: draft.currentUserVoteCount,
+                total: draft.currentUserVotePlaceCount,
+              ),
             ],
           ),
           const SizedBox(height: 14),
           Row(
             children: [
-              AvatarStack(
-                names: draft.members.map((member) => member.name).toList(),
-                size: 25,
-                ringColor: Colors.white,
-              ),
-              const SizedBox(width: 9),
               Expanded(
                 child: Text(
-                  '${draft.memberCount} members · '
-                  '$voted of $total of your votes',
+                  'You voted for ${draft.currentUserVoteCount} of '
+                  '${draft.currentUserVotePlaceCount} places',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppText.ui(
@@ -361,7 +479,7 @@ class _VoteProgressPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final complete = voted == total;
+    final complete = total > 0 && voted == total;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
@@ -399,11 +517,7 @@ class _SelectedPlaceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final votes = draft.votesFor(candidate.id);
-    final voteCount = votes.length;
     final voted = draft.currentUserVoted(candidate.id);
-    final makesCut = voteCount >= draft.requiredVotes;
-    final remaining = draft.requiredVotes - voteCount;
 
     return Container(
       decoration: BoxDecoration(
@@ -436,16 +550,23 @@ class _SelectedPlaceCard extends StatelessWidget {
                         candidate.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AppText.ui(15, FontWeight.w800,
-                            color: AppColors.navy, height: 1.25),
+                        style: AppText.ui(
+                          15,
+                          FontWeight.w800,
+                          color: AppColors.navy,
+                          height: 1.25,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         candidate.locationLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppText.ui(11.5, FontWeight.w500,
-                            color: AppColors.muted),
+                        style: AppText.ui(
+                          11.5,
+                          FontWeight.w500,
+                          color: AppColors.muted,
+                        ),
                       ),
                       if (candidate.address.isNotEmpty) ...[
                         const SizedBox(height: 5),
@@ -542,12 +663,8 @@ class _SelectedPlaceCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          if (votes.isNotEmpty)
-                            AvatarStack(
-                              names: votes.toList(),
-                              size: 22,
-                              ringColor: Colors.white,
-                            )
+                          if (voted)
+                            Avatar(name: draft.currentUserName, size: 22)
                           else
                             Container(
                               width: 22,
@@ -565,7 +682,7 @@ class _SelectedPlaceCard extends StatelessWidget {
                             ),
                           const SizedBox(width: 7),
                           Text(
-                            '$voteCount/${draft.memberCount} votes',
+                            voted ? 'Voted by you' : 'Not voted by you',
                             style: AppText.ui(
                               10.5,
                               FontWeight.w700,
@@ -576,14 +693,13 @@ class _SelectedPlaceCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        makesCut
-                            ? 'Makes the final cut'
-                            : 'Needs $remaining more '
-                                  '${remaining == 1 ? 'vote' : 'votes'}',
+                        voted
+                            ? 'Your vote is saved'
+                            : 'You have not voted for this place',
                         style: AppText.ui(
                           10,
                           FontWeight.w600,
-                          color: makesCut
+                          color: voted
                               ? AppColors.greenText
                               : AppColors.amberText,
                         ),
@@ -618,10 +734,7 @@ class _PlaceThumb extends StatelessWidget {
         border: Border.all(color: AppColors.border),
       ),
       alignment: Alignment.center,
-      child: Text(
-        candidate.icon,
-        style: const TextStyle(fontSize: 25),
-      ),
+      child: Text(candidate.icon, style: const TextStyle(fontSize: 25)),
     );
 
     if (!(candidate.imageUrl.startsWith('http://') ||
@@ -676,10 +789,7 @@ class _MiniTag extends StatelessWidget {
         children: [
           Icon(icon, size: 10, color: color),
           const SizedBox(width: 3),
-          Text(
-            label,
-            style: AppText.ui(9.5, FontWeight.w700, color: color),
-          ),
+          Text(label, style: AppText.ui(9.5, FontWeight.w700, color: color)),
         ],
       ),
     );
@@ -712,9 +822,7 @@ class _VoteButton extends StatelessWidget {
                 ),
           borderRadius: BorderRadius.circular(10),
           border: voted
-              ? Border.all(
-                  color: AppColors.green.withValues(alpha: 0.25),
-                )
+              ? Border.all(color: AppColors.green.withValues(alpha: 0.25))
               : null,
           boxShadow: voted
               ? null
@@ -730,9 +838,7 @@ class _VoteButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              voted
-                  ? Icons.check_circle_rounded
-                  : Icons.how_to_vote_rounded,
+              voted ? Icons.check_circle_rounded : Icons.how_to_vote_rounded,
               size: 14,
               color: voted ? AppColors.greenText : Colors.white,
             ),
@@ -769,8 +875,6 @@ class _GenerateBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final voted = draft.currentUserVoteCount;
-    final total = draft.selected.length;
     final ready = onGenerate != null || isLoading;
 
     return SafeArea(
@@ -779,9 +883,7 @@ class _GenerateBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
         decoration: BoxDecoration(
           color: Colors.white,
-          border: const Border(
-            top: BorderSide(color: AppColors.border),
-          ),
+          border: const Border(top: BorderSide(color: AppColors.border)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
@@ -798,17 +900,21 @@ class _GenerateBar extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Your votes: $voted/$total',
-                    style: AppText.ui(12, FontWeight.w800,
-                        color: AppColors.navy),
+                    'Your votes: ${draft.currentUserVoteCount} of '
+                    '${draft.currentUserVotePlaceCount} places',
+                    style: AppText.ui(
+                      12,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     isLoading
                         ? 'Building the real itinerary…'
                         : ready
-                        ? 'Ready to generate the final plan'
-                        : 'Vote on at least one place',
+                        ? 'Everyone has voted. The plan is ready.'
+                        : 'Waiting for every member to vote',
                     style: AppText.ui(
                       10.5,
                       FontWeight.w500,

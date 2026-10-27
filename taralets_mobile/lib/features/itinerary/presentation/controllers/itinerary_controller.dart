@@ -18,12 +18,16 @@ class ItineraryController extends ChangeNotifier {
   int get memberCount => _plan.members.length;
   bool get allMembersReviewed => _plan.allReviewed;
 
+  void updatePlan(ItineraryPlan plan) {
+    _plan = plan;
+    _confirmed = plan.status == ItineraryStatus.finalized;
+    notifyListeners();
+  }
+
   void toggleCurrentUserReviewed() {
     if (_confirmed) return;
 
-    final index = _plan.members.indexWhere(
-      (member) => member.isCurrentUser,
-    );
+    final index = _plan.members.indexWhere((member) => member.isCurrentUser);
     if (index == -1) return;
 
     final members = List<ItineraryMember>.of(_plan.members);

@@ -231,6 +231,18 @@ abstract class TripRepository {
     String? date,
     String? startTime,
   });
+  Future<Map<String, dynamic>> addItinerarySelections(
+    String tripId,
+    List<String> placeIds,
+  );
+  Future<Map<String, dynamic>> getItinerarySelections(String tripId);
+  Future<Map<String, dynamic>> saveItineraryVotes(
+    String tripId,
+    List<String> placeIds,
+  );
+  Future<Map<String, dynamic>> getItinerary(String tripId);
+  Future<Map<String, dynamic>> reviewItinerary(String tripId, bool reviewed);
+  Future<Map<String, dynamic>> lockItinerary(String tripId);
   Future<void> updateGroupPreferences(String tripId, GroupPreferences prefs);
   Future<Trip> getTrip(String tripId);
   Future<Trip> updateTrip(Trip updatedTrip);
@@ -376,11 +388,7 @@ class ApiTripRepository implements TripRepository {
     try {
       final response = await _dio.get(
         '${ApiEndpoints.apiPrefix}/groups/$tripId/recommendations',
-        queryParameters: {
-          'radius': radius,
-          'limit': limit,
-          'offset': offset,
-        },
+        queryParameters: {'radius': radius, 'limit': limit, 'offset': offset},
       );
 
       final payload = response.data;
@@ -398,10 +406,12 @@ class ApiTripRepository implements TripRepository {
 
       return (payload['data'] as List)
           .whereType<Map>()
-          .map((place) => {
-                ...Map<String, dynamic>.from(place),
-                '_group_activity_preferences': groupActivities,
-              })
+          .map(
+            (place) => {
+              ...Map<String, dynamic>.from(place),
+              '_group_activity_preferences': groupActivities,
+            },
+          )
           .toList();
     } on DioException catch (e) {
       throw TripException(
@@ -445,10 +455,130 @@ class ApiTripRepository implements TripRepository {
     } on DioException catch (e) {
       throw TripException(
         'ITINERARY FAILED',
-        _handleError(
-          e,
-          'Could not generate the itinerary. Please try again.',
-        ),
+        _handleError(e, 'Could not generate the itinerary. Please try again.'),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> addItinerarySelections(
+    String tripId,
+    List<String> placeIds,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/itinerary/selections',
+        data: {'place_ids': placeIds},
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      throw TripException(
+        'SELECTION FAILED',
+        _handleError(e, 'Could not save the group selections'),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> getItinerarySelections(String tripId) async {
+    try {
+      final response = await _dio.get(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/itinerary/selections',
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      throw TripException(
+        'VOTES FAILED',
+        _handleError(e, 'Could not load group votes'),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> saveItineraryVotes(
+    String tripId,
+    List<String> placeIds,
+  ) async {
+    try {
+      final response = await _dio.put(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/itinerary/votes',
+        data: {'place_ids': placeIds},
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      throw TripException(
+        'VOTE FAILED',
+        _handleError(e, 'Could not save your votes'),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> getItinerary(String tripId) async {
+    try {
+      final response = await _dio.get(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/itinerary',
+      );
+      final payload = response.data;
+      if (payload is Map && payload['data'] is Map) {
+        return Map<String, dynamic>.from(payload['data'] as Map);
+      }
+      throw const TripException(
+        'INVALID RESPONSE',
+        'The itinerary response has an unexpected format.',
+      );
+    } on DioException catch (e) {
+      throw TripException(
+        'ITINERARY FAILED',
+        _handleError(e, 'Could not load the saved itinerary'),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> reviewItinerary(
+    String tripId,
+    bool reviewed,
+  ) async {
+    try {
+      final response = await _dio.put(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/itinerary/review',
+        data: {'reviewed': reviewed},
+      );
+      final payload = response.data;
+      if (payload is Map && payload['data'] is Map) {
+        return Map<String, dynamic>.from(payload['data'] as Map);
+      }
+      throw const TripException(
+        'INVALID RESPONSE',
+        'The review response has an unexpected format.',
+      );
+    } on DioException catch (e) {
+      throw TripException(
+        'REVIEW FAILED',
+        _handleError(e, 'Could not save your itinerary review'),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> lockItinerary(String tripId) async {
+    try {
+      final response = await _dio.post(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/itinerary/lock',
+      );
+      final payload = response.data;
+      if (payload is Map && payload['data'] is Map) {
+        return Map<String, dynamic>.from(payload['data'] as Map);
+      }
+      throw const TripException(
+        'INVALID RESPONSE',
+        'The lock response has an unexpected format.',
+      );
+    } on DioException catch (e) {
+      throw TripException(
+        'LOCK FAILED',
+        _handleError(e, 'Could not lock the itinerary'),
       );
     }
   }
@@ -683,6 +813,44 @@ class MockTripRepository implements TripRepository {
       'Real itinerary generation needs the live API.',
     );
   }
+
+  @override
+  Future<Map<String, dynamic>> addItinerarySelections(
+    String tripId,
+    List<String> placeIds,
+  ) async => {};
+
+  @override
+  Future<Map<String, dynamic>> getItinerarySelections(String tripId) async => {
+    'selections': [],
+    'members': [],
+  };
+
+  @override
+  Future<Map<String, dynamic>> saveItineraryVotes(
+    String tripId,
+    List<String> placeIds,
+  ) async => {'selections': [], 'members': []};
+
+  @override
+  Future<Map<String, dynamic>> getItinerary(String tripId) async =>
+      throw const TripException('NOT FOUND', 'No itinerary is available.');
+
+  @override
+  Future<Map<String, dynamic>> reviewItinerary(
+    String tripId,
+    bool reviewed,
+  ) async => throw const TripException(
+    'NOT CONNECTED',
+    'Itinerary reviews need the live API.',
+  );
+
+  @override
+  Future<Map<String, dynamic>> lockItinerary(String tripId) async =>
+      throw const TripException(
+        'NOT CONNECTED',
+        'Locking the itinerary needs the live API.',
+      );
 
   @override
   Future<void> updateGroupPreferences(

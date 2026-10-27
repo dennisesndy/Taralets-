@@ -34,12 +34,49 @@ class TripLobbyScreen extends ConsumerStatefulWidget {
   ConsumerState<TripLobbyScreen> createState() => _TripLobbyScreenState();
 }
 
+class _WaitingForMembers extends StatelessWidget {
+  const _WaitingForMembers({required this.ready, required this.total});
+
+  final int ready;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    decoration: BoxDecoration(
+      color: AppColors.amberSoft,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: AppColors.amber.withValues(alpha: 0.3)),
+    ),
+    child: Row(
+      children: [
+        const Icon(
+          Icons.hourglass_top_rounded,
+          color: AppColors.amberText,
+          size: 18,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Waiting for everyone to be ready',
+            style: AppText.ui(13, FontWeight.w700, color: AppColors.amberText),
+          ),
+        ),
+        Text(
+          '$ready/$total ready',
+          style: AppText.ui(11, FontWeight.w800, color: AppColors.amberText),
+        ),
+      ],
+    ),
+  );
+}
+
 class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   late Trip _trip = widget.trip;
   Timer? _refreshTimer;
   bool _refreshing = false;
   bool _toggling = false;
-  bool _starting = false;
+  bool _hasItinerary = false;
   bool _cancellingOrLeaving = false;
   String? _errorTitle;
   String? _errorMessage;
@@ -49,6 +86,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   @override
   void initState() {
     super.initState();
+    Future.microtask(_refreshItineraryAvailability);
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 3),
       (_) => _refreshTrip(),
@@ -58,6 +96,15 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) _showSuccessOverlay();
       });
+    }
+  }
+
+  Future<void> _refreshItineraryAvailability() async {
+    try {
+      await _repo.getItinerary(_trip.id);
+      if (mounted) setState(() => _hasItinerary = true);
+    } on TripException {
+      if (mounted) setState(() => _hasItinerary = false);
     }
   }
 
@@ -94,7 +141,12 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
               Text(
                 "Your group trip is ready. Share the code to invite your friends.",
                 textAlign: TextAlign.center,
-                style: AppText.ui(13, FontWeight.w500, color: AppColors.muted, height: 1.5),
+                style: AppText.ui(
+                  13,
+                  FontWeight.w500,
+                  color: AppColors.muted,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 24),
               Container(
@@ -129,7 +181,11 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   }
 
   Future<void> _refreshTrip() async {
-    if (!mounted || _refreshing || _toggling || _starting || _cancellingOrLeaving) return;
+    if (!mounted ||
+        _refreshing ||
+        _toggling ||
+        _cancellingOrLeaving)
+      return;
     _refreshing = true;
     try {
       final latestTrip = await _repo.getTrip(_trip.id);
@@ -157,7 +213,8 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
       ..showSnackBar(SnackBar(content: Text(text)));
   }
 
-  void _back() => context.canPop() ? context.pop() : context.go(AppRoutes.trips);
+  void _back() =>
+      context.canPop() ? context.pop() : context.go(AppRoutes.trips);
 
   void _copyCode() {
     Clipboard.setData(ClipboardData(text: _trip.code));
@@ -208,29 +265,6 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
     }
   }
 
-  Future<void> _start() async {
-    if (_starting) return;
-    setState(() {
-      _starting = true;
-      _errorTitle = null;
-      _errorMessage = null;
-    });
-    try {
-      final started = await _repo.startTrip(_trip.id);
-      ref.invalidate(myTripsProvider);
-      if (!mounted) return;
-      context.pushReplacement(AppRoutes.activeTrip, extra: started);
-    } on TripException catch (e) {
-      if (mounted) {
-        setState(() {
-          _starting = false;
-          _errorTitle = e.title;
-          _errorMessage = e.message;
-        });
-      }
-    }
-  }
-
   Future<void> _cancelOrLeaveTrip(bool isLeader) async {
     if (_cancellingOrLeaving) return;
     final title = isLeader ? 'Cancel Trip' : 'Leave Trip';
@@ -244,19 +278,33 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
       builder: (c) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: AppText.ui(18, FontWeight.w900, color: AppColors.navy)),
+        title: Text(
+          title,
+          style: AppText.ui(18, FontWeight.w900, color: AppColors.navy),
+        ),
         content: Text(
           content,
-          style: AppText.ui(13, FontWeight.w500, color: AppColors.muted, height: 1.5),
+          style: AppText.ui(
+            13,
+            FontWeight.w500,
+            color: AppColors.muted,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
-            child: Text('No', style: AppText.ui(14, FontWeight.w700, color: AppColors.navy)),
+            child: Text(
+              'No',
+              style: AppText.ui(14, FontWeight.w700, color: AppColors.navy),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(c, true),
-            child: Text(confirmText, style: AppText.ui(14, FontWeight.w800, color: AppColors.red)),
+            child: Text(
+              confirmText,
+              style: AppText.ui(14, FontWeight.w800, color: AppColors.red),
+            ),
           ),
         ],
       ),
@@ -283,7 +331,9 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final me = ref.watch(currentUserProvider).maybeWhen(data: (u) => u, orElse: () => null);
+    final me = ref
+        .watch(currentUserProvider)
+        .maybeWhen(data: (u) => u, orElse: () => null);
     final isLeader = _trip.isLeader(me?.id);
     final myMember = _trip.members.where((m) => m.id == me?.id).firstOrNull;
 
@@ -294,23 +344,41 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(trip: _trip, showEdit: isLeader, onBack: _back, onEdit: _edit),
+              _Header(
+                trip: _trip,
+                showEdit: isLeader,
+                onBack: _back,
+                onEdit: _edit,
+              ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 20,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _RoomCodeCard(code: _trip.code, onCopy: _copyCode, onShare: _shareInvite),
+                    _RoomCodeCard(
+                      code: _trip.code,
+                      onCopy: _copyCode,
+                      onShare: _shareInvite,
+                    ),
                     const SizedBox(height: 16),
                     _OverviewCard(trip: _trip),
                     const SizedBox(height: 16),
                     _MembersCard(trip: _trip, meId: me?.id),
                     const SizedBox(height: 16),
-                    _PrefsLink(onTap: () => context.push(AppRoutes.groupPrefs, extra: _trip)),
+                    _PrefsLink(
+                      onTap: () =>
+                          context.push(AppRoutes.groupPrefs, extra: _trip),
+                    ),
                     const SizedBox(height: 24),
 
                     if (_errorTitle != null) ...[
-                      ErrorNote(title: _errorTitle!, message: _errorMessage ?? ''),
+                      ErrorNote(
+                        title: _errorTitle!,
+                        message: _errorMessage ?? '',
+                      ),
                       const SizedBox(height: 16),
                     ],
 
@@ -322,28 +390,36 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                       const SizedBox(height: 12),
                     ],
 
+                    if (_hasItinerary) ...[
+                      TaraletsButton.orange(
+                        label: 'View Itinerary',
+                        onPressed: () => context.go(
+                          AppRoutes.itinerary,
+                          extra: {'tripId': _trip.id},
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
                     if (_trip.everyoneReady) ...[
                       TaraletsButton.orange(
                         label: 'Find Places',
                         onPressed: () {
-                          context.push(AppRoutes.recommendations, extra: {'groupId': widget.trip.id});
+                          context.push(
+                            AppRoutes.recommendations,
+                            extra: {'groupId': widget.trip.id},
+                          );
                         },
                       ),
                     ] else if (isLeader) ...[
-                      TaraletsButton.ghost(
-                        label: 'Waiting... ${_trip.readyCount}/${_trip.memberCount} ready',
-                        onPressed: null,
-                      ),
-                      const SizedBox(height: 12),
-                      TaraletsButton.orange(
-                        label: 'Start Trip',
-                        isLoading: _starting,
-                        onPressed: _starting ? null : _start,
+                      _WaitingForMembers(
+                        ready: _trip.readyCount,
+                        total: _trip.memberCount,
                       ),
                     ] else ...[
-                      TaraletsButton.orange(
-                        label: 'Waiting... ${_trip.readyCount}/${_trip.memberCount} ready',
-                        onPressed: null,
+                      _WaitingForMembers(
+                        ready: _trip.readyCount,
+                        total: _trip.memberCount,
                       ),
                     ],
 
@@ -365,20 +441,35 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                     if (isLeader || myMember != null) ...[
                       const SizedBox(height: 20),
                       GestureDetector(
-                        onTap: _cancellingOrLeaving ? null : () => _cancelOrLeaveTrip(isLeader),
+                        onTap: _cancellingOrLeaving
+                            ? null
+                            : () => _cancelOrLeaveTrip(isLeader),
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: AppColors.redSoft,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.red.withValues(alpha: 0.2)),
+                            border: Border.all(
+                              color: AppColors.red.withValues(alpha: 0.2),
+                            ),
                           ),
                           child: _cancellingOrLeaving
-                              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: AppColors.red, strokeWidth: 2))
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.red,
+                                    strokeWidth: 2,
+                                  ),
+                                )
                               : Text(
                                   isLeader ? 'Cancel Trip' : 'Leave Trip',
-                                  style: AppText.ui(14, FontWeight.w800, color: AppColors.red),
+                                  style: AppText.ui(
+                                    14,
+                                    FontWeight.w800,
+                                    color: AppColors.red,
+                                  ),
                                 ),
                         ),
                       ),
@@ -398,7 +489,12 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
 // Header
 // ---------------------------------------------------------------------------
 class _Header extends StatelessWidget {
-  const _Header({required this.trip, required this.showEdit, required this.onBack, required this.onEdit});
+  const _Header({
+    required this.trip,
+    required this.showEdit,
+    required this.onBack,
+    required this.onEdit,
+  });
   final Trip trip;
   final bool showEdit;
   final VoidCallback onBack;
@@ -424,12 +520,20 @@ class _Header extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     // Parehong-pareho na ng timbang at kulay sa Create Trip
-                    style: AppText.ui(18, FontWeight.w800, color: AppColors.navy), 
+                    style: AppText.ui(
+                      18,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '${trip.dateLabel} • Target arrival ${trip.arrivalTarget}',
-                    style: AppText.ui(13, FontWeight.w500, color: AppColors.muted),
+                    style: AppText.ui(
+                      13,
+                      FontWeight.w500,
+                      color: AppColors.muted,
+                    ),
                   ),
                 ],
               ),
@@ -441,7 +545,10 @@ class _Header extends StatelessWidget {
               onTap: onEdit,
               child: Container(
                 margin: const EdgeInsets.only(left: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   border: Border.all(color: AppColors.border, width: 1.5),
@@ -452,7 +559,14 @@ class _Header extends StatelessWidget {
                   children: [
                     const Icon(AppIcons.edit, color: AppColors.navy, size: 16),
                     const SizedBox(width: 6),
-                    Text('Edit', style: AppText.ui(12, FontWeight.w700, color: AppColors.navy)),
+                    Text(
+                      'Edit',
+                      style: AppText.ui(
+                        12,
+                        FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -481,7 +595,11 @@ BoxDecoration _cardDeco() => BoxDecoration(
 
 // BINAGO: Literal na TicketCard para sa Room Code
 class _RoomCodeCard extends StatelessWidget {
-  const _RoomCodeCard({required this.code, required this.onCopy, required this.onShare});
+  const _RoomCodeCard({
+    required this.code,
+    required this.onCopy,
+    required this.onShare,
+  });
   final String code;
   final VoidCallback onCopy;
   final VoidCallback onShare;
@@ -504,18 +622,32 @@ class _RoomCodeCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.confirmation_number_outlined, size: 16, color: AppColors.primary), // Rose color
+                    const Icon(
+                      Icons.confirmation_number_outlined,
+                      size: 16,
+                      color: AppColors.primary,
+                    ), // Rose color
                     const SizedBox(width: 8),
                     Text(
                       'TRIP INVITE CODE',
-                      style: AppText.ui(11, FontWeight.w800, color: AppColors.primary, letterSpacing: 1.5),
+                      style: AppText.ui(
+                        11,
+                        FontWeight.w800,
+                        color: AppColors.primary,
+                        letterSpacing: 1.5,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Text(
                   code,
-                  style: AppText.mono(36, FontWeight.w900, color: AppColors.navy, letterSpacing: 4),
+                  style: AppText.mono(
+                    36,
+                    FontWeight.w900,
+                    color: AppColors.navy,
+                    letterSpacing: 4,
+                  ),
                 ),
               ],
             ),
@@ -525,11 +657,17 @@ class _RoomCodeCard extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: TaraletsButton.ghost(label: 'Copy Code', onPressed: onCopy),
+                  child: TaraletsButton.ghost(
+                    label: 'Copy Code',
+                    onPressed: onCopy,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TaraletsButton.orange(label: 'Share Invite', onPressed: onShare),
+                  child: TaraletsButton.orange(
+                    label: 'Share Invite',
+                    onPressed: onShare,
+                  ),
                 ),
               ],
             ),
@@ -567,22 +705,51 @@ class _OverviewCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(r.$2.toUpperCase(), style: AppText.ui(10, FontWeight.w800, color: AppColors.muted, letterSpacing: 1)),
+                      Text(
+                        r.$2.toUpperCase(),
+                        style: AppText.ui(
+                          10,
+                          FontWeight.w800,
+                          color: AppColors.muted,
+                          letterSpacing: 1,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text(r.$3, style: AppText.ui(15, FontWeight.w800, color: AppColors.navy)),
+                      Text(
+                        r.$3,
+                        style: AppText.ui(
+                          15,
+                          FontWeight.w800,
+                          color: AppColors.navy,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
-            if (r != rows.last || trip.description.isNotEmpty) const SizedBox(height: 18),
+            if (r != rows.last || trip.description.isNotEmpty)
+              const SizedBox(height: 18),
           ],
           if (trip.description.isNotEmpty) ...[
-            Text('ABOUT THIS TRIP', style: AppText.ui(10, FontWeight.w800, color: AppColors.muted, letterSpacing: 1)),
+            Text(
+              'ABOUT THIS TRIP',
+              style: AppText.ui(
+                10,
+                FontWeight.w800,
+                color: AppColors.muted,
+                letterSpacing: 1,
+              ),
+            ),
             const SizedBox(height: 6),
             Text(
               trip.description,
-              style: AppText.ui(13, FontWeight.w500, color: AppColors.muted, height: 1.5),
+              style: AppText.ui(
+                13,
+                FontWeight.w500,
+                color: AppColors.muted,
+                height: 1.5,
+              ),
             ),
           ],
         ],
@@ -607,14 +774,28 @@ class _MembersCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Trip Members', style: AppText.ui(15, FontWeight.w900, color: AppColors.navy)),
-              Text('${trip.readyCount}/${trip.memberCount} ready', style: AppText.ui(13, FontWeight.w800, color: AppColors.primary)), // Rose text
+              Text(
+                'Trip Members',
+                style: AppText.ui(15, FontWeight.w900, color: AppColors.navy),
+              ),
+              Text(
+                '${trip.readyCount}/${trip.memberCount} ready',
+                style: AppText.ui(
+                  13,
+                  FontWeight.w800,
+                  color: AppColors.primary,
+                ),
+              ), // Rose text
             ],
           ),
           const SizedBox(height: 16),
           for (final m in trip.members) ...[
             _MemberRow(member: m, isMe: m.id == meId),
-            if (m != trip.members.last) const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: AppColors.border)),
+            if (m != trip.members.last)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Divider(height: 1, color: AppColors.border),
+              ),
           ],
         ],
       ),
@@ -644,21 +825,41 @@ class _MemberRow extends StatelessWidget {
                     child: Text(
                       isMe ? '${member.name} (You)' : member.name,
                       overflow: TextOverflow.ellipsis,
-                      style: AppText.ui(14, FontWeight.w800, color: AppColors.navy),
+                      style: AppText.ui(
+                        14,
+                        FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
                     ),
                   ),
                   if (member.isLeader) ...[
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(color: AppColors.primarySoft, borderRadius: BorderRadius.circular(99)),
-                      child: Text('Leader', style: AppText.ui(10, FontWeight.w800, color: AppColors.primary)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primarySoft,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text(
+                        'Leader',
+                        style: AppText.ui(
+                          10,
+                          FontWeight.w800,
+                          color: AppColors.primary,
+                        ),
+                      ),
                     ),
                   ],
                 ],
               ),
               const SizedBox(height: 2),
-              Text('@${member.username}', style: AppText.ui(12, FontWeight.w500, color: AppColors.muted)),
+              Text(
+                '@${member.username}',
+                style: AppText.ui(12, FontWeight.w500, color: AppColors.muted),
+              ),
             ],
           ),
         ),
@@ -670,7 +871,11 @@ class _MemberRow extends StatelessWidget {
           ),
           child: Text(
             ready ? '✓ Ready' : 'Pending',
-            style: AppText.ui(11, FontWeight.w800, color: ready ? AppColors.greenText : AppColors.amberText),
+            style: AppText.ui(
+              11,
+              FontWeight.w800,
+              color: ready ? AppColors.greenText : AppColors.amberText,
+            ),
           ),
         ),
       ],
@@ -694,17 +899,38 @@ class _PrefsLink extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: AppColors.primarySoft, borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.favorite_rounded, color: AppColors.primary, size: 20),
+              decoration: BoxDecoration(
+                color: AppColors.primarySoft,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.favorite_rounded,
+                color: AppColors.primary,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Group Preferences', style: AppText.ui(15, FontWeight.w900, color: AppColors.navy)),
+                  Text(
+                    'Group Preferences',
+                    style: AppText.ui(
+                      15,
+                      FontWeight.w900,
+                      color: AppColors.navy,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text('See what the group wants to do', style: AppText.ui(12, FontWeight.w500, color: AppColors.muted)),
+                  Text(
+                    'See what the group wants to do',
+                    style: AppText.ui(
+                      12,
+                      FontWeight.w500,
+                      color: AppColors.muted,
+                    ),
+                  ),
                 ],
               ),
             ),
