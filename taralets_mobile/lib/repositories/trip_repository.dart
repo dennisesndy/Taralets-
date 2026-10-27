@@ -241,6 +241,7 @@ abstract class TripRepository {
     List<String> placeIds,
   );
   Future<Map<String, dynamic>> getItinerary(String tripId);
+  Future<Map<String, dynamic>> reorderItinerary(String tripId, List<int> placeIds);
   Future<Map<String, dynamic>> reviewItinerary(String tripId, bool reviewed);
   Future<Map<String, dynamic>> lockItinerary(String tripId);
   Future<void> updateGroupPreferences(String tripId, GroupPreferences prefs);
@@ -531,6 +532,32 @@ class ApiTripRepository implements TripRepository {
       throw TripException(
         'ITINERARY FAILED',
         _handleError(e, 'Could not load the saved itinerary'),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> reorderItinerary(
+    String tripId,
+    List<int> placeIds,
+  ) async {
+    try {
+      final response = await _dio.put(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/itinerary/order',
+        data: {'place_ids': placeIds},
+      );
+      final payload = response.data;
+      if (payload is Map && payload['data'] is Map) {
+        return Map<String, dynamic>.from(payload['data'] as Map);
+      }
+      throw const TripException(
+        'INVALID RESPONSE',
+        'The itinerary response has an unexpected format.',
+      );
+    } on DioException catch (e) {
+      throw TripException(
+        'ORDER FAILED',
+        _handleError(e, 'Could not save the itinerary order'),
       );
     }
   }
@@ -835,6 +862,15 @@ class MockTripRepository implements TripRepository {
   @override
   Future<Map<String, dynamic>> getItinerary(String tripId) async =>
       throw const TripException('NOT FOUND', 'No itinerary is available.');
+
+  @override
+  Future<Map<String, dynamic>> reorderItinerary(
+    String tripId,
+    List<int> placeIds,
+  ) async => throw const TripException(
+    'NOT CONNECTED',
+    'Reordering the itinerary needs the live API.',
+  );
 
   @override
   Future<Map<String, dynamic>> reviewItinerary(

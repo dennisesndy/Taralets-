@@ -24,6 +24,19 @@ class ItineraryController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void reorderStops(int oldIndex, int newIndex) {
+    final stops = List<ItineraryStop>.of(_plan.stops);
+    if (oldIndex < 0 || oldIndex >= stops.length) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+    if (newIndex < 0 || newIndex >= stops.length) return;
+    final stop = stops.removeAt(oldIndex);
+    stops.insert(newIndex, stop);
+    _plan = _plan.copyWith(
+      days: [ItineraryDay(label: _plan.days.first.label, stops: stops)],
+    );
+    notifyListeners();
+  }
+
   void toggleCurrentUserReviewed() {
     if (_confirmed) return;
 

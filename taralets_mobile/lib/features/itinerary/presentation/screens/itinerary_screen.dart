@@ -44,6 +44,7 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
   bool _nearby = false;
   bool _loadingPlan = false;
   bool _savingReview = false;
+  bool _savingOrder = false;
   Timer? _refreshTimer;
   final ScrollController _scrollController = ScrollController();
 
@@ -57,7 +58,7 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
     if ((widget.tripId?.isNotEmpty ?? false)) {
       Future.microtask(_loadSavedItinerary);
       _refreshTimer = Timer.periodic(
-        const Duration(seconds: 5),
+        const Duration(seconds: 2),
         (_) => _loadSavedItinerary(),
       );
     }
@@ -74,7 +75,7 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
       _loadSavedItinerary();
       _refreshTimer?.cancel();
       _refreshTimer = Timer.periodic(
-        const Duration(seconds: 5),
+        const Duration(seconds: 2),
         (_) => _loadSavedItinerary(),
       );
     }
@@ -103,7 +104,7 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
 
   Future<void> _loadSavedItinerary() async {
     final tripId = widget.tripId;
-    if (tripId == null || tripId.isEmpty || _loadingPlan || _savingReview) {
+    if (tripId == null || tripId.isEmpty || _loadingPlan || _savingReview || _savingOrder) {
       return;
     }
     _loadingPlan = true;
@@ -148,6 +149,31 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
       }
     } finally {
       if (mounted) setState(() => _savingReview = false);
+    }
+  }
+
+  Future<void> _reorderStops(int oldIndex, int newIndex) async {
+    final tripId = widget.tripId;
+    final controller = _controller;
+    if (tripId == null || controller == null || _savingOrder) return;
+    setState(() => _savingOrder = true);
+    controller.reorderStops(oldIndex, newIndex);
+    try {
+      final data = await ref.read(tripRepositoryProvider).reorderItinerary(
+        tripId,
+        controller.plan.stops.map((stop) => stop.placeId).toList(),
+      );
+      if (mounted) controller.updatePlan(itineraryPlanFromApi(data));
+    } on TripException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+        _savingOrder = false;
+        await _loadSavedItinerary();
+      }
+    } finally {
+      if (mounted) setState(() => _savingOrder = false);
     }
   }
 
@@ -255,7 +281,12 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
                           if (_nearby)
                             _NearbySpotsView(stops: plan.stops)
                           else
-                            _TimelineView(stops: plan.stops),
+                            _TimelineView(
+                              stops: plan.stops,
+                              editable: plan.status != ItineraryStatus.finalized &&
+                                  (widget.tripId?.isNotEmpty ?? false),
+                              onReorder: _reorderStops,
+                            ),
                           const SizedBox(height: 18),
                           _GroupReviewCard(
                             plan: plan,
@@ -723,15 +754,19 @@ class _ViewTab extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _TimelineView extends StatelessWidget {
-  const _TimelineView({required this.stops});
+  const _TimelineView({
+    required this.stops,
+    this.editable = false,
+    this.onReorder,
+  });
 
   final List<ItineraryStop> stops;
+  final bool editable;
+  final ReorderCallback? onReorder;
 
   @override
   Widget build(BuildContext context) {
     if (stops.isEmpty) return const _EmptyItinerary();
-
-    final periods = _buildPeriods(stops);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -749,13 +784,41 @@ class _TimelineView extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        for (final period in periods) ...[
-          _PeriodHeader(period: period),
-          const SizedBox(height: 8),
-          for (final stop in period.stops) _TimelineStop(stop: stop),
-          const SizedBox(height: 6),
+        if (editable) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Press and hold the handle to arrange places',
+            style: AppText.ui(10.5, FontWeight.w500, color: AppColors.muted),
+          ),
         ],
+        const SizedBox(height: 10),
+        if (editable)
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            itemCount: stops.length,
+            onReorder: onReorder!,
+            itemBuilder: (context, index) {
+              final stop = stops[index];
+              return Row(
+                key: ValueKey(stop.id),
+                children: [
+                  Expanded(child: _TimelineStop(stop: stop)),
+                  ReorderableDelayedDragStartListener(
+                    index: index,
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 8, bottom: 18),
+                      child: Icon(Icons.drag_indicator_rounded,
+                          color: AppColors.muted, size: 22),
+                    ),
+                  ),
+                ],
+              );
+            },
+          )
+        else
+          for (final stop in stops) _TimelineStop(stop: stop),
         _WrapUpCard(endLabel: stops.last.endLabel),
       ],
     );

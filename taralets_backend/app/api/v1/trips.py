@@ -26,6 +26,7 @@ from app.schemas.trip import (
     GroupPreferencesSchema,
     TripPlaceVoteRequest,
     ItineraryReviewRequest,
+    ItineraryReorderRequest,
 )
 from app.services.itinerary.trip_itinerary import (
     build_trip_itinerary,
@@ -178,6 +179,55 @@ async def lock_trip_itinerary(
         raise HTTPException(status_code=409, detail="Every trip member must review the itinerary before it can be locked")
     itinerary.status = "finalized"
     itinerary.finalized_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(itinerary)
+    return {"status": "success", "data": await _itinerary_response(db, itinerary, current_user.id)}
+
+
+@router.put("/{trip_id}/itinerary/order")
+async def reorder_trip_itinerary(
+    trip_id: str,
+    payload: ItineraryReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await _trip_member_for_user(db, trip_id, current_user.id)
+    itinerary = await _latest_itinerary(db, trip_id)
+    if itinerary is None:
+        raise HTTPException(status_code=404, detail="No itinerary has been generated for this trip")
+    if itinerary.status == "finalized":
+        raise HTTPException(status_code=409, detail="The itinerary is already locked")
+
+    stops = (await db.execute(
+        select(TripItineraryStop)
+        .where(TripItineraryStop.itinerary_id == itinerary.id)
+        .order_by(TripItineraryStop.order_index)
+    )).scalars().all()
+    requested = payload.place_ids
+    current_ids = [stop.place_id for stop in stops]
+    if len(set(requested)) != len(requested) or set(requested) != set(current_ids):
+        raise HTTPException(status_code=422, detail="The order must include every itinerary place exactly once")
+
+    metadata = dict(itinerary.algorithm_metadata or {})
+    metadata_stops = metadata.get("stops") or []
+    by_place_id = {}
+    for stop in metadata_stops:
+        try:
+            by_place_id[int(stop.get("id") or stop.get("place_id"))] = stop
+        except (AttributeError, TypeError, ValueError):
+            continue
+    reordered = [by_place_id[place_id] for place_id in requested if place_id in by_place_id]
+    if len(reordered) == len(requested):
+        metadata["stops"] = reordered
+        itinerary.algorithm_metadata = metadata
+
+    stop_by_place_id = {stop.place_id: stop for stop in stops}
+    # Move indices out of the unique range before assigning the new order.
+    for index, stop in enumerate(stops):
+        stop.order_index = len(stops) + index
+    await db.flush()
+    for index, place_id in enumerate(requested):
+        stop_by_place_id[place_id].order_index = index
     await db.commit()
     await db.refresh(itinerary)
     return {"status": "success", "data": await _itinerary_response(db, itinerary, current_user.id)}
