@@ -27,6 +27,7 @@ from app.schemas.trip import (
     TripPlaceVoteRequest,
     ItineraryReviewRequest,
     ItineraryReorderRequest,
+    ItineraryAddPlaceRequest,
 )
 from app.services.itinerary.trip_itinerary import (
     build_trip_itinerary,
@@ -184,6 +185,36 @@ async def lock_trip_itinerary(
     return {"status": "success", "data": await _itinerary_response(db, itinerary, current_user.id)}
 
 
+@router.post("/{trip_id}/itinerary/unlock")
+async def unlock_trip_itinerary(
+    trip_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_member = await _trip_member_for_user(db, trip_id, current_user.id)
+    if not current_member.is_leader:
+        raise HTTPException(status_code=403, detail="Only the trip leader can reopen the itinerary for editing")
+    itinerary = await _latest_itinerary(db, trip_id)
+    if itinerary is None:
+        raise HTTPException(status_code=404, detail="No itinerary has been generated for this trip")
+    if itinerary.status != "finalized":
+        raise HTTPException(status_code=409, detail="The itinerary is not locked")
+
+    itinerary.status = "review"
+    itinerary.finalized_at = None
+    confirmations = (await db.execute(
+        select(TripConfirmation).where(TripConfirmation.itinerary_id == itinerary.id)
+    )).scalars().all()
+    for confirmation in confirmations:
+        confirmation.status = "pending"
+        confirmation.confirmed_at = None
+        confirmation.note = None
+
+    await db.commit()
+    await db.refresh(itinerary)
+    return {"status": "success", "data": await _itinerary_response(db, itinerary, current_user.id)}
+
+
 @router.put("/{trip_id}/itinerary/order")
 async def reorder_trip_itinerary(
     trip_id: str,
@@ -228,6 +259,114 @@ async def reorder_trip_itinerary(
     await db.flush()
     for index, place_id in enumerate(requested):
         stop_by_place_id[place_id].order_index = index
+    await db.commit()
+    await db.refresh(itinerary)
+    return {"status": "success", "data": await _itinerary_response(db, itinerary, current_user.id)}
+
+
+@router.post("/{trip_id}/itinerary/stops")
+async def add_itinerary_stop(
+    trip_id: str,
+    payload: ItineraryAddPlaceRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    member = await _trip_member_for_user(db, trip_id, current_user.id)
+    itinerary = await _latest_itinerary(db, trip_id)
+    if itinerary is None:
+        raise HTTPException(status_code=404, detail="No itinerary has been generated for this trip")
+    if itinerary.status == "finalized":
+        raise HTTPException(status_code=409, detail="Reopen the itinerary before adding places")
+
+    place = await db.get(Place, payload.place_id)
+    if place is None:
+        raise HTTPException(status_code=404, detail="Place not found")
+    existing = await db.scalar(select(TripItineraryStop).where(
+        TripItineraryStop.itinerary_id == itinerary.id,
+        TripItineraryStop.place_id == place.id,
+    ))
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="This place is already in the itinerary")
+
+    metadata = dict(itinerary.algorithm_metadata or {})
+    stops = list(metadata.get("stops") or [])
+    last_stop = stops[-1] if stops else {}
+    start_time = _parse_optional_time(last_stop.get("end_time")) or _parse_optional_time("09:00")
+    duration = 60
+    start_minutes = start_time.hour * 60 + start_time.minute
+    end_minutes = (start_minutes + duration) % (24 * 60)
+    from datetime import time as datetime_time
+    end_time = datetime_time(end_minutes // 60, end_minutes % 60)
+    item = {
+        "sequence": len(stops) + 1,
+        "id": place.id,
+        "place_id": place.id,
+        "master_id": place.master_id,
+        "name": place.name,
+        "category": place.category,
+        "area": getattr(place, "district", None) or "",
+        "latitude": place.latitude,
+        "longitude": place.longitude,
+        "start_time": start_time.strftime("%H:%M"),
+        "end_time": end_time.strftime("%H:%M"),
+        "duration_minutes": duration,
+        "travel_minutes": 0,
+        "travel_cost": 0,
+        "travel_distance_km": 0,
+        "budget": int(getattr(place, "min_cost", 0) or 0),
+        "group_score": 0,
+        "member_scores": [],
+        "open_time": place.open_time.isoformat() if place.open_time else None,
+        "close_time": place.close_time.isoformat() if place.close_time else None,
+        "days_open": getattr(place, "days_open", []) or [],
+        "feasible": True,
+        "warning": None,
+    }
+    stops.append(item)
+    metadata["stops"] = stops
+    summary = dict(metadata.get("summary") or {})
+    summary["total_stops"] = len(stops)
+    summary["total_duration_minutes"] = int(summary.get("total_duration_minutes", 0) or 0) + duration
+    summary["total_budget"] = int(summary.get("total_budget", 0) or 0) + item["budget"]
+    summary["end_time"] = end_time.strftime("%H:%M")
+    metadata["summary"] = summary
+    itinerary.algorithm_metadata = metadata
+
+    db.add(TripItineraryStop(
+        itinerary_id=itinerary.id,
+        place_id=place.id,
+        day_number=1,
+        order_index=len(stops) - 1,
+        start_time=start_time,
+        end_time=end_time,
+        duration_minutes=duration,
+        travel_minutes_from_previous=0,
+        group_score=0,
+    ))
+    selection = await db.scalar(select(TripPlaceSelection).where(
+        TripPlaceSelection.trip_id == trip_id,
+        TripPlaceSelection.place_id == place.id,
+    ))
+    if selection is None:
+        selection = TripPlaceSelection(
+            trip_id=trip_id,
+            place_id=place.id,
+            selected_by_member_id=member.id,
+            is_active=True,
+        )
+        db.add(selection)
+    else:
+        selection.is_active = True
+
+    confirmations = (await db.execute(select(TripConfirmation).where(
+        TripConfirmation.itinerary_id == itinerary.id,
+    ))).scalars().all()
+    for confirmation in confirmations:
+        confirmation.status = "pending"
+        confirmation.confirmed_at = None
+        confirmation.note = None
+    itinerary.status = "review"
+    itinerary.finalized_at = None
     await db.commit()
     await db.refresh(itinerary)
     return {"status": "success", "data": await _itinerary_response(db, itinerary, current_user.id)}

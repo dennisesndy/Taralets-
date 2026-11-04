@@ -58,3 +58,6 @@ class ItineraryReviewRequest(BaseModel):
 
 class ItineraryReorderRequest(BaseModel):
     place_ids: List[int] = Field(min_length=1, max_length=50)
+
+class ItineraryAddPlaceRequest(BaseModel):
+    place_id: int

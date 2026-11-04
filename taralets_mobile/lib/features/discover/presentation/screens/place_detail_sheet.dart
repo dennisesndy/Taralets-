@@ -10,21 +10,31 @@ import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 
 /// Place detail (Figma "Place Detail" screen), shown full-height over the tabs.
-Future<void> showPlaceDetail(BuildContext context, Place place, {VoidCallback? onViewOnMap}) {
+Future<void> showPlaceDetail(
+  BuildContext context,
+  Place place, {
+  VoidCallback? onViewOnMap,
+  Future<void> Function()? onAddToTrip,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.white,
-    builder: (_) => _PlaceDetail(place: place, onViewOnMap: onViewOnMap),
+    builder: (_) => _PlaceDetail(
+      place: place,
+      onViewOnMap: onViewOnMap,
+      onAddToTrip: onAddToTrip,
+    ),
   );
 }
 
 class _PlaceDetail extends ConsumerStatefulWidget {
-  const _PlaceDetail({required this.place, this.onViewOnMap});
+  const _PlaceDetail({required this.place, this.onViewOnMap, this.onAddToTrip});
   final Place place;
   final VoidCallback? onViewOnMap;
+  final Future<void> Function()? onAddToTrip;
 
   @override
   ConsumerState<_PlaceDetail> createState() => _PlaceDetailState();
@@ -32,6 +42,7 @@ class _PlaceDetail extends ConsumerStatefulWidget {
 
 class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
   bool _saved = false;
+  bool _addingToTrip = false;
 
   @override
   Widget build(BuildContext context) {
@@ -154,7 +165,14 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
                     const SizedBox(width: 8),
                     Text('${p.rating}', style: AppText.ui(13, FontWeight.w700)),
                     const SizedBox(width: 4),
-                    Text('(${p.reviews})', style: AppText.ui(11, FontWeight.w400, color: AppColors.muted)),
+                    Text(
+                      '(${p.reviews})',
+                      style: AppText.ui(
+                        11,
+                        FontWeight.w400,
+                        color: AppColors.muted,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       dynamicDistanceLabel,
@@ -283,8 +301,25 @@ class _PlaceDetailState extends ConsumerState<_PlaceDetail> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: TaraletsButton.orange(
-                        label: 'Add to Trip',
-                        onPressed: () => Navigator.of(context).pop(),
+                        label: _addingToTrip
+                            ? 'Adding…'
+                            : widget.onAddToTrip == null
+                            ? 'Close'
+                            : 'Add to Trip',
+                        isLoading: _addingToTrip,
+                        onPressed: widget.onAddToTrip == null
+                            ? () => Navigator.of(context).pop()
+                            : () async {
+                                setState(() => _addingToTrip = true);
+                                try {
+                                  await widget.onAddToTrip!();
+                                  if (context.mounted)
+                                    Navigator.of(context).pop();
+                                } finally {
+                                  if (mounted)
+                                    setState(() => _addingToTrip = false);
+                                }
+                              },
                       ),
                     ),
                   ],
@@ -309,14 +344,14 @@ class _PlaceImageFallback extends StatelessWidget {
     final icon = normalized.contains('cafe') || normalized.contains('food')
         ? Icons.local_cafe_rounded
         : normalized.contains('museum') || normalized.contains('art')
-            ? Icons.museum_rounded
-            : normalized.contains('park') || normalized.contains('nature')
-                ? Icons.park_rounded
-                : normalized.contains('shop')
-                    ? Icons.shopping_bag_rounded
-                    : normalized.contains('church') || normalized.contains('heritage')
-                        ? Icons.church_rounded
-                        : Icons.place_rounded;
+        ? Icons.museum_rounded
+        : normalized.contains('park') || normalized.contains('nature')
+        ? Icons.park_rounded
+        : normalized.contains('shop')
+        ? Icons.shopping_bag_rounded
+        : normalized.contains('church') || normalized.contains('heritage')
+        ? Icons.church_rounded
+        : Icons.place_rounded;
 
     return Container(
       decoration: const BoxDecoration(

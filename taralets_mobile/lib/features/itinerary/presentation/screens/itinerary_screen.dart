@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text.dart';
@@ -12,6 +16,9 @@ import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/taralets_card.dart';
 import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
+import '../../../discover/data/discover_places_provider.dart';
+import '../../../discover/presentation/screens/place_detail_sheet.dart';
+import '../../../../data/manila_places.dart';
 import '../../data/itinerary_api_mapper.dart';
 import '../../data/models/itinerary_models.dart';
 import '../controllers/itinerary_controller.dart';
@@ -41,26 +48,65 @@ class ItineraryScreen extends ConsumerStatefulWidget {
 
 class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
   ItineraryController? _controller;
+  String? _activeTripId;
   bool _nearby = false;
   bool _loadingPlan = false;
   bool _savingReview = false;
   bool _savingOrder = false;
+  bool _unlockingItinerary = false;
   Timer? _refreshTimer;
   final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _activeTripId = widget.tripId;
     final plan = widget.initialPlan;
     if (plan != null) {
       _controller = ItineraryController(plan: plan);
     }
-    if ((widget.tripId?.isNotEmpty ?? false)) {
-      Future.microtask(_loadSavedItinerary);
+    if ((_activeTripId?.isNotEmpty ?? false)) {
+      _loadSavedItinerary();
       _refreshTimer = Timer.periodic(
         const Duration(seconds: 2),
         (_) => _loadSavedItinerary(),
       );
+    } else {
+      _loadingPlan = true;
+      Future.microtask(_loadMostRecentSavedItinerary);
+    }
+  }
+
+  String? get _tripId => _activeTripId;
+
+  Future<void> _loadMostRecentSavedItinerary() async {
+    if (_controller != null) return;
+    if (!_loadingPlan) setState(() => _loadingPlan = true);
+    try {
+      final trips = await ref.read(myTripsProvider.future);
+      for (final trip in trips) {
+        if (!mounted || _tripId != null) return;
+        try {
+          final data = await ref
+              .read(tripRepositoryProvider)
+              .getItinerary(trip.id);
+          if (!mounted) return;
+          _activeTripId = trip.id;
+          _controller = ItineraryController(plan: itineraryPlanFromApi(data));
+          _refreshTimer?.cancel();
+          _refreshTimer = Timer.periodic(
+            const Duration(seconds: 2),
+            (_) => _loadSavedItinerary(),
+          );
+          break;
+        } on TripException {
+          // Try the next trip; the current one may not have an itinerary yet.
+        }
+      }
+    } catch (_) {
+      // Keep the empty state available if the trips list cannot be loaded.
+    } finally {
+      if (mounted) setState(() => _loadingPlan = false);
     }
   }
 
@@ -72,6 +118,7 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
 
     if (oldWidget.tripId != widget.tripId &&
         (widget.tripId?.isNotEmpty ?? false)) {
+      _activeTripId = widget.tripId;
       _loadSavedItinerary();
       _refreshTimer?.cancel();
       _refreshTimer = Timer.periodic(
@@ -103,8 +150,13 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
   }
 
   Future<void> _loadSavedItinerary() async {
-    final tripId = widget.tripId;
-    if (tripId == null || tripId.isEmpty || _loadingPlan || _savingReview || _savingOrder) {
+    final tripId = _tripId;
+    if (tripId == null ||
+        tripId.isEmpty ||
+        _loadingPlan ||
+        _savingReview ||
+        _savingOrder ||
+        _unlockingItinerary) {
       return;
     }
     _loadingPlan = true;
@@ -127,7 +179,7 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
   }
 
   Future<void> _reviewCurrentUser() async {
-    final tripId = widget.tripId;
+    final tripId = _tripId;
     final controller = _controller;
     if (tripId == null || controller == null || _savingReview) return;
     final me = controller.plan.members
@@ -153,22 +205,24 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
   }
 
   Future<void> _reorderStops(int oldIndex, int newIndex) async {
-    final tripId = widget.tripId;
+    final tripId = _tripId;
     final controller = _controller;
     if (tripId == null || controller == null || _savingOrder) return;
     setState(() => _savingOrder = true);
     controller.reorderStops(oldIndex, newIndex);
     try {
-      final data = await ref.read(tripRepositoryProvider).reorderItinerary(
-        tripId,
-        controller.plan.stops.map((stop) => stop.placeId).toList(),
-      );
+      final data = await ref
+          .read(tripRepositoryProvider)
+          .reorderItinerary(
+            tripId,
+            controller.plan.stops.map((stop) => stop.placeId).toList(),
+          );
       if (mounted) controller.updatePlan(itineraryPlanFromApi(data));
     } on TripException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
         _savingOrder = false;
         await _loadSavedItinerary();
       }
@@ -178,7 +232,7 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
   }
 
   Future<void> _confirmItinerary() async {
-    final tripId = widget.tripId;
+    final tripId = _tripId;
     if (tripId == null) return;
     setState(() => _savingReview = true);
     try {
@@ -192,6 +246,51 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
       }
     } finally {
       if (mounted) setState(() => _savingReview = false);
+    }
+  }
+
+  Future<void> _editFinalizedItinerary() async {
+    final tripId = _tripId;
+    if (tripId == null || _unlockingItinerary) return;
+    setState(() => _unlockingItinerary = true);
+    try {
+      final data = await ref
+          .read(tripRepositoryProvider)
+          .unlockItinerary(tripId);
+      if (mounted) _controller?.updatePlan(itineraryPlanFromApi(data));
+    } on TripException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _unlockingItinerary = false);
+    }
+  }
+
+  Future<void> _addNearbyPlace(Place place) async {
+    final tripId = _tripId;
+    if (tripId == null || tripId.isEmpty) return;
+    try {
+      final data = await ref
+          .read(tripRepositoryProvider)
+          .addItineraryStop(tripId, place.id);
+      if (!mounted) return;
+      _controller?.updatePlan(itineraryPlanFromApi(data));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${place.name} added to the itinerary. Group review has reopened.',
+          ),
+        ),
+      );
+    } on TripException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     }
   }
 
@@ -241,7 +340,7 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
           child: CircularProgressIndicator(color: AppColors.primary),
         );
       }
-      return _NoItineraryState(tripId: widget.tripId, onBack: _handleBack);
+      return _NoItineraryState(tripId: _tripId, onBack: _handleBack);
     }
 
     return ColoredBox(
@@ -279,12 +378,19 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
                           ),
                           const SizedBox(height: 14),
                           if (_nearby)
-                            _NearbySpotsView(stops: plan.stops)
+                            _NearbySpotsView(
+                              stops: plan.stops,
+                              editable:
+                                  plan.status != ItineraryStatus.finalized &&
+                                  (_tripId?.isNotEmpty ?? false),
+                              onAddPlace: _addNearbyPlace,
+                            )
                           else
                             _TimelineView(
                               stops: plan.stops,
-                              editable: plan.status != ItineraryStatus.finalized &&
-                                  (widget.tripId?.isNotEmpty ?? false),
+                              editable:
+                                  plan.status != ItineraryStatus.finalized &&
+                                  (_tripId?.isNotEmpty ?? false),
                               onReorder: _reorderStops,
                             ),
                           const SizedBox(height: 18),
@@ -295,9 +401,11 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
                                 ? () {}
                                 : _reviewCurrentUser,
                             onConfirm: _confirmItinerary,
+                            onEditFinalized: _editFinalizedItinerary,
                             onSelectRoute: _openRouteSelection,
                             onViewItinerary: _viewItinerary,
                             isSaving: _savingReview,
+                            isUnlocking: _unlockingItinerary,
                           ),
                           const SizedBox(height: 20),
                         ],
@@ -809,8 +917,11 @@ class _TimelineView extends StatelessWidget {
                     index: index,
                     child: const Padding(
                       padding: EdgeInsets.only(left: 8, bottom: 18),
-                      child: Icon(Icons.drag_indicator_rounded,
-                          color: AppColors.muted, size: 22),
+                      child: Icon(
+                        Icons.drag_indicator_rounded,
+                        color: AppColors.muted,
+                        size: 22,
+                      ),
                     ),
                   ),
                 ],
@@ -1282,170 +1393,683 @@ class _WrapUpCard extends StatelessWidget {
 // Nearby spots
 // ---------------------------------------------------------------------------
 
-class _NearbySpotsView extends StatelessWidget {
-  const _NearbySpotsView({required this.stops});
-
-  final List<ItineraryStop> stops;
-
-  @override
-  Widget build(BuildContext context) {
-    if (stops.isEmpty) return const _EmptyItinerary();
-
-    final groups = <String, List<ItineraryStop>>{};
-    for (final stop in stops) {
-      groups.putIfAbsent(stop.area, () => []).add(stop);
-    }
-    final entries = groups.entries.toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Text(
-              'Nearby spots',
-              style: AppText.ui(15, FontWeight.w800, color: AppColors.navy),
-            ),
-            const Spacer(),
-            Text(
-              '${entries.length} areas',
-              style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Your stops, grouped by neighborhood.',
-          style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
-        ),
-        const SizedBox(height: 12),
-        for (var i = 0; i < entries.length; i++) ...[
-          _ClusterCard(area: entries[i].key, stops: entries[i].value, index: i),
-          const SizedBox(height: 10),
-        ],
-      ],
-    );
-  }
-}
-
-class _ClusterStyle {
-  const _ClusterStyle(this.color, this.bg);
-
-  final Color color;
-  final Color bg;
-}
-
-_ClusterStyle _clusterStyle(int index) {
-  const styles = [
-    _ClusterStyle(AppColors.primary, AppColors.primarySoft),
-    _ClusterStyle(AppColors.navy, AppColors.blueSoft),
-    _ClusterStyle(AppColors.green, AppColors.greenSoft),
-    _ClusterStyle(AppColors.purple, Color(0xFFF3EEFF)),
-  ];
-  return styles[index % styles.length];
-}
-
-class _ClusterCard extends StatelessWidget {
-  const _ClusterCard({
-    required this.area,
+class _NearbySpotsView extends ConsumerWidget {
+  const _NearbySpotsView({
     required this.stops,
-    required this.index,
+    required this.editable,
+    required this.onAddPlace,
   });
 
-  final String area;
   final List<ItineraryStop> stops;
-  final int index;
+  final bool editable;
+  final ValueChanged<Place> onAddPlace;
 
   @override
-  Widget build(BuildContext context) {
-    final style = _clusterStyle(index);
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: style.bg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: style.color.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (stops.isEmpty) return const _EmptyItinerary();
+    return ref
+        .watch(discoverPlacesProvider)
+        .when(
+          loading: () {
+            final knownPins = _pinsFromStops(stops);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _NearbyMapHeader(stopCount: stops.length),
+                const SizedBox(height: 10),
+                if (knownPins.isNotEmpty)
+                  _ItineraryNearbyMap(
+                    stops: knownPins,
+                    nearby: const [],
+                    center: _centerForPins(knownPins),
+                    editable: editable,
+                    onAddPlace: onAddPlace,
+                  )
+                else
+                  Container(
+                    height: 300,
+                    decoration: BoxDecoration(
+                      color: AppColors.blueSoft,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Center(child: Text('Loading…')),
+                  ),
+                const SizedBox(height: 8),
+                Text(
+                  'Loading…',
+                  style: AppText.ui(
+                    11,
+                    FontWeight.w500,
+                    color: AppColors.muted,
+                  ),
+                ),
+              ],
+            );
+          },
+          error: (error, stack) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: style.color,
-                  shape: BoxShape.circle,
+              _NearbyMapHeader(stopCount: stops.length),
+              const SizedBox(height: 10),
+              if (_pinsFromStops(stops).isNotEmpty)
+                _ItineraryNearbyMap(
+                  stops: _pinsFromStops(stops),
+                  nearby: const [],
+                  center: _centerForPins(_pinsFromStops(stops)),
+                  editable: editable,
+                  onAddPlace: onAddPlace,
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Explore: $area',
-                  style: AppText.ui(12, FontWeight.w800, color: style.color),
-                ),
-              ),
+              const SizedBox(height: 10),
               Text(
-                '${stops.length} ${stops.length == 1 ? 'stop' : 'stops'}',
-                style: AppText.ui(
-                  10,
-                  FontWeight.w600,
-                  color: style.color.withValues(alpha: 0.8),
-                ),
+                'Nearby places could not be loaded.',
+                style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final stop in stops)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: style.color.withValues(alpha: 0.12),
+          data: (places) {
+            final placesById = {for (final place in places) place.id: place};
+            final resolvedStops = <_StopPin>[];
+            for (final stop in stops) {
+              final place =
+                  placesById[stop.placeId] ??
+                  places
+                      .where(
+                        (candidate) =>
+                            _normalizedPlaceName(candidate.name) ==
+                            _normalizedPlaceName(stop.name),
+                      )
+                      .firstOrNull;
+              final lat = stop.latitude != null && stop.latitude != 0
+                  ? stop.latitude
+                  : place?.lat;
+              final lng = stop.longitude != null && stop.longitude != 0
+                  ? stop.longitude
+                  : place?.lng;
+              if (lat != null && lng != null && lat != 0 && lng != 0) {
+                resolvedStops.add(_StopPin(stop, LatLng(lat, lng)));
+              }
+            }
+            if (resolvedStops.isEmpty) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _NearbyMapHeader(stopCount: stops.length),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Map locations are unavailable for these itinerary stops.',
+                    style: AppText.ui(
+                      11,
+                      FontWeight.w500,
+                      color: AppColors.muted,
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(stop.icon, style: const TextStyle(fontSize: 13)),
-                      const SizedBox(width: 5),
-                      Text(
-                        stop.name,
-                        style: AppText.ui(
-                          11,
-                          FontWeight.w700,
-                          color: AppColors.navy,
-                        ),
+                ],
+              );
+            }
+            final center = _centerForPins(resolvedStops);
+            final stopIds = stops.map((stop) => stop.placeId).toSet();
+            final nearby =
+                places.where((place) {
+                  if (stopIds.contains(place.id) ||
+                      place.lat == 0 ||
+                      place.lng == 0) {
+                    return false;
+                  }
+                  return resolvedStops.any(
+                    (stop) =>
+                        Geolocator.distanceBetween(
+                          stop.point.latitude,
+                          stop.point.longitude,
+                          place.lat,
+                          place.lng,
+                        ) <=
+                        2000,
+                  );
+                }).toList()..sort(
+                  (a, b) => _distanceFromRoute(
+                    a,
+                    resolvedStops,
+                  ).compareTo(_distanceFromRoute(b, resolvedStops)),
+                );
+            final visibleNearby = nearby.take(5).toList();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _NearbyMapHeader(stopCount: stops.length),
+                const SizedBox(height: 10),
+                _ItineraryNearbyMap(
+                  stops: resolvedStops,
+                  nearby: visibleNearby,
+                  center: center,
+                  editable: editable,
+                  onAddPlace: onAddPlace,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text(
+                      'Nearby places',
+                      style: AppText.ui(
+                        14,
+                        FontWeight.w800,
+                        color: AppColors.navy,
                       ),
-                      const SizedBox(width: 5),
-                      Text(
-                        stop.startLabel,
-                        style: AppText.mono(
-                          9.5,
-                          FontWeight.w500,
-                          color: AppColors.muted,
-                        ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      'Within 2 km · ${nearby.length} places · ${visibleNearby.length} map pins',
+                      style: AppText.ui(
+                        10.5,
+                        FontWeight.w500,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (visibleNearby.isEmpty)
+                  Text(
+                    'No other places were found near these itinerary stops.',
+                    style: AppText.ui(
+                      11,
+                      FontWeight.w500,
+                      color: AppColors.muted,
+                    ),
+                  )
+                else
+                  for (final place in visibleNearby.take(5)) ...[
+                    _NearbyPlaceTile(
+                      place: place,
+                      distanceKm:
+                          _distanceFromRoute(place, resolvedStops) / 1000,
+                      onTap: () => showPlaceDetail(
+                        context,
+                        place,
+                        onAddToTrip: editable
+                            ? () async => onAddPlace(place)
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                  ],
+              ],
+            );
+          },
+        );
+  }
+}
+
+String _normalizedPlaceName(String name) =>
+    name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+
+class _StopPin {
+  const _StopPin(this.stop, this.point);
+
+  final ItineraryStop stop;
+  final LatLng point;
+}
+
+List<_StopPin> _pinsFromStops(List<ItineraryStop> stops) => [
+  for (final stop in stops)
+    if (stop.latitude != null &&
+        stop.longitude != null &&
+        stop.latitude != 0 &&
+        stop.longitude != 0)
+      _StopPin(stop, LatLng(stop.latitude!, stop.longitude!)),
+];
+
+LatLng _centerForPins(List<_StopPin> stops) => LatLng(
+  stops.map((stop) => stop.point.latitude).reduce((a, b) => a + b) /
+      stops.length,
+  stops.map((stop) => stop.point.longitude).reduce((a, b) => a + b) /
+      stops.length,
+);
+
+double _distanceFromRoute(Place place, List<_StopPin> stops) {
+  var nearest = double.infinity;
+  for (final stop in stops) {
+    final distance = Geolocator.distanceBetween(
+      stop.point.latitude,
+      stop.point.longitude,
+      place.lat,
+      place.lng,
+    );
+    if (distance < nearest) nearest = distance;
+  }
+  return nearest;
+}
+
+class _NearbyMapHeader extends StatelessWidget {
+  const _NearbyMapHeader({required this.stopCount});
+  final int stopCount;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(
+        children: [
+          Text(
+            'Stops and nearby places',
+            style: AppText.ui(15, FontWeight.w800, color: AppColors.navy),
+          ),
+          const Spacer(),
+          Text(
+            '$stopCount itinerary stops',
+            style: AppText.ui(10.5, FontWeight.w600, color: AppColors.muted),
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      Text(
+        'Your itinerary is highlighted. Other places within 2 km are shown as nearby options.',
+        style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
+      ),
+    ],
+  );
+}
+
+class _ItineraryNearbyMap extends StatelessWidget {
+  const _ItineraryNearbyMap({
+    required this.stops,
+    required this.nearby,
+    required this.center,
+    required this.editable,
+    required this.onAddPlace,
+    this.fullScreen = false,
+  });
+  final List<_StopPin> stops;
+  final List<Place> nearby;
+  final LatLng center;
+  final bool editable;
+  final ValueChanged<Place> onAddPlace;
+  final bool fullScreen;
+
+  @override
+  Widget build(BuildContext context) {
+    final route = stops.map((stop) => stop.point).toList();
+    final groupedStops = <List<int>>[];
+    for (var i = 0; i < stops.length; i++) {
+      final group = groupedStops
+          .where(
+            (indices) =>
+                Geolocator.distanceBetween(
+                  stops[indices.first].point.latitude,
+                  stops[indices.first].point.longitude,
+                  stops[i].point.latitude,
+                  stops[i].point.longitude,
+                ) <
+                35,
+          )
+          .firstOrNull;
+      if (group == null) {
+        groupedStops.add([i]);
+      } else {
+        group.add(i);
+      }
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        height: fullScreen ? double.infinity : 520,
+        child: Stack(
+          children: [
+            FlutterMap(
+              options: MapOptions(
+                initialCenter: center,
+                initialZoom: 13.5,
+                initialCameraFit: route.length > 1
+                    ? CameraFit.bounds(
+                        bounds: LatLngBounds.fromPoints(route),
+                        padding: const EdgeInsets.all(48),
+                      )
+                    : null,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.taralets.app',
+                ),
+                if (route.length > 1)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: route,
+                        color: AppColors.primary.withValues(alpha: 0.78),
+                        strokeWidth: 4,
                       ),
                     ],
                   ),
+                MarkerLayer(
+                  markers: [
+                    for (final place in nearby)
+                      Marker(
+                        point: LatLng(place.lat, place.lng),
+                        width: 25,
+                        height: 25,
+                        child: GestureDetector(
+                          onTap: () => showPlaceDetail(
+                            context,
+                            place,
+                            onAddToTrip: editable
+                                ? () async => onAddPlace(place)
+                                : null,
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: _nearbyMarkerColor(place),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 2,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              _nearbyMarkerIcon(place.category),
+                              size: 13,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    for (final stopGroup in groupedStops)
+                      for (
+                        var memberIndex = 0;
+                        memberIndex < stopGroup.length;
+                        memberIndex++
+                      )
+                        Marker(
+                          point: stopGroup.length == 1
+                              ? route[stopGroup.first]
+                              : _fannedMarkerPoint(
+                                  route[stopGroup.first],
+                                  memberIndex,
+                                  stopGroup.length,
+                                ),
+                          width: 42,
+                          height: 48,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                constraints: const BoxConstraints(
+                                  minWidth: 34,
+                                  minHeight: 34,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2.5,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black26,
+                                      blurRadius: 5,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '${stopGroup[memberIndex] + 1}',
+                                  style: AppText.ui(
+                                    13,
+                                    FontWeight.w900,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                width: 3,
+                                height: 9,
+                                color: AppColors.primary,
+                              ),
+                            ],
+                          ),
+                        ),
+                  ],
                 ),
-            ],
-          ),
-        ],
+              ],
+            ),
+            Positioned(
+              left: 10,
+              bottom: 10,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.95),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 11,
+                      height: 11,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Itinerary',
+                      style: AppText.ui(
+                        10,
+                        FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Icon(
+                      Icons.add_circle_outline,
+                      size: 13,
+                      color: AppColors.navy,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Nearby',
+                      style: AppText.ui(
+                        10,
+                        FontWeight.w600,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (!fullScreen)
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Material(
+                  color: Colors.white.withValues(alpha: 0.96),
+                  shape: const CircleBorder(),
+                  elevation: 2,
+                  child: IconButton(
+                    tooltip: 'Open full-screen map',
+                    onPressed: () => _openFullScreenMap(context),
+                    icon: const Icon(Icons.fullscreen_rounded),
+                    color: AppColors.navy,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
+
+  void _openFullScreenMap(BuildContext context) {
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(
+            title: const Text('Itinerary map'),
+            backgroundColor: AppColors.navy,
+            foregroundColor: Colors.white,
+          ),
+          body: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                  child: _NearbyMapHeader(stopCount: stops.length),
+                ),
+                Expanded(
+                  child: _ItineraryNearbyMap(
+                    stops: stops,
+                    nearby: nearby,
+                    center: center,
+                    editable: editable,
+                    onAddPlace: onAddPlace,
+                    fullScreen: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+LatLng _fannedMarkerPoint(LatLng center, int index, int count) {
+  final angle = (2 * math.pi * index / count) - (math.pi / 2);
+  const offsetMeters = 24.0;
+  final latitudeOffset = math.cos(angle) * offsetMeters / 111320;
+  final longitudeScale = math.cos(center.latitude * math.pi / 180).abs();
+  final longitudeOffset =
+      math.sin(angle) *
+      offsetMeters /
+      (111320 * (longitudeScale < 0.01 ? 0.01 : longitudeScale));
+  return LatLng(
+    center.latitude + latitudeOffset,
+    center.longitude + longitudeOffset,
+  );
+}
+
+Color _nearbyMarkerColor(Place place) {
+  const colors = [
+    Color(0xFFE95D27),
+    Color(0xFF2F80ED),
+    Color(0xFF27AE60),
+    Color(0xFF9B51E0),
+    Color(0xFFEB5757),
+    Color(0xFF00A6A6),
+  ];
+  return colors[place.clusterId.abs() % colors.length];
+}
+
+IconData _nearbyMarkerIcon(String category) {
+  final value = category.toLowerCase();
+  if (value.contains('food') ||
+      value.contains('cafe') ||
+      value.contains('restaurant')) {
+    return Icons.restaurant_rounded;
+  }
+  if (value.contains('shopping') || value.contains('retail')) {
+    return Icons.shopping_bag_rounded;
+  }
+  if (value.contains('church') || value.contains('religious')) {
+    return Icons.church_rounded;
+  }
+  if (value.contains('museum') || value.contains('historical')) {
+    return Icons.account_balance_rounded;
+  }
+  if (value.contains('park') || value.contains('nature')) {
+    return Icons.park_rounded;
+  }
+  return Icons.place_rounded;
+}
+
+class _NearbyPlaceTile extends StatelessWidget {
+  const _NearbyPlaceTile({
+    required this.place,
+    required this.distanceKm,
+    required this.onTap,
+  });
+  final Place place;
+  final double distanceKm;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.add_location_alt_outlined,
+              size: 18,
+              color: AppColors.muted,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    place.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.ui(
+                      11.5,
+                      FontWeight.w700,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  Text(
+                    place.category,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.ui(
+                      10,
+                      FontWeight.w500,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              distanceKm < 0.1
+                  ? '${(distanceKm * 1000).round()} m'
+                  : '${distanceKm.toStringAsFixed(1)} km',
+              style: AppText.ui(10, FontWeight.w600, color: AppColors.muted),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1458,18 +2082,22 @@ class _GroupReviewCard extends StatelessWidget {
     required this.confirmed,
     required this.onToggleReview,
     required this.onConfirm,
+    required this.onEditFinalized,
     required this.onSelectRoute,
     required this.onViewItinerary,
     required this.isSaving,
+    required this.isUnlocking,
   });
 
   final ItineraryPlan plan;
   final bool confirmed;
   final VoidCallback onToggleReview;
   final VoidCallback onConfirm;
+  final VoidCallback onEditFinalized;
   final VoidCallback onSelectRoute;
   final VoidCallback onViewItinerary;
   final bool isSaving;
+  final bool isUnlocking;
 
   @override
   Widget build(BuildContext context) {
@@ -1528,12 +2156,29 @@ class _GroupReviewCard extends StatelessWidget {
             const SizedBox(height: 8),
           ],
           const SizedBox(height: 4),
-          if (confirmed)
+          if (confirmed) ...[
             _ConfirmedBanner(
               onSelectRoute: onSelectRoute,
               onViewItinerary: onViewItinerary,
-            )
-          else if (reviewed == total && currentUserIsLeader)
+            ),
+            if (currentUserIsLeader && (plan.tripId?.isNotEmpty ?? false)) ...[
+              const SizedBox(height: 10),
+              TaraletsButton.ghost(
+                label: isUnlocking ? 'Loading…' : 'Edit itinerary',
+                onPressed: isUnlocking ? null : onEditFinalized,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Editing will reopen group review and ask everyone to confirm the changes.',
+                textAlign: TextAlign.center,
+                style: AppText.ui(
+                  10.5,
+                  FontWeight.w500,
+                  color: AppColors.muted,
+                ),
+              ),
+            ],
+          ] else if (reviewed == total && currentUserIsLeader)
             TaraletsButton.orange(
               label: '🔒 Lock Final Itinerary',
               isLoading: isSaving,

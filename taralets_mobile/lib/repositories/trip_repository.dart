@@ -241,9 +241,14 @@ abstract class TripRepository {
     List<String> placeIds,
   );
   Future<Map<String, dynamic>> getItinerary(String tripId);
-  Future<Map<String, dynamic>> reorderItinerary(String tripId, List<int> placeIds);
+  Future<Map<String, dynamic>> reorderItinerary(
+    String tripId,
+    List<int> placeIds,
+  );
   Future<Map<String, dynamic>> reviewItinerary(String tripId, bool reviewed);
   Future<Map<String, dynamic>> lockItinerary(String tripId);
+  Future<Map<String, dynamic>> unlockItinerary(String tripId);
+  Future<Map<String, dynamic>> addItineraryStop(String tripId, int placeId);
   Future<void> updateGroupPreferences(String tripId, GroupPreferences prefs);
   Future<Trip> getTrip(String tripId);
   Future<Trip> updateTrip(Trip updatedTrip);
@@ -611,6 +616,54 @@ class ApiTripRepository implements TripRepository {
   }
 
   @override
+  Future<Map<String, dynamic>> unlockItinerary(String tripId) async {
+    try {
+      final response = await _dio.post(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/itinerary/unlock',
+      );
+      final payload = response.data;
+      if (payload is Map && payload['data'] is Map) {
+        return Map<String, dynamic>.from(payload['data'] as Map);
+      }
+      throw const TripException(
+        'INVALID RESPONSE',
+        'The unlock response has an unexpected format.',
+      );
+    } on DioException catch (e) {
+      throw TripException(
+        'UNLOCK FAILED',
+        _handleError(e, 'Could not reopen the itinerary for editing'),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> addItineraryStop(
+    String tripId,
+    int placeId,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '${ApiEndpoints.apiPrefix}/trips/$tripId/itinerary/stops',
+        data: {'place_id': placeId},
+      );
+      final payload = response.data;
+      if (payload is Map && payload['data'] is Map) {
+        return Map<String, dynamic>.from(payload['data'] as Map);
+      }
+      throw const TripException(
+        'INVALID RESPONSE',
+        'The updated itinerary response has an unexpected format.',
+      );
+    } on DioException catch (e) {
+      throw TripException(
+        'ADD PLACE FAILED',
+        _handleError(e, 'Could not add this place to the itinerary'),
+      );
+    }
+  }
+
+  @override
   Future<void> updateGroupPreferences(
     String tripId,
     GroupPreferences preferences,
@@ -887,6 +940,22 @@ class MockTripRepository implements TripRepository {
         'NOT CONNECTED',
         'Locking the itinerary needs the live API.',
       );
+
+  @override
+  Future<Map<String, dynamic>> unlockItinerary(String tripId) async =>
+      throw const TripException(
+        'NOT CONNECTED',
+        'Reopening the itinerary needs the live API.',
+      );
+
+  @override
+  Future<Map<String, dynamic>> addItineraryStop(
+    String tripId,
+    int placeId,
+  ) async => throw const TripException(
+    'NOT CONNECTED',
+    'Adding to this itinerary needs the live API.',
+  );
 
   @override
   Future<void> updateGroupPreferences(
