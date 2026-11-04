@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/network/api_endpoints.dart';
+
 // Simpleng Model para sa Notification
 class AppNotification {
   final String id;
@@ -32,8 +34,7 @@ class NotificationsRepository {
 
   Future<List<AppNotification>> getNotifications() async {
     try {
-      // Pinapalagay natin na ito ang endpoint ng inyong backend
-      final res = await _dio.get('http://10.0.2.2:8000/api/v1/notifications');
+      final res = await _dio.get('${ApiEndpoints.baseUrl}${ApiEndpoints.apiPrefix}/notifications');
       final data = res.data as List;
       return data.map((e) => AppNotification.fromJson(e)).toList();
     } catch (e) {

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart'; 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
@@ -83,8 +82,9 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   }
 
   Future<void> _fetchPlacesList() async {
-    final String baseUrl = kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
-    final url = Uri.parse('$baseUrl/api/v1/places/clusters'); 
+    final url = Uri.parse(
+      '${ApiEndpoints.baseUrl}${ApiEndpoints.apiPrefix}/places/clusters',
+    );
     
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 15)); 

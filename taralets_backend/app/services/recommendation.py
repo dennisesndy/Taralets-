@@ -128,17 +128,6 @@ async def get_group_recommendations(
     limit: int = 30,
     offset: int = 0,
 ):
-    """
-    Generate group recommendations using all member preferences.
-
-    Pipeline:
-    1. Load places from the dataset
-    2. Apply basic hard constraints
-    3. Score each place for every member
-    4. Aggregate member scores into group consensus
-    5. Include spatial relevance
-    6. Return ranked recommendations
-    """
 
     if not group_profiles:
         return []
@@ -171,8 +160,6 @@ async def get_group_recommendations(
             except (TypeError, ValueError):
                 pass
 
-    # The lowest member budget is used as the conservative
-    # group budget for hard candidate filtering.
     group_budget = (
         min(budgets)
         if budgets
@@ -193,10 +180,6 @@ async def get_group_recommendations(
     if not candidates:
         candidates = list(all_places)
 
-    # IMPORTANT:
-    # If strict filtering removes everything, don't show
-    # "No places found". Let the scoring system rank them
-    # instead.
     if not candidates:
         return []
 
@@ -205,15 +188,11 @@ async def get_group_recommendations(
     # 4. Filter by selected group activities
     # ---------------------------------------------------------
 
-    # Don't silently fall back to unrelated places when saved activity
-    # preferences have no matching dataset rows.
     candidates = filter_by_group_activities(candidates, group_profiles)
 
     if not candidates:
         return []
 
-    # A confirmed failure for any participating member's selected need is
-    # never presented as a suitable recommendation. Unknown data stays eligible.
     from app.services.itinerary.group_scoring import accessibility_match_status
     with_accessibility_needs = any(
         member.get("accessibility_preferences")
@@ -247,9 +226,6 @@ async def get_group_recommendations(
         int(sum(place_targets) / len(place_targets) + 0.5)
         if place_targets else 3
     )
-    # Nearby ordering uses a greedy nearest-place search. Limit that extra
-    # pass to the top ten pages so large groups remain responsive while
-    # pagination below keeps a stable, fully ranked tail.
     cluster_window = min(len(recommendations), 300)
     nearby_recommendations = _order_nearby_recommendations(
         recommendations[:cluster_window],
@@ -260,5 +236,4 @@ async def get_group_recommendations(
     )
     recommendations = nearby_recommendations + recommendations[cluster_window:]
 
-    # I-apply ang pagination
     return recommendations[offset : offset + limit]

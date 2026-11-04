@@ -85,7 +85,6 @@ async def get_place_clusters(db: AsyncSession = Depends(get_db)):
         if cluster_id not in clusters_map:
             clusters_map[cluster_id] = []
         
-        # IDINAGDAG ANG MGA SUB-CATEGORIES AT ACCESSIBILITY BOOLEANS
         clusters_map[cluster_id].append({
             "id": place.id,
             "name": place.name,

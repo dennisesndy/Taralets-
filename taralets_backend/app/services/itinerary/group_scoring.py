@@ -598,7 +598,6 @@ def calculate_member_score(
     max_cost = safe_cost(_get(place, "max_cost", 0))
     entrance_fee = safe_cost(_get(place, "entrance_fee", 0))
 
-    # Use the higher estimated cost and numeric entrance fee.
     estimated_cost = max(min_cost, max_cost, entrance_fee)
 
     if max_budget is None or max_budget <= 0:
@@ -614,8 +613,6 @@ def calculate_member_score(
             ),
         )
 
-    # Activity is the main preference signal.
-    # Dietary/accessibility/budget support the match.
     return (
         0.55 * activity_score
         + 0.20 * dietary_score
@@ -645,7 +642,6 @@ def calculate_group_score(
         for score in member_scores
     ) / len(member_scores)
 
-    # Average satisfaction + protection for the least satisfied member.
     consensus = (
         0.50 * average
         + 0.30 * least_misery
@@ -684,7 +680,6 @@ def calculate_rating_score(place) -> float:
         min(1.0, rating / 5.0),
     )
 
-    # Reliability increases with review count.
     reliability = min(
         1.0,
         reviews / 100.0,
@@ -715,15 +710,12 @@ def calculate_spatial_score(
 
     distance_meters = distance * 1000
 
-    # Dynamic limit base sa choice ng user o sa default (e.g. 3000)
     if distance_meters > max_radius:
         return -1.0
 
-    # Pasok sa target na 500m = perfect spatial score (1.0)
     if distance_meters <= 500:
         return 1.0
 
-    # Distance-Decay: Unti-unting bababa ang score mula 500m hanggang max_radius
     decay_rate = 1000
     return math.exp(-(distance_meters - 500) / decay_rate)
 
@@ -745,7 +737,6 @@ def aggregate_group_scores(
         if isinstance(place, dict):
             place = SimpleNamespace(**place)
 
-        # 1. Ipasa ang dynamic radius
         spatial_score = calculate_spatial_score(
             place,
             origin_lat,
@@ -753,11 +744,9 @@ def aggregate_group_scores(
             max_radius,
         )
 
-        # 2. Kung nag-return ng -1, wag nang i-compute ang iba at i-skip na
         if spatial_score < 0:
             continue
 
-        # 3. Tuloy na ang dating computation para sa mga pumasa
         member_scores = [
             calculate_member_score(member, place)
             for member in group_profiles
