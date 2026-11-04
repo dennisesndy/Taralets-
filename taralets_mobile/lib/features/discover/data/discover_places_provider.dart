@@ -11,7 +11,7 @@ final discoverPlacesProvider = FutureProvider<List<Place>>((ref) async {
   final url = Uri.parse(
     '${ApiEndpoints.baseUrl}${ApiEndpoints.apiPrefix}/places/clusters',
   );
-  final response = await http.get(url).timeout(const Duration(seconds: 20));
+  final response = await http.get(url).timeout(const Duration(seconds: 45));
   if (response.statusCode != 200) {
     throw Exception('Could not load places (${response.statusCode}).');
   }

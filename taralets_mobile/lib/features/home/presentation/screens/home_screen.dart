@@ -39,6 +39,68 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _category = 'All';
   final Set<int> _saved = {};
 
+  void _showJoinTripOptions() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Join a Trip',
+                style: AppText.ui(20, FontWeight.w900, color: AppColors.navy),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Choose how you want to join your friend’s trip.',
+                style: AppText.ui(12, FontWeight.w500, color: AppColors.muted),
+              ),
+              const SizedBox(height: 16),
+            _JoinOptionTile(
+                icon: Icons.key_rounded,
+                title: 'Enter an invite code',
+                subtitle: 'Use the code shared by the trip leader',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  context.push(AppRoutes.joinTrip);
+                },
+              ),
+              const SizedBox(height: 10),
+              _JoinOptionTile(
+                icon: Icons.people_alt_rounded,
+                title: 'Join a friend’s group',
+                subtitle: 'Browse itineraries shared by your friends',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  context.push(AppRoutes.friendsTrips);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Kunin ang tunay na account details mula sa user
@@ -56,8 +118,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .watch(myTripsProvider)
         .maybeWhen(data: (t) => t, orElse: () => const <Trip>[]);
 
-    // Binago ang logic dito: Ipakita ang unang trip (upcoming man o active)
-    final displayTrip = trips.firstOrNull;
+    // Match the My Trips > Upcoming filter, including its date-based status.
+    final displayTrip = trips
+        .where((trip) => displayTripStatus(trip) == TripStatus.lobby)
+        .firstOrNull;
 
     final placesAsync = ref.watch(discoverPlacesProvider);
     final allPlaces = placesAsync.valueOrNull ?? const <Place>[];
@@ -66,8 +130,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final filteredPlaces = _category == 'All'
         ? allPlaces
         : allPlaces
-            .where((place) => _matchesCategory(place, _category))
-            .toList();
+              .where((place) => _matchesCategory(place, _category))
+              .toList();
 
     return ColoredBox(
       color: AppColors.bg,
@@ -221,7 +285,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                           title: 'Create Trip',
                           subtitle: 'Plan with group',
-                          onTap: () => context.push(AppRoutes.createTrip),
+                          onTap: () => context.push(AppRoutes.tripStart),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -235,8 +299,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             size: 18,
                           ),
                           title: 'Join a Trip',
-                          subtitle: 'Enter invite code',
-                          onTap: () => context.push(AppRoutes.joinTrip),
+                          subtitle: 'Use a code or join a friend',
+                          onTap: _showJoinTripOptions,
                         ),
                       ),
                     ],
@@ -327,13 +391,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   else if (placesAsync.hasError)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 20),
-                      child: Text(
-                        'Could not load places. Please try Discover again.',
-                        style: AppText.ui(
-                          13,
-                          FontWeight.w500,
-                          color: AppColors.muted,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Could not load places. Check your connection and retry.',
+                            style: AppText.ui(
+                              13,
+                              FontWeight.w500,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () =>
+                                ref.invalidate(discoverPlacesProvider),
+                            icon: const Icon(Icons.refresh_rounded, size: 16),
+                            label: const Text('Retry'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.orange,
+                            ),
+                          ),
+                        ],
                       ),
                     )
                   else if (filteredPlaces.isEmpty)
@@ -492,10 +570,7 @@ class _ActiveTripCard extends StatelessWidget {
     final badgeText = isUpcoming ? 'UPCOMING TRIP' : 'ACTIVE TRIP';
 
     return GestureDetector(
-      onTap: () => context.go(
-        AppRoutes.itinerary,
-        extra: {'tripId': trip.id},
-      ),
+      onTap: () => context.go(AppRoutes.itinerary, extra: {'tripId': trip.id}),
       child: TicketCard(
         fillColor: TicketPalette.lavenderFill,
         lineColor: TicketPalette.lavenderLine,
@@ -632,6 +707,72 @@ class _ActiveTripCard extends StatelessWidget {
 // =============================================================================
 // Action Tile (Create / Join ticket)
 // =============================================================================
+
+class _JoinOptionTile extends StatelessWidget {
+  const _JoinOptionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: AppColors.bg,
+    borderRadius: BorderRadius.circular(14),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: const BoxDecoration(
+                color: AppColors.orangeSoft,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: AppColors.orange, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppText.ui(
+                      14,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: AppText.ui(
+                      11,
+                      FontWeight.w500,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 
 class _ActionTile extends StatelessWidget {
   const _ActionTile({

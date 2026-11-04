@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +21,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
+
+# The places/clusters feed serves the full Manila catalog to Home, Discover,
+# and itinerary Nearby. Compress it so mobile clients do not time out on the
+# multi-megabyte response.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # CORS Configuration
 # CORS Configuration

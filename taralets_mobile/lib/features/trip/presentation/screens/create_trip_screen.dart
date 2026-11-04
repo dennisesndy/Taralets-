@@ -3,23 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:geolocator/geolocator.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../../../core/utils/geo_boundary.dart';
 import '../../../../core/utils/activity_category_helper.dart';
 import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/app_icons.dart';
 import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
-import '../../../../shared/widgets/error_note.dart';
-import '../../../../shared/widgets/map_background.dart';
 import '../../../../shared/widgets/step_bar.dart';
 import '../../../../shared/widgets/taralets_button.dart';
 import '../../../../shared/widgets/taralets_field.dart';
@@ -28,10 +22,20 @@ import '../../../profile/providers/preferences_provider.dart';
 // FIX: Idinagdag ang profile preferences repo para ma-save ang prefs ni leader
 import '../../../profile/data/profile_preferences_repository.dart';
 import '../../data/models/trip_models.dart';
-import '../../../routing/data/routing_repository.dart';
 
 class CreateTripScreen extends ConsumerStatefulWidget {
-  const CreateTripScreen({super.key});
+  const CreateTripScreen({
+    super.key,
+    this.initialLocationName,
+    this.initialLatitude,
+    this.initialLongitude,
+    this.sourceItineraryId,
+  });
+
+  final String? initialLocationName;
+  final double? initialLatitude;
+  final double? initialLongitude;
+  final String? sourceItineraryId;
 
   @override
   ConsumerState<CreateTripScreen> createState() => _CreateTripScreenState();
@@ -47,18 +51,9 @@ class _Member {
 class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   static const _titles = [
     'Create a Trip',
-    'Meetup Location',
     'Invite Members',
     'Group Preferences',
     'Review Trip',
-  ];
-
-  static const _presets = <(String, double, double)>[
-    ('Plaza Roma, Intramuros', 14.5896, 120.9753),
-    ('Luneta Park / Rizal Park', 14.5831, 120.9794),
-    ('Binondo Church', 14.6004, 120.9742),
-    ('National Museum Plaza', 14.5870, 120.9815),
-    ('Baywalk Promenade', 14.5740, 120.9760),
   ];
 
   final List<String> _activityOptions = [
@@ -115,7 +110,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     'Budget-Friendly': '💸',
   };
 
-
   int _step = 1;
   bool _submitting = false;
   late final String _code = generateRoomCode();
@@ -126,18 +120,12 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   final _name = TextEditingController(text: '');
   final _desc = TextEditingController();
   DateTime? _date;
+  int _durationDays = 1;
   TimeOfDay _meetupTime = const TimeOfDay(hour: 14, minute: 30);
   TimeOfDay _wrapTime = const TimeOfDay(hour: 20, minute: 0);
 
-  String _selected = 'Plaza Roma, Intramuros';
-  final _query = TextEditingController();
-  bool _pinMoved = false;
-
-  final MapController _mapController = MapController();
-  LatLng _mapCenter = const LatLng(14.5896, 120.9753);
-  Timer? _debounce;
-  List<Map<String, dynamic>> _searchResults = [];
-  bool _isSearching = false;
+  late final String _selected =
+      widget.initialLocationName ?? 'Plaza Roma, Intramuros';
 
   final _username = TextEditingController();
   final List<_Member> _members = [];
@@ -145,15 +133,16 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   late List<String> _cats;
   late List<String> _dietary;
   final _budgetController = TextEditingController(text: '2500');
-  final _placesController = TextEditingController();
   final List<String> _accessibility = [];
 
   @override
   void initState() {
     super.initState();
     final prefs = ref.read(userPreferencesProvider);
-    _cats = normalizeActivityCategories(prefs.activityTags)
-        .where(_activityOptions.contains)
+    _cats = prefs.activityTags
+        .map((tag) => matchActivityCategoryOption(tag, _activityOptions))
+        .whereType<String>()
+        .toSet()
         .toList();
     _dietary = List.of(prefs.dietary);
 
@@ -168,65 +157,17 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   @override
   void dispose() {
     _membersPollTimer?.cancel();
-    _mapController.dispose();
-    _debounce?.cancel();
     _name.dispose();
     _desc.dispose();
-    _query.dispose();
     _username.dispose();
-    _placesController.dispose();
     _budgetController.dispose();
     super.dispose();
-  }
-
-  void _onSearchChanged(String query) {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
-
-    if (query.isEmpty) {
-      setState(() => _searchResults.clear());
-      return;
-    }
-
-    _debounce = Timer(const Duration(milliseconds: 500), () async {
-      setState(() => _isSearching = true);
-      final repo = ref.read(routingRepositoryProvider);
-      final results = await repo.searchPlaces(query);
-
-      if (mounted) {
-        setState(() {
-          _searchResults = results;
-          _isSearching = false;
-        });
-      }
-    });
-  }
-
-  Future<void> _useCurrentLocation() async {
-    setState(() => _isSearching = true);
-    final repo = ref.read(routingRepositoryProvider);
-    final location = await repo.getCurrentLocation();
-
-    if (mounted) {
-      setState(() {
-        _isSearching = false;
-        if (location != null) {
-          _selected = "My Current Location";
-          _mapCenter = location;
-          _mapController.move(location, 16.0);
-          FocusScope.of(context).unfocus();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not access current location.')),
-          );
-        }
-      });
-    }
   }
 
   void _startPollingMembers() {
     _membersPollTimer?.cancel();
     _membersPollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      if (_createdTripId == null || !mounted || _step != 3) return;
+      if (_createdTripId == null || !mounted || _step != 2) return;
 
       try {
         final updatedTrip = await ref
@@ -252,23 +193,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     });
   }
 
-  bool get _outOfBoundary {
-    const double minLat = 14.5500;
-    const double maxLat = 14.6300;
-    const double minLng = 120.9500;
-    const double maxLng = 121.0300;
-
-    final lat = _mapCenter.latitude;
-    final lng = _mapCenter.longitude;
-
-    return !(lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng);
-  }
-
   void _back() {
     if (_step == 1) {
       context.canPop() ? context.pop() : context.go(AppRoutes.home);
     } else {
-      if (_step == 4) {
+      if (_step == 3) {
         _startPollingMembers();
       }
       setState(() => _step--);
@@ -281,7 +210,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
     // The member-preferences endpoint requires at least 2 activity tags.
     // Validate here so Review Trip never submits an invalid payload.
-    if (_step == 4 && _cats.length < 2) {
+    if (_step == 3 && _cats.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select at least 2 activity tags.'),
@@ -290,16 +219,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       return;
     }
 
-    if (_step == 2 && _outOfBoundary) return;
-
-    if (_step == 2 && _createdTrip == null) {
+    if (_step == 1 && _createdTrip == null) {
       setState(() => _submitting = true);
 
       try {
-        final p = _presets.where((p) => p.$1 == _selected).firstOrNull;
-        final finalLat = p?.$2 ?? _mapCenter.latitude;
-        final finalLng = p?.$3 ?? _mapCenter.longitude;
-
         final dto = CreateTripDto(
           code: _code,
           title: _name.text.trim().isEmpty
@@ -307,17 +230,19 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               : _name.text.trim(),
           description: _desc.text.trim(),
           date: _date ?? DateTime.now(),
+          durationDays: _durationDays,
           meetupTime: _meetupTime,
           wrapUpTime: _wrapTime,
           meetupName: _selected,
-          latitude: finalLat,
-          longitude: finalLng,
+          latitude: widget.initialLatitude ?? 14.5896,
+          longitude: widget.initialLongitude ?? 120.9753,
           memberNames: _members.map((m) => m.name).toList(),
           preferences: const GroupPreferences(
             categories: [],
             budget: '₱0',
             desiredPlacesPerDay: null,
           ),
+          sourceItineraryId: widget.sourceItineraryId,
         );
 
         final trip = await ref.read(tripRepositoryProvider).createTrip(dto);
@@ -341,7 +266,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       setState(() => _submitting = false);
     }
 
-    if (_step == 3) {
+    if (_step == 2) {
       _membersPollTimer?.cancel();
     }
 
@@ -355,19 +280,17 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     try {
       final parsedBudget =
           double.tryParse(_budgetController.text.replaceAll(',', '')) ?? 2500.0;
-      final activityTagsToSave = normalizeActivityCategories(_cats)
-          .where(_activityOptions.contains)
+      final activityTagsToSave = _cats
+          .map((tag) => matchActivityCategoryOption(tag, _activityOptions))
+          .whereType<String>()
+          .toSet()
           .toList();
 
       // 1. I-save ang GROUP Preferences
       final groupPreferences = GroupPreferences(
-        categories: [
-          ...activityTagsToSave,
-          ..._dietary,
-          ..._accessibility,
-        ],
+        categories: [...activityTagsToSave, ..._dietary, ..._accessibility],
         budget: '₱${parsedBudget.toInt()}',
-        desiredPlacesPerDay: int.tryParse(_placesController.text),
+        desiredPlacesPerDay: null,
       );
 
       await ref
@@ -383,7 +306,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             activityTags: activityTagsToSave,
             dietaryPreferences: dietaryToSave,
             maxBudget: parsedBudget,
-            desiredPlacesPerDay: int.tryParse(_placesController.text),
+            desiredPlacesPerDay: null,
             accessibilityPreferences: _accessibility,
           );
 
@@ -456,219 +379,27 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           ],
         ),
         const SizedBox(height: 20),
-        StepBar(current: _step),
+        StepBar(
+          current: _step + 1,
+          labels: const ['Location', 'Details', 'Invite', 'Prefs', 'Review'],
+        ),
       ],
-    );
-  }
-
-  Widget _buildSearchCard(bool out) {
-    final q = _query.text.toLowerCase().trim();
-    final shown = q.isEmpty
-        ? _presets
-        : _presets.where((p) => p.$1.toLowerCase().contains(q)).toList();
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.35,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TaraletsField(
-            hint: 'Search location',
-            controller: _query,
-            icon: AppIcons.search(),
-            onChanged: _onSearchChanged,
-          ),
-          const SizedBox(height: 12),
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _useCurrentLocation,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 11,
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.my_location,
-                            color: AppColors.orange,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Use my current location',
-                            style: AppText.ui(
-                              13,
-                              FontWeight.w600,
-                              color: AppColors.orange,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (_isSearching)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
-                  else if (_searchResults.isNotEmpty)
-                    for (final result in _searchResults)
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          setState(() {
-                            _selected = result['name'];
-                            _mapCenter = LatLng(result['lat'], result['lng']);
-                            _query.text = result['name'];
-                            _searchResults.clear();
-                            FocusScope.of(context).unfocus();
-                          });
-                          _mapController.move(_mapCenter, 16.0);
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 2),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 11,
-                          ),
-                          child: Row(
-                            children: [
-                              AppIcons.pin(color: AppColors.muted),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  result['full_address'],
-                                  style: AppText.ui(
-                                    13,
-                                    FontWeight.w500,
-                                    color: AppColors.text,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                  else ...[
-                    if (shown.isEmpty && !out && _selected != _query.text)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-                        child: Text(
-                          'No matching presets. Try a landmark in the City of Manila.',
-                          style: AppText.ui(
-                            12,
-                            FontWeight.w400,
-                            color: AppColors.muted,
-                          ),
-                        ),
-                      ),
-                    for (final o in shown)
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          setState(() {
-                            _selected = o.$1;
-                            _mapCenter = LatLng(o.$2, o.$3);
-                            FocusScope.of(context).unfocus();
-                          });
-                          _mapController.move(_mapCenter, 16.0);
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 2),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 11,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _selected == o.$1
-                                ? AppColors.orangeSoft
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              AppIcons.pin(
-                                color: _selected == o.$1
-                                    ? AppColors.orange
-                                    : AppColors.muted,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  o.$1,
-                                  style: AppText.ui(
-                                    13,
-                                    _selected == o.$1
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: _selected == o.$1
-                                        ? AppColors.orange
-                                        : AppColors.text,
-                                  ),
-                                ),
-                              ),
-                              if (_selected == o.$1)
-                                AppIcons.check(
-                                  color: AppColors.orange,
-                                  size: 14,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final button = switch (_step) {
-      1 => TaraletsButton.orange(label: 'Continue →', onPressed: _next),
-      2 => Opacity(
-        opacity: _outOfBoundary ? 0.45 : 1,
-        child: TaraletsButton.orange(
-          label: 'Confirm Location →',
-          isLoading: _submitting,
-          onPressed: _next,
-        ),
+      1 => TaraletsButton.orange(
+        label: 'Continue →',
+        isLoading: _submitting,
+        onPressed: _next,
       ),
-      3 => TaraletsButton.orange(
+      2 => TaraletsButton.orange(
         label: 'Continue to Preferences →',
         onPressed: _next,
       ),
-      4 => TaraletsButton.orange(
+      3 => TaraletsButton.orange(
         label: 'Confirm Preferences →',
         onPressed: _next,
       ),
@@ -678,148 +409,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         onPressed: _submit,
       ),
     };
-
-    if (_step == 2) {
-      final out = _outOfBoundary;
-      return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) _back();
-        },
-        child: Scaffold(
-          backgroundColor: AppColors.bg,
-          body: Stack(
-            children: [
-              Positioned.fill(
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: _mapCenter,
-                    initialZoom: 15.0,
-                    onPositionChanged: (position, hasGesture) {
-                      if (hasGesture && position.center != null) {
-                        setState(() {
-                          _mapCenter = position.center!;
-                          _pinMoved = true;
-                          FocusScope.of(context).unfocus();
-                        });
-                      }
-                    },
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.taralets.app',
-                    ),
-                  ],
-                ),
-              ),
-
-              Center(
-                child: FractionalTranslation(
-                  translation: const Offset(0, -0.5),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('📍', style: TextStyle(fontSize: 40)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: out ? AppColors.redSoft : Colors.white,
-                          borderRadius: BorderRadius.circular(6),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          out ? 'OUT OF BOUNDARY' : _selected.split(',').first,
-                          style: AppText.ui(
-                            10,
-                            FontWeight.w700,
-                            color: out ? AppColors.errorTitle : AppColors.navy,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top + 16,
-                    left: 24,
-                    right: 24,
-                    bottom: 24,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.white.withValues(alpha: 0.95),
-                        Colors.white.withValues(alpha: 0.8),
-                        Colors.white.withValues(alpha: 0.0),
-                      ],
-                      stops: const [0.6, 0.8, 1.0],
-                    ),
-                  ),
-                  child: _buildHeader(),
-                ),
-              ),
-
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: EdgeInsets.fromLTRB(
-                    24,
-                    16,
-                    24,
-                    MediaQuery.of(context).padding.bottom + 16,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildSearchCard(out),
-                      if (out) ...[
-                        const SizedBox(height: 14),
-                        const ErrorNote(
-                          title: 'OUT OF BOUNDARY',
-                          message:
-                              'This meetup location is outside the supported City of Manila area. Choose a location inside the City of Manila to continue.',
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      button,
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     final body = switch (_step) {
       1 => _step1(),
-      3 => _step3(),
-      4 => _step4(),
+      2 => _step3(),
+      3 => _step4(),
       _ => _step5(),
     };
 
@@ -952,6 +545,68 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.orangeSoft,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.orange.withValues(alpha: 0.22),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.date_range_rounded, color: AppColors.orange),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Tour duration',
+                          style: AppText.ui(
+                            13,
+                            FontWeight.w800,
+                            color: AppColors.navy,
+                          ),
+                        ),
+                        Text(
+                          '${_durationDays} ${_durationDays == 1 ? 'day' : 'days'}${_date == null ? '' : ' · through ${formatInputDate(_date!.add(Duration(days: _durationDays - 1)))}'}',
+                          style: AppText.ui(
+                            11,
+                            FontWeight.w500,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Fewer days',
+                    onPressed: _durationDays <= 1
+                        ? null
+                        : () => setState(() => _durationDays--),
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                  Text(
+                    '$_durationDays',
+                    style: AppText.ui(
+                      15,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'More days',
+                    onPressed: _durationDays >= 30
+                        ? null
+                        : () => setState(() => _durationDays++),
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             Row(
@@ -1114,7 +769,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           children: [
             Expanded(
               child: TaraletsField(
-                hint: 'Invite by username...',
+                hint: 'Invite a friend by email or name...',
                 controller: _username,
                 radius: 10,
                 fontSize: 13,
@@ -1360,19 +1015,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       const SizedBox(height: 16),
 
       _SectionCard(
-        emoji: '📍',
-        title: 'Desired Number of Places to Visit',
-        subtitle: 'Your ideal number of places per day. Optional; trip members can add their own targets.',
-        child: TaraletsTextField(
-          label: 'Places per day',
-          controller: _placesController,
-          keyboardType: TextInputType.number,
-          hint: 'e.g. 4',
-        ),
-      ),
-      const SizedBox(height: 16),
-
-      _SectionCard(
         emoji: '♿',
         title: 'Accessibility',
         subtitle: 'Any specific accessibility needs?',
@@ -1405,6 +1047,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         : _name.text.trim();
     final rows = [
       ('📍', 'Meetup', _selected),
+      (
+        '📅',
+        'Tour duration',
+        '$_durationDays ${_durationDays == 1 ? 'day' : 'days'}',
+      ),
       ('⏰', 'Target Arrival', formatTimeOfDay(_meetupTime)),
       ('👥', 'Members', '${_members.length} people'),
     ];
@@ -1416,7 +1063,6 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       ..._cats,
       ..._dietary,
       '₱${parsedBudget.toInt()}',
-      if (_placesController.text.trim().isNotEmpty) '${_placesController.text.trim()} places/day',
       ..._accessibility,
     ];
 

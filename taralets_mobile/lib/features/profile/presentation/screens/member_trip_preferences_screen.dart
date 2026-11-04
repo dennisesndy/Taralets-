@@ -69,7 +69,6 @@ class _MemberTripPreferenceScreenState
     'Wheelchair accessible',
   ];
 
-
   static const Map<String, String> _activityEmoji = {
     "Accommodations": '🏨',
     "Cafes": '☕',
@@ -100,7 +99,6 @@ class _MemberTripPreferenceScreenState
 
   // FIX: Inalis ang double at pinalitan ng TextField Controller
   final _budgetController = TextEditingController(text: '2500');
-  final _placesController = TextEditingController();
 
   bool _isLoading = false;
   bool _tagError = false;
@@ -115,7 +113,6 @@ class _MemberTripPreferenceScreenState
   void dispose() {
     _shake.dispose();
     _budgetController.dispose();
-    _placesController.dispose();
     super.dispose();
   }
 
@@ -159,7 +156,7 @@ class _MemberTripPreferenceScreenState
             activityTags: _selectedActivities,
             dietaryPreferences: dietaryToSave,
             maxBudget: parsedBudget,
-            desiredPlacesPerDay: int.tryParse(_placesController.text),
+            desiredPlacesPerDay: null,
             accessibilityPreferences: _selectedAccessibility,
           );
 
@@ -322,13 +319,9 @@ class _MemberTripPreferenceScreenState
                       child: _budgetSection(),
                     ),
                     const SizedBox(height: 16),
-                    FadeSlideIn(
-                      delay: const Duration(milliseconds: 650),
-                      child: _placesSection(),
-                    ),
                     const SizedBox(height: 16),
                     FadeSlideIn(
-                      delay: const Duration(milliseconds: 750),
+                      delay: const Duration(milliseconds: 650),
                       child: _accessibilitySection(),
                     ),
                   ],
@@ -520,20 +513,6 @@ class _MemberTripPreferenceScreenState
         keyboardType: TextInputType.number,
         hint: 'e.g. 2500',
         icon: Icons.account_balance_wallet_outlined,
-      ),
-    );
-  }
-
-  Widget _placesSection() {
-    return _SectionCard(
-      emoji: '📍',
-      title: 'Desired Number of Places to Visit',
-      subtitle: 'Your ideal number of places for each trip day. Optional.',
-      child: TaraletsTextField(
-        label: 'Places per day',
-        controller: _placesController,
-        keyboardType: TextInputType.number,
-        hint: 'e.g. 4',
       ),
     );
   }

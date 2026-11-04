@@ -41,6 +41,7 @@ class ItineraryStop {
     required this.travelMinutes,
     required this.travelCost,
     required this.area,
+    this.dayNumber = 1,
     this.activityTags = const [],
     this.dietaryTags = const [],
     this.accessibilityTags = const [],
@@ -64,6 +65,7 @@ class ItineraryStop {
   final int travelMinutes;
   final int travelCost;
   final String area;
+  final int dayNumber;
   final List<String> activityTags;
   final List<String> dietaryTags;
   final List<String> accessibilityTags;
@@ -151,13 +153,17 @@ class ItineraryPlan {
   int get totalBudget => stops.fold(0, (sum, stop) => sum + stop.budget);
 
   int get spanMinutes {
-    if (stops.isEmpty) return 0;
-    final start = stops.first.startTime;
-    final end = stops.last.endTime;
-    final startMinutes = start.hour * 60 + start.minute;
-    final endMinutes = end.hour * 60 + end.minute;
-    if (endMinutes >= startMinutes) return endMinutes - startMinutes;
-    return (24 * 60 - startMinutes) + endMinutes;
+    return days.fold(0, (sum, day) {
+      if (day.stops.isEmpty) return sum;
+      final start = day.stops.first.startTime;
+      final end = day.stops.last.endTime;
+      final startMinutes = start.hour * 60 + start.minute;
+      final endMinutes = end.hour * 60 + end.minute;
+      final daySpan = endMinutes >= startMinutes
+          ? endMinutes - startMinutes
+          : (24 * 60 - startMinutes) + endMinutes;
+      return sum + daySpan;
+    });
   }
 
   String get startLabel => stops.isEmpty ? '—' : stops.first.startLabel;

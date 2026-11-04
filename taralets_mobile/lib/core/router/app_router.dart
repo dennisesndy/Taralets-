@@ -14,6 +14,7 @@ import '../../features/itinerary/presentation/controllers/itinerary_draft_contro
 import '../../features/itinerary/presentation/screens/itinerary_screen.dart';
 import '../../features/itinerary/presentation/screens/selected_places_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/profile/presentation/screens/friends_screen.dart';
 import '../../features/profile/presentation/screens/preference_screen.dart';
 import '../../features/profile/presentation/screens/member_trip_preferences_screen.dart';
 import '../../features/trip/presentation/screens/create_trip_screen.dart';
@@ -25,6 +26,8 @@ import '../../features/trip/presentation/screens/trip_created_screen.dart';
 import '../../features/trip/presentation/screens/trip_lobby_screen.dart';
 import '../../features/trip/presentation/screens/active_trip_screen.dart';
 import '../../features/trip/presentation/screens/edit_trip_screen.dart';
+import '../../features/trip/presentation/screens/trip_start_screen.dart';
+import '../../features/trip/presentation/screens/friends_trips_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../repositories/trip_repository.dart';
@@ -128,9 +131,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   final extra = state.extra;
                   return ItineraryScreen(
                     initialPlan: extra is ItineraryPlan ? extra : null,
-                    tripId: extra is Map
-                        ? extra['tripId'] as String?
-                        : null,
+                    tripId: extra is Map ? extra['tripId'] as String? : null,
                   );
                 },
               ),
@@ -145,6 +146,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+
+      GoRoute(
+        path: AppRoutes.friends,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const FriendsScreen(),
       ),
 
       // Auth routes: full screen, no bottom bar.
@@ -190,9 +197,29 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
+        path: AppRoutes.tripStart,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const TripStartScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.friendsTrips,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          return const FriendsTripsScreen();
+        },
+      ),
+      GoRoute(
         path: AppRoutes.createTrip,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const CreateTripScreen(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? const {};
+          return CreateTripScreen(
+            initialLocationName: extra['locationName']?.toString(),
+            initialLatitude: (extra['latitude'] as num?)?.toDouble(),
+            initialLongitude: (extra['longitude'] as num?)?.toDouble(),
+            sourceItineraryId: extra['sourceItineraryId']?.toString(),
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.tripCreated,
@@ -203,14 +230,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) =>
             TripCreatedScreen(trip: state.extra! as Trip),
       ),
+
       // Group Lobby: Full screen bago umalis ang grupo
-      
       GoRoute(
         path: AppRoutes.tripLobby,
         parentNavigatorKey: _rootNavigatorKey,
         redirect: (context, state) {
           if (state.extra is Trip) return null;
-          if (state.extra is Map<String, dynamic> && 
+          if (state.extra is Map<String, dynamic> &&
               (state.extra as Map)['trip'] is Trip) {
             return null;
           }
@@ -227,7 +254,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           return TripLobbyScreen(trip: state.extra! as Trip);
         },
       ),
-
 
       // Edit Trip: Leader-only form (pops with updated Trip)
       GoRoute(
@@ -267,16 +293,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-          path: AppRoutes.recommendations, // Gamitin ang variable mo
-          builder: (context, state) {
-            final extra = state.extra;
-            final groupId = extra is Map
-                ? extra['groupId'] as String? ?? ''
-                : '';
+        path: AppRoutes.recommendations, // Gamitin ang variable mo
+        builder: (context, state) {
+          final extra = state.extra;
+          final groupId = extra is Map ? extra['groupId'] as String? ?? '' : '';
 
-            return GroupRecommendationsScreen(groupId: groupId);
-          },
-        ),
+          return GroupRecommendationsScreen(groupId: groupId);
+        },
+      ),
       GoRoute(
         path: AppRoutes.selectedPlaces,
         parentNavigatorKey: _rootNavigatorKey,

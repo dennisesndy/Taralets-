@@ -4,7 +4,7 @@ import csv
 import json
 import math
 import re
-from datetime import date as Date, datetime, time
+from datetime import date as Date, datetime, time, timedelta
 from io import StringIO
 from typing import Any
 
@@ -214,6 +214,150 @@ def _estimate_duration_minutes(place: Any) -> int:
     return 50
 
 
+def _place_labels(place: Any) -> list[str]:
+    activity_tags = _get(place, "activity_tags", []) or []
+    if isinstance(activity_tags, str):
+        activity_tags = [activity_tags]
+    values = [
+        _get(place, "category", ""),
+        _get(place, "sub_category_1", ""),
+        _get(place, "sub_category_2", ""),
+        _get(place, "sub_category_3", ""),
+        *activity_tags,
+    ]
+    return [str(value).casefold() for value in values if value]
+
+
+def _is_restaurant(place: Any) -> bool:
+    labels = _place_labels(place)
+    return any(
+        token in label
+        for label in labels
+        for token in ("restaurant", "eatery", "food court", "carinderia", "diner")
+    )
+
+
+def _is_cafe(place: Any) -> bool:
+    return any(
+        token in label
+        for label in _place_labels(place)
+        for token in ("cafe", "café", "coffee shop", "tea house")
+    )
+
+
+def _place_bucket(place: Any) -> str:
+    labels = _place_labels(place)
+    checks = (
+        ("restaurant", ("restaurant", "eatery", "food court", "carinderia", "diner")),
+        ("cafe", ("cafe", "café", "coffee shop", "tea house")),
+        ("culture", ("museum", "gallery", "historical", "heritage", "church", "temple", "shrine")),
+        ("outdoors", ("park", "plaza", "garden")),
+        ("shopping", ("shopping", "retail", "market", "bookstore", "book store", "store")),
+        ("entertainment", ("entertainment", "leisure", "cinema", "arcade", "amusement")),
+        ("wellness", ("wellness", "health", "spa", "gym", "salon")),
+        ("lodging", ("accommodation", "hotel", "hostel", "lodging", "guest house")),
+    )
+    for bucket, tokens in checks:
+        if any(token in label for label in labels for token in tokens):
+            return bucket
+    return labels[0] if labels else "other"
+
+
+def _balance_route_by_day(
+    route_items: list[dict[str, Any]],
+    duration_days: int,
+    start_location: dict[str, float] | None,
+) -> list[list[dict[str, Any]]]:
+    """Balance selected places by category and spread meal stops across days."""
+    daily_items: list[list[dict[str, Any]]] = [[] for _ in range(duration_days)]
+    if not route_items:
+        return daily_items
+
+    base, remainder = divmod(len(route_items), duration_days)
+    capacities = [base + (1 if day < remainder else 0) for day in range(duration_days)]
+    meal_items = [
+        item
+        for item in route_items
+        if _is_restaurant(item.get("place") or {})
+        or _is_cafe(item.get("place") or {})
+    ]
+    meal_item_ids = {id(item) for item in meal_items}
+    bucket_counts: list[dict[str, int]] = [dict() for _ in range(duration_days)]
+    meal_counts = [0 for _ in range(duration_days)]
+
+    def add_to_day(item: dict[str, Any], day_index: int) -> None:
+        daily_items[day_index].append(item)
+        bucket = _place_bucket(item.get("place") or {})
+        bucket_counts[day_index][bucket] = bucket_counts[day_index].get(bucket, 0) + 1
+
+    # Spread selected restaurants and cafes across the days before placing
+    # attractions, so each day gets a dining stop when enough were selected.
+    for item in meal_items:
+        available = [
+            index for index, day in enumerate(daily_items)
+            if len(day) < capacities[index]
+        ]
+        if not available:
+            break
+        day_index = min(
+            available,
+            key=lambda index: (
+                meal_counts[index],
+                len(daily_items[index]) / max(1, capacities[index]),
+                index,
+            ),
+        )
+        add_to_day(item, day_index)
+        meal_counts[day_index] += 1
+
+    for item in route_items:
+        if id(item) in meal_item_ids:
+            continue
+        place = item.get("place") or {}
+        bucket = _place_bucket(place)
+        available = [
+            index for index, day in enumerate(daily_items)
+            if len(day) < capacities[index]
+        ]
+        if not available:
+            break
+
+        def assignment_cost(index: int) -> tuple[float, float, int]:
+            same_category = bucket_counts[index].get(bucket, 0)
+            day_places = [entry.get("place") or {} for entry in daily_items[index]]
+            if day_places:
+                distance = min(_distance_km(place, other) for other in day_places)
+            elif start_location:
+                distance = _distance_km(start_location, place)
+            else:
+                distance = 0.0
+            return (
+                float(same_category),
+                len(daily_items[index]) / max(1, capacities[index]) + distance / 1000,
+                index,
+            )
+
+        add_to_day(item, min(available, key=assignment_cost))
+
+    # Keep attraction order mostly intact while spacing selected dining stops
+    # through each day's activities, where they naturally work as breaks.
+    for index, day in enumerate(daily_items):
+        meals = [item for item in day if id(item) in meal_item_ids]
+        other_stops = [item for item in day if id(item) not in meal_item_ids]
+        if meals:
+            balanced = list(other_stops)
+            for meal_index, meal in enumerate(meals):
+                position = (
+                    (meal_index + 1) * len(other_stops) // (len(meals) + 1)
+                ) + meal_index
+                balanced.insert(min(position, len(balanced)), meal)
+            daily_items[index] = balanced
+        else:
+            daily_items[index] = sorted(day, key=route_items.index)
+
+    return daily_items
+
+
 def _distance_km(first: Any, second: Any) -> float:
     lat1 = _get(first, "lat", _get(first, "latitude"))
     lon1 = _get(first, "lng", _get(first, "longitude"))
@@ -350,8 +494,9 @@ def summarize_group_preferences(
     if budgets:
         preferences.append(f"₱{min(budgets):,.0f} / person")
     preferences.extend(f"Accessibility: {tag}" for tag in _unique_strings(accessibility))
-    target = math.floor(sum(place_targets) / len(place_targets) + 0.5) if place_targets else None
-    return preferences, target
+    # Trip length now controls multi-day planning; place-count preferences no
+    # longer cap the selected itinerary stops.
+    return preferences, None
 
 
 def build_trip_itinerary(
@@ -363,20 +508,22 @@ def build_trip_itinerary(
     start_location: dict[str, float] | None = None,
     origin_lat: float | None = None,
     origin_lon: float | None = None,
+    duration_days: int = 1,
 ) -> dict[str, Any]:
+    duration_days = max(1, min(int(duration_days or 1), 30))
     route = generate_group_acs_itinerary(
         group_profiles=group_profiles,
         candidate_places=candidate_places,
         start_location=start_location,
         origin_lat=origin_lat,
         origin_lon=origin_lon,
-        desired_places_per_day=summarize_group_preferences(group_profiles)[1],
+        desired_places_per_day=None,
     )
 
     route_items = route.get("itinerary") or []
-    cursor = _parse_clock(start_time) or time(9, 0)
-    previous_place: Any = None
+    daily_items = _balance_route_by_day(route_items, duration_days, start_location)
 
+    days: list[dict[str, Any]] = []
     stops: list[dict[str, Any]] = []
     all_warnings: list[str] = []
 
@@ -388,70 +535,66 @@ def build_trip_itinerary(
 
     first_start: time | None = None
     last_end: time | None = None
+    start_clock = _parse_clock(start_time) or time(9, 0)
+    meal_item_ids = {
+        id(item)
+        for item in route_items
+        if _is_restaurant(item.get("place") or {})
+        or _is_cafe(item.get("place") or {})
+    }
 
-    for item in route_items:
-        place = item.get("place") or {}
+    for day_index, day_items in enumerate(daily_items):
+        day_date = trip_date + timedelta(days=day_index) if trip_date else None
+        cursor = start_clock if day_index == 0 else time(9, 0)
+        previous_place: Any = None
+        day_stops: list[dict[str, Any]] = []
 
-        if previous_place is not None:
-            distance = _distance_km(previous_place, place)
-        elif start_location:
-            distance = _distance_km(start_location, place)
-        else:
-            distance = 0.0
+        for item in day_items:
+            place = item.get("place") or {}
+            if previous_place is not None:
+                distance = _distance_km(previous_place, place)
+            elif start_location:
+                distance = _distance_km(start_location, place)
+            else:
+                distance = 0.0
 
-        travel_minutes, travel_cost = _travel_estimate(distance)
-        cursor = _add_minutes(cursor, travel_minutes)
+            travel_minutes, travel_cost = _travel_estimate(distance)
+            cursor = _add_minutes(cursor, travel_minutes)
+            if day_index > 0 and id(item) in meal_item_ids and cursor < time(12, 0):
+                cursor = time(12, 0)
+            duration = _estimate_duration_minutes(place)
+            open_clock = _parse_clock(_get(place, "open_time"))
+            close_clock = _parse_clock(_get(place, "close_time"))
+            warnings: list[str] = []
+            feasible = True
 
-        duration = _estimate_duration_minutes(place)
-        open_clock = _parse_clock(_get(place, "open_time"))
-        close_clock = _parse_clock(_get(place, "close_time"))
-
-        warnings: list[str] = []
-        feasible = True
-
-        if _closed_on(place, trip_date):
-            feasible = False
-            warnings.append(
-                f"Closed on {trip_date.strftime('%A')}."
-            )
-
-        if open_clock is not None and cursor < open_clock:
-            cursor = open_clock
-            warnings.append(
-                f"Opens at {_format_clock(open_clock)}."
-            )
-
-        end = _add_minutes(cursor, duration)
-
-        if close_clock is not None and not (
-            open_clock is not None and close_clock < open_clock
-        ):
-            if cursor > close_clock:
+            if day_date and _closed_on(place, day_date):
                 feasible = False
-                warnings.append(
-                    f"Starts after closing at "
-                    f"{_format_clock(close_clock)}."
-                )
-            elif end > close_clock:
-                feasible = False
-                warnings.append(
-                    f"Ends after closing at "
-                    f"{_format_clock(close_clock)}."
-                )
+                warnings.append(f"Closed on {day_date.strftime('%A')}.")
+            if open_clock is not None and cursor < open_clock:
+                cursor = open_clock
+                warnings.append(f"Opens at {_format_clock(open_clock)}.")
 
-        if first_start is None:
-            first_start = cursor
-        last_end = end
+            end = _add_minutes(cursor, duration)
+            if close_clock is not None and not (open_clock is not None and close_clock < open_clock):
+                if cursor > close_clock:
+                    feasible = False
+                    warnings.append(f"Starts after closing at {_format_clock(close_clock)}.")
+                elif end > close_clock:
+                    feasible = False
+                    warnings.append(f"Ends after closing at {_format_clock(close_clock)}.")
 
-        warning = " ".join(warnings) or None
-        if warning:
-            all_warnings.append(warning)
-
-        budget = _place_budget(place)
-
-        stops.append(
-            {
-                "sequence": item.get("sequence"),
+            if first_start is None:
+                first_start = cursor
+            last_end = end
+            warning = " ".join(warnings) or None
+            if warning:
+                all_warnings.append(warning)
+            budget = _place_budget(place)
+            stop = {
+                "sequence": len(stops) + 1,
+                "day_number": day_index + 1,
+                "date": day_date.isoformat() if day_date else None,
                 "id": _get(place, "id"),
                 "place_id": _get(place, "id"),
                 "master_id": _get(place, "master_id"),
@@ -463,15 +606,9 @@ def build_trip_itinerary(
                 "image_url": _get(place, "image_url") or "",
                 "latitude": _get(place, "latitude"),
                 "longitude": _get(place, "longitude"),
-                "activity_tags": _unique_strings(
-                    _get(place, "activity_tags", [])
-                ),
-                "dietary_tags": _unique_strings(
-                    _get(place, "dietary_options", [])
-                ),
-                "accessibility_tags": _unique_strings(
-                    _get(place, "accessibility_pets", [])
-                ),
+                "activity_tags": _unique_strings(_get(place, "activity_tags", [])),
+                "dietary_tags": _unique_strings(_get(place, "dietary_options", [])),
+                "accessibility_tags": _unique_strings(_get(place, "accessibility_pets", [])),
                 "accessibility_match_status": _get(place, "accessibility_match_status", "unknown"),
                 "start_time": _format_clock(cursor),
                 "end_time": _format_clock(end),
@@ -480,10 +617,7 @@ def build_trip_itinerary(
                 "travel_cost": travel_cost,
                 "travel_distance_km": round(distance, 2),
                 "budget": budget,
-                "group_score": round(
-                    float(item.get("group_score", 0.0) or 0.0),
-                    4,
-                ),
+                "group_score": round(float(item.get("group_score", 0.0) or 0.0), 4),
                 "member_scores": _get(place, "member_scores", []) or [],
                 "open_time": _format_clock(open_clock),
                 "close_time": _format_clock(close_clock),
@@ -491,16 +625,22 @@ def build_trip_itinerary(
                 "feasible": feasible,
                 "warning": warning,
             }
-        )
+            stops.append(stop)
+            day_stops.append(stop)
+            total_duration += duration
+            total_travel += travel_minutes
+            total_travel_cost += travel_cost
+            total_budget += budget
+            total_distance += distance
+            previous_place = place
+            cursor = end
 
-        total_duration += duration
-        total_travel += travel_minutes
-        total_travel_cost += travel_cost
-        total_budget += budget
-        total_distance += distance
-
-        previous_place = place
-        cursor = end
+        days.append({
+            "day_number": day_index + 1,
+            "date": day_date.isoformat() if day_date else None,
+            "label": f"Day {day_index + 1}" + (f" · {day_date.strftime('%b %d')}" if day_date else ""),
+            "stops": day_stops,
+        })
 
     summary = {
         "total_stops": len(stops),
@@ -511,10 +651,13 @@ def build_trip_itinerary(
         "total_distance_km": round(total_distance, 2),
         "start_time": _format_clock(first_start),
         "end_time": _format_clock(last_end),
-        "span_minutes": (
-            _minutes_between(first_start, last_end)
-            if first_start is not None and last_end is not None
-            else 0
+        "span_minutes": sum(
+            _minutes_between(
+                _parse_clock(day["stops"][0]["start_time"]),
+                _parse_clock(day["stops"][-1]["end_time"]),
+            )
+            for day in days
+            if day["stops"]
         ),
     }
 
@@ -523,6 +666,8 @@ def build_trip_itinerary(
         "objective_score": route.get("objective_score"),
         "parameters": route.get("parameters"),
         "stops": stops,
+        "days": days,
+        "duration_days": duration_days,
         "summary": summary,
         "warnings": all_warnings,
     }

@@ -107,3 +107,19 @@ List<String> normalizeActivityCategories(
 
   return normalized;
 }
+
+/// Resolves a display or legacy category label to the canonical option used
+/// by the trip API. For example, `Restaurants` maps back to
+/// `Restaurant / Eatery` when that is the option list's persisted label.
+String? matchActivityCategoryOption(
+  String value,
+  Iterable<String> options,
+) {
+  final normalizedValue = normalizeActivityCategory(value).toLowerCase();
+  for (final option in options) {
+    if (normalizeActivityCategory(option).toLowerCase() == normalizedValue) {
+      return option;
+    }
+  }
+  return null;
+}

@@ -18,7 +18,9 @@ class GroupPreferences {
     return GroupPreferences(
       categories: List<String>.from(json['categories'] ?? []),
       budget: json['budget']?.toString() ?? '₱2500',
-      desiredPlacesPerDay: int.tryParse('${json['desired_places_per_day'] ?? ''}'),
+      desiredPlacesPerDay: int.tryParse(
+        '${json['desired_places_per_day'] ?? ''}',
+      ),
       accessibility: List<String>.from(json['accessibility'] ?? []),
     );
   }
@@ -45,6 +47,7 @@ class CreateTripDto {
     required this.title,
     this.description = '',
     required this.date,
+    this.durationDays = 1,
     required this.meetupTime,
     required this.wrapUpTime,
     required this.meetupName,
@@ -52,6 +55,7 @@ class CreateTripDto {
     required this.longitude,
     required this.memberNames,
     required this.preferences,
+    this.sourceItineraryId,
   });
 
   /// Room code, e.g. `TARA-88` (generated when the wizard opens so the Invite
@@ -60,6 +64,7 @@ class CreateTripDto {
   final String title;
   final String description;
   final DateTime date;
+  final int durationDays;
   final TimeOfDay meetupTime;
   final TimeOfDay wrapUpTime;
   final String meetupName;
@@ -69,4 +74,5 @@ class CreateTripDto {
   /// Leader first.
   final List<String> memberNames;
   final GroupPreferences preferences;
+  final String? sourceItineraryId;
 }

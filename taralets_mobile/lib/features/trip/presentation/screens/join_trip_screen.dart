@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,13 +10,13 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/constants/app_text.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../repositories/repository_providers.dart';
 import '../../../../repositories/trip_repository.dart';
 import '../../../../shared/widgets/app_icons.dart';
 import '../../../../shared/widgets/avatar.dart';
 import '../../../../shared/widgets/back_button_tile.dart';
 import '../../../../shared/widgets/error_note.dart';
 import '../../../../shared/widgets/taralets_button.dart';
-import '../../../../shared/widgets/taralets_card.dart';
 import '../../providers/join_trip_controller.dart';
 
 /// Full-screen Join Trip flow (no bottom bar), matching the Figma `JoinTrip`.
@@ -152,13 +154,22 @@ class _EnterStepState extends ConsumerState<_EnterStep> {
                       const SizedBox(height: 16),
                       Text(
                         'Have an Invite Code?',
-                        style: AppText.ui(20, FontWeight.w900, color: AppColors.navy),
+                        style: AppText.ui(
+                          20,
+                          FontWeight.w900,
+                          color: AppColors.navy,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         'Enter the room code shared by the organizer to access the itinerary.',
                         textAlign: TextAlign.center,
-                        style: AppText.ui(13, FontWeight.w500, color: AppColors.muted, height: 1.5),
+                        style: AppText.ui(
+                          13,
+                          FontWeight.w500,
+                          color: AppColors.muted,
+                          height: 1.5,
+                        ),
                       ),
                     ],
                   ),
@@ -175,7 +186,9 @@ class _EnterStepState extends ConsumerState<_EnterStep> {
                           boxShadow: _focus.hasFocus
                               ? [
                                   BoxShadow(
-                                    color: AppColors.primary.withValues(alpha: 0.15),
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.15,
+                                    ),
                                     spreadRadius: 4,
                                     blurRadius: 12,
                                   ),
@@ -190,7 +203,9 @@ class _EnterStepState extends ConsumerState<_EnterStep> {
                           textCapitalization: TextCapitalization.characters,
                           textInputAction: TextInputAction.done,
                           inputFormatters: [
-                            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9-]')),
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[a-zA-Z0-9-]'),
+                            ),
                             const UpperCaseTextFormatter(),
                             LengthLimitingTextInputFormatter(12),
                           ],
@@ -202,7 +217,9 @@ class _EnterStepState extends ConsumerState<_EnterStep> {
                             letterSpacing: 4,
                           ),
                           onChanged: (_) {
-                            ref.read(joinTripControllerProvider.notifier).clearError();
+                            ref
+                                .read(joinTripControllerProvider.notifier)
+                                .clearError();
                             setState(() {});
                           },
                           onSubmitted: (_) => _find(),
@@ -210,29 +227,46 @@ class _EnterStepState extends ConsumerState<_EnterStep> {
                             isDense: true,
                             filled: true,
                             fillColor: AppColors.bg, // Clean off-white inner bg
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 20,
+                            ),
                             hintText: 'TARA-88',
                             hintStyle: AppText.mono(
                               26,
                               FontWeight.w900,
-                              color: AppColors.placeholder.withValues(alpha: 0.5),
+                              color: AppColors.placeholder.withValues(
+                                alpha: 0.5,
+                              ),
                               letterSpacing: 4,
                             ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(color: borderColor, width: 2),
+                              borderSide: BorderSide(
+                                color: borderColor,
+                                width: 2,
+                              ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(color: borderColor, width: 2),
+                              borderSide: BorderSide(
+                                color: borderColor,
+                                width: 2,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                              borderSide: const BorderSide(
+                                color: AppColors.primary,
+                                width: 2,
+                              ),
                             ),
                             disabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(color: borderColor, width: 2),
+                              borderSide: BorderSide(
+                                color: borderColor,
+                                width: 2,
+                              ),
                             ),
                           ),
                         ),
@@ -254,13 +288,17 @@ class _EnterStepState extends ConsumerState<_EnterStep> {
 
           TaraletsButton.orange(
             label: 'Search Trip',
-            icon: const Icon(Icons.search_rounded, size: 20, color: Colors.white),
+            icon: const Icon(
+              Icons.search_rounded,
+              size: 20,
+              color: Colors.white,
+            ),
             isLoading: state.isLoading,
             onPressed: _find,
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Cleaned up "How it works" section
           GestureDetector(
             onTap: () => setState(() => _showHowItWorks = !_showHowItWorks),
@@ -278,11 +316,17 @@ class _EnterStepState extends ConsumerState<_EnterStep> {
                   const SizedBox(width: 8),
                   Text(
                     'How does the invite code work?',
-                    style: AppText.ui(13, FontWeight.w700, color: AppColors.navy),
+                    style: AppText.ui(
+                      13,
+                      FontWeight.w700,
+                      color: AppColors.navy,
+                    ),
                   ),
                   const SizedBox(width: 4),
                   Icon(
-                    _showHowItWorks ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                    _showHowItWorks
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
                     color: AppColors.navy,
                     size: 20,
                   ),
@@ -378,12 +422,21 @@ class _HowItWorks extends StatelessWidget {
                       children: [
                         Text(
                           '${s.$1}. ${s.$3}',
-                          style: AppText.ui(14, FontWeight.w800, color: AppColors.navy),
+                          style: AppText.ui(
+                            14,
+                            FontWeight.w800,
+                            color: AppColors.navy,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           s.$4,
-                          style: AppText.ui(12, FontWeight.w500, color: AppColors.muted, height: 1.5),
+                          style: AppText.ui(
+                            12,
+                            FontWeight.w500,
+                            color: AppColors.muted,
+                            height: 1.5,
+                          ),
                         ),
                       ],
                     ),
@@ -453,7 +506,10 @@ class _FoundStep extends ConsumerWidget {
                   child: Column(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.greenSoft,
                           borderRadius: BorderRadius.circular(99),
@@ -461,11 +517,20 @@ class _FoundStep extends ConsumerWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.check_circle_rounded, color: AppColors.greenText, size: 14),
+                            const Icon(
+                              Icons.check_circle_rounded,
+                              color: AppColors.greenText,
+                              size: 14,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               'MATCH FOUND',
-                              style: AppText.ui(11, FontWeight.w800, color: AppColors.greenText, letterSpacing: 1),
+                              style: AppText.ui(
+                                11,
+                                FontWeight.w800,
+                                color: AppColors.greenText,
+                                letterSpacing: 1,
+                              ),
                             ),
                           ],
                         ),
@@ -474,13 +539,21 @@ class _FoundStep extends ConsumerWidget {
                       Text(
                         trip.title,
                         textAlign: TextAlign.center,
-                        style: AppText.ui(22, FontWeight.w900, color: AppColors.navy),
+                        style: AppText.ui(
+                          22,
+                          FontWeight.w900,
+                          color: AppColors.navy,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Organized by ${trip.leader}',
                         textAlign: TextAlign.center,
-                        style: AppText.ui(13, FontWeight.w600, color: AppColors.primary), // Rose color
+                        style: AppText.ui(
+                          13,
+                          FontWeight.w600,
+                          color: AppColors.primary,
+                        ), // Rose color
                       ),
                     ],
                   ),
@@ -503,12 +576,21 @@ class _FoundStep extends ConsumerWidget {
                                 children: [
                                   Text(
                                     r.$2.toUpperCase(),
-                                    style: AppText.ui(10, FontWeight.w800, color: AppColors.muted, letterSpacing: 1),
+                                    style: AppText.ui(
+                                      10,
+                                      FontWeight.w800,
+                                      color: AppColors.muted,
+                                      letterSpacing: 1,
+                                    ),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
                                     r.$3,
-                                    style: AppText.ui(15, FontWeight.w700, color: AppColors.navy),
+                                    style: AppText.ui(
+                                      15,
+                                      FontWeight.w700,
+                                      color: AppColors.navy,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -540,12 +622,21 @@ class _FoundStep extends ConsumerWidget {
                                 children: [
                                   Text(
                                     'TRIP MEMBERS',
-                                    style: AppText.ui(10, FontWeight.w800, color: AppColors.muted, letterSpacing: 1),
+                                    style: AppText.ui(
+                                      10,
+                                      FontWeight.w800,
+                                      color: AppColors.muted,
+                                      letterSpacing: 1,
+                                    ),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
                                     '${trip.memberCount} going',
-                                    style: AppText.ui(14, FontWeight.w800, color: AppColors.navy),
+                                    style: AppText.ui(
+                                      14,
+                                      FontWeight.w800,
+                                      color: AppColors.navy,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -561,21 +652,10 @@ class _FoundStep extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
           TaraletsButton.orange(
-            label: 'Join This Trip',
+            label: 'Request to Join',
             isLoading: state.isLoading,
             onPressed: () async {
               await ctrl.confirmJoin();
-              if (!context.mounted) return;
-              final currentState = ref.read(joinTripControllerProvider);
-              if (currentState.phase == JoinPhase.joined) {
-                context.go(
-                  AppRoutes.tripPreferences,
-                  extra: {
-                    'tripId': currentState.trip!.id,
-                    'returnRoute': AppRoutes.trips,
-                  },
-                );
-              }
             },
           ),
           const SizedBox(height: 12),
@@ -590,12 +670,55 @@ class _FoundStep extends ConsumerWidget {
 // Step 3: joined
 // ---------------------------------------------------------------------------
 
-class _JoinedStep extends StatelessWidget {
+class _JoinedStep extends ConsumerStatefulWidget {
   const _JoinedStep({required this.trip});
   final Trip trip;
 
   @override
+  ConsumerState<_JoinedStep> createState() => _JoinedStepState();
+}
+
+class _JoinedStepState extends ConsumerState<_JoinedStep> {
+  Timer? _membershipTimer;
+  bool _checking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _membershipTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _checkMembership(),
+    );
+  }
+
+  Future<void> _checkMembership() async {
+    if (_checking || !mounted) return;
+    _checking = true;
+    try {
+      final status = await ref
+          .read(tripRepositoryProvider)
+          .getTripJoinRequestStatus(widget.trip.id);
+      if (status['status']?.toString() == 'accepted' && mounted) {
+        _membershipTimer?.cancel();
+        ref.invalidate(myTripsProvider);
+        context.go(AppRoutes.trips);
+      }
+    } catch (_) {
+      // Retry on the next tick while approval is pending.
+    } finally {
+      _checking = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _membershipTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final trip = widget.trip;
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
@@ -610,7 +733,7 @@ class _JoinedStep extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              "You're in!",
+              'Request sent',
               textAlign: TextAlign.center,
               style: AppText.ui(24, FontWeight.w900, color: AppColors.navy),
             ),
@@ -619,7 +742,7 @@ class _JoinedStep extends StatelessWidget {
               TextSpan(
                 style: AppText.ui(14, FontWeight.w400, color: AppColors.muted),
                 children: [
-                  const TextSpan(text: "You've joined "),
+                  const TextSpan(text: 'Your request to join '),
                   TextSpan(
                     text: trip.title,
                     style: AppText.ui(
@@ -631,6 +754,12 @@ class _JoinedStep extends StatelessWidget {
                 ],
               ),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You will become a member only after the trip leader approves your request.',
+              textAlign: TextAlign.center,
+              style: AppText.ui(12, FontWeight.w400, color: AppColors.muted),
             ),
             const SizedBox(height: 16),
             Container(
@@ -680,11 +809,6 @@ class _JoinedStep extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             TaraletsButton.orange(
-              label: 'View Trip Details →',
-              onPressed: () => context.go(AppRoutes.trips),
-            ),
-            const SizedBox(height: 16),
-            TaraletsButton.ghost(
               label: 'Back to Home',
               onPressed: () => context.go(AppRoutes.home),
             ),

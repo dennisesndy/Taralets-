@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../repositories/repository_providers.dart';
 import '../../../repositories/trip_repository.dart';
 
-/// Mirrors the three Figma phases: enter code -> trip found -> joined.
+/// Mirrors the flow: enter code -> trip found -> join request sent.
 enum JoinPhase { enter, found, joined }
 
 class JoinTripState {
@@ -45,15 +45,14 @@ class JoinTripController extends Notifier<JoinTripState> {
     }
   }
 
-  /// "Join This Trip ->"
+  /// "Request to Join ->". Membership starts only after leader approval.
   Future<void> confirmJoin() async {
     final trip = state.trip;
     if (trip == null || state.isLoading) return;
     state = JoinTripState(phase: JoinPhase.found, trip: trip, isLoading: true);
     try {
       await ref.read(tripRepositoryProvider).joinTrip(trip);
-      // Ensure the home page trip list updates dynamically
-      ref.invalidate(myTripsProvider);
+      // This is a request only. The leader's approval creates membership.
       state = JoinTripState(phase: JoinPhase.joined, trip: trip);
     } on TripException catch (e) {
       // Masalo ang errors mula sa API tulad ng "Already a member"

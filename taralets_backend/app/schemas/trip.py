@@ -19,6 +19,7 @@ class CreateTripRequest(BaseModel):
     title: str
     description: Optional[str] = ""
     date: datetime
+    duration_days: int = Field(default=1, ge=1, le=30)
     meetup_time: str 
     wrap_up_time: str 
     meetup_name: str
@@ -26,6 +27,11 @@ class CreateTripRequest(BaseModel):
     longitude: float
     member_names: List[str]
     preferences: GroupPreferencesSchema
+    source_itinerary_id: Optional[str] = None
+
+
+class ItinerarySharingRequest(BaseModel):
+    visibility: str = Field(pattern="^(private|friends)$")
 
 class InviteMemberRequest(BaseModel):
     username: str
@@ -34,6 +40,7 @@ class UpdateTripRequest(BaseModel):
     title: str
     description: Optional[str] = ""
     date: Optional[datetime] = None
+    duration_days: Optional[int] = Field(default=None, ge=1, le=30)
     date_label: str
     long_date: str
     arrival_target: str

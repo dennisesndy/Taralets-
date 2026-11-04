@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,9 +22,12 @@ String _tripDateLabel(Trip trip) {
 
   final today = DateUtils.dateOnly(DateTime.now());
   final tripDay = DateUtils.dateOnly(date);
+  final lastDay = DateUtils.dateOnly(
+    date.add(Duration(days: trip.durationDays - 1)),
+  );
   final daysUntilTrip = tripDay.difference(today).inDays;
-  if (daysUntilTrip == 0) return 'Today';
-  if (daysUntilTrip == 1) return 'Tomorrow';
+  if (trip.durationDays == 1 && daysUntilTrip == 0) return 'Today';
+  if (trip.durationDays == 1 && daysUntilTrip == 1) return 'Tomorrow';
 
   const months = [
     'Jan',
@@ -38,18 +43,14 @@ String _tripDateLabel(Trip trip) {
     'Nov',
     'Dec',
   ];
+  if (trip.durationDays > 1) {
+    final start = '${months[date.month - 1]} ${date.day}';
+    final end = '${months[lastDay.month - 1]} ${lastDay.day}, ${lastDay.year}';
+    if (daysUntilTrip == 0) return 'Today – $end';
+    if (daysUntilTrip == 1) return 'Tomorrow – $end';
+    return '$start – $end';
+  }
   return '${months[date.month - 1]} ${date.day}, ${date.year}';
-}
-
-TripStatus _displayStatus(Trip trip) {
-  if (trip.status == TripStatus.cancelled || trip.status == TripStatus.completed) {
-    return trip.status;
-  }
-  final date = trip.date?.toLocal();
-  if (date != null && DateUtils.dateOnly(date).isBefore(DateUtils.dateOnly(DateTime.now()))) {
-    return TripStatus.completed;
-  }
-  return trip.status;
 }
 
 class MyTripsScreen extends ConsumerStatefulWidget {
@@ -60,8 +61,31 @@ class MyTripsScreen extends ConsumerStatefulWidget {
 }
 
 class _MyTripsScreenState extends ConsumerState<MyTripsScreen> {
-  static const _filters = ['All', 'Active', 'Upcoming', 'Completed', 'Cancelled'];
+  static const _filters = [
+    'All',
+    'Active',
+    'Upcoming',
+    'Completed',
+    'Cancelled',
+  ];
   String _filter = 'Upcoming';
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted && !ref.read(myTripsProvider).isLoading) {
+        ref.invalidate(myTripsProvider);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -204,7 +228,8 @@ class _MyTripsScreenState extends ConsumerState<MyTripsScreen> {
   }
 
   Widget _buildList(List<Trip> items) {
-    Iterable<Trip> of(TripStatus s) => items.where((t) => _displayStatus(t) == s);
+    Iterable<Trip> of(TripStatus s) =>
+        items.where((t) => displayTripStatus(t) == s);
     final sections = [
       ('Active', of(TripStatus.active).toList()),
       ('Upcoming', of(TripStatus.lobby).toList()),
@@ -341,7 +366,7 @@ class _TripCard extends ConsumerWidget {
 
   /// Lobby trips open the Group Lobby, active trips open the Active Trip.
   void _open(BuildContext context) {
-    switch (_displayStatus(trip)) {
+    switch (displayTripStatus(trip)) {
       case TripStatus.lobby:
         context.push(AppRoutes.tripLobby, extra: trip);
       case TripStatus.active:
@@ -355,7 +380,7 @@ class _TripCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final status = _displayStatus(trip);
+    final TripStatus status = displayTripStatus(trip);
     final (fill, line, accent, pillBg, pillLabel) = switch (status) {
       TripStatus.active => (
         TicketPalette.skyFill,
@@ -588,9 +613,12 @@ class _TripCard extends ConsumerWidget {
                       if (status == TripStatus.lobby && me != null) ...[
                         const SizedBox(width: 8),
                         TextButton.icon(
-                          onPressed: () => _cancelOrLeave(context, ref, trip, isLeader),
+                          onPressed: () =>
+                              _cancelOrLeave(context, ref, trip, isLeader),
                           icon: Icon(
-                            isLeader ? Icons.event_busy_rounded : Icons.logout_rounded,
+                            isLeader
+                                ? Icons.event_busy_rounded
+                                : Icons.logout_rounded,
                             size: 15,
                           ),
                           label: Text(isLeader ? 'Cancel' : 'Leave'),
@@ -650,7 +678,8 @@ class _TripCard extends ConsumerWidget {
             icon: isLeader ? Icons.event_busy_rounded : Icons.logout_rounded,
           );
         },
-        onDismissed: (direction) => _cancelOrLeave(context, ref, trip, isLeader, confirm: false),
+        onDismissed: (direction) =>
+            _cancelOrLeave(context, ref, trip, isLeader, confirm: false),
         child: cardUI,
       );
     }
@@ -686,14 +715,24 @@ class _TripCard extends ConsumerWidget {
       ref.invalidate(myTripsProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isLeader ? 'Trip cancelled successfully.' : 'You have left the trip.')),
+          SnackBar(
+            content: Text(
+              isLeader
+                  ? 'Trip cancelled successfully.'
+                  : 'You have left the trip.',
+            ),
+          ),
         );
       }
     } catch (e) {
       ref.invalidate(myTripsProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not ${isLeader ? 'cancel' : 'leave'} trip: $e')),
+          SnackBar(
+            content: Text(
+              'Could not ${isLeader ? 'cancel' : 'leave'} trip: $e',
+            ),
+          ),
         );
       }
     }

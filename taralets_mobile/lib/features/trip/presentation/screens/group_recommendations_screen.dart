@@ -439,7 +439,6 @@ class _GroupRecommendationsScreenState
 
   List<_Place> _places = [];
   List<String> _selectedGroupActivities = const [];
-  int _averagePlacesPerDay = 3;
   String _selectedCategory = 'All';
   String _searchQuery = '';
   bool _loading = true;
@@ -623,15 +622,6 @@ class _GroupRecommendationsScreenState
       final meFuture = ref.read(currentUserProvider.future);
       final trip = await tripFuture;
       _selectedGroupActivities = _rankGroupActivities(trip.members);
-      final placeTargets = trip.members
-          .map((member) => member.desiredPlacesPerDay)
-          .whereType<int>()
-          .where((target) => target > 0)
-          .toList();
-      _averagePlacesPerDay = placeTargets.isEmpty
-          ? 3
-          : (placeTargets.reduce((a, b) => a + b) / placeTargets.length + 0.5)
-                .floor();
       final me = await meFuture;
 
       final members = <ItineraryMember>[];
@@ -962,7 +952,7 @@ class _GroupRecommendationsScreenState
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'Nearby places are prioritized and grouped to fit your group’s pace of about $_averagePlacesPerDay places per day.',
+                  'Nearby places are prioritized based on your group’s selected interests and trip preferences.',
                   style: AppText.ui(
                     11,
                     FontWeight.w500,

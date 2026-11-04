@@ -48,7 +48,6 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
     final activities = <String, int>{};
     final dietary = <String, int>{};
     final accessibility = <String, int>{};
-    final placeTargets = <int>[];
     final budgets = <double>[];
 
     for (final member in _trip.members) {
@@ -64,9 +63,6 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
       for (final pref in member.accessibilityPreferences.toSet()) {
         accessibility[pref] = (accessibility[pref] ?? 0) + 1;
       }
-
-      if (member.desiredPlacesPerDay != null)
-        placeTargets.add(member.desiredPlacesPerDay!);
 
       if (member.maxBudget != null) {
         budgets.add(member.maxBudget!);
@@ -92,11 +88,6 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
       'activities': activities,
       'dietary': dietary,
       'accessibility': accessibility,
-      'averagePlacesPerDay': placeTargets.isEmpty
-          ? null
-          : (placeTargets.reduce((a, b) => a + b) / placeTargets.length)
-                .round(),
-      'placeTargetMemberCount': placeTargets.length,
       'budgetAverage': budgets.isEmpty
           ? null
           : budgets.reduce((a, b) => a + b) / budgets.length,
@@ -426,7 +417,6 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                   member.activityTags.isNotEmpty ||
                   member.dietaryPreferences.isNotEmpty ||
                   member.accessibilityPreferences.isNotEmpty ||
-                  member.desiredPlacesPerDay != null ||
                   member.maxBudget != null;
 
               return Container(
@@ -556,8 +546,6 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          if (member.desiredPlacesPerDay != null)
-                            _tag('📍 ${member.desiredPlacesPerDay} places/day'),
                           if (member.maxBudget != null)
                             _tag('💳 ${_formatPeso(member.maxBudget!)}'),
                         ],
@@ -598,8 +586,6 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
     final activities = summary['activities'] as Map<String, int>;
     final dietary = summary['dietary'] as Map<String, int>;
     final accessibility = summary['accessibility'] as Map<String, int>;
-    final averagePlacesPerDay = summary['averagePlacesPerDay'] as int?;
-    final placeTargetMemberCount = summary['placeTargetMemberCount'] as int;
     final budgetAverage = summary['budgetAverage'] as double?;
     final budgetMemberCount = summary['budgetMemberCount'] as int;
 
@@ -893,15 +879,6 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                           emptyText: 'No accessibility needs reported.',
                         ),
                         const SizedBox(height: 12),
-                        _metricCard(
-                          label: 'Average places per day',
-                          emoji: '📍',
-                          value: averagePlacesPerDay?.toString() ?? 'No target',
-                          subtitle: averagePlacesPerDay == null
-                              ? 'No members entered a target'
-                              : 'Average from $placeTargetMemberCount member${placeTargetMemberCount == 1 ? '' : 's'}; rounded to a whole place',
-                        ),
-                        const SizedBox(height: 10),
                         Text(
                           accessibility.isEmpty
                               ? 'No accessibility requirements selected.'
@@ -1133,56 +1110,57 @@ class _GroupPrefsScreenState extends ConsumerState<GroupPrefsScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  if (allConfirmed)
-                    TaraletsButton.orange(
-                      label: 'Find Places',
-                      onPressed: () => context.push(
-                        AppRoutes.recommendations,
-                        extra: {'groupId': _trip.id},
-                      ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.amberSoft,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.amber.withValues(alpha: 0.3),
+                  if (_trip.sourceItineraryId == null)
+                    if (allConfirmed)
+                      TaraletsButton.orange(
+                        label: 'Find Places',
+                        onPressed: () => context.push(
+                          AppRoutes.recommendations,
+                          extra: {'groupId': _trip.id},
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.hourglass_top_rounded,
-                            color: AppColors.amberText,
-                            size: 18,
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.amberSoft,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppColors.amber.withValues(alpha: 0.3),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Waiting for everyone to be ready',
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.hourglass_top_rounded,
+                              color: AppColors.amberText,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Waiting for everyone to be ready',
+                                style: AppText.ui(
+                                  13,
+                                  FontWeight.w700,
+                                  color: AppColors.amberText,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${_trip.readyCount}/${_trip.memberCount} ready',
                               style: AppText.ui(
-                                13,
-                                FontWeight.w700,
+                                11,
+                                FontWeight.w800,
                                 color: AppColors.amberText,
                               ),
                             ),
-                          ),
-                          Text(
-                            '${_trip.readyCount}/${_trip.memberCount} ready',
-                            style: AppText.ui(
-                              11,
-                              FontWeight.w800,
-                              color: AppColors.amberText,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
                 ],
               ),
             ),

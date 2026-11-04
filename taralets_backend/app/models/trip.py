@@ -38,6 +38,7 @@ class Trip(Base):
     # applying that migration.
 
     date = Column(DateTime, nullable=True)
+    duration_days = Column(Integer, nullable=False, default=1, server_default="1")
     date_label = Column(String, default="Today")
     long_date = Column(String, default="Today")
 
@@ -56,6 +57,14 @@ class Trip(Base):
         JSONB,
         nullable=False,
         default=dict,
+    )
+    itinerary_visibility = Column(
+        String(24), nullable=False, default="private", server_default="private"
+    )
+    source_itinerary_id = Column(
+        String,
+        nullable=True,
+        index=True,
     )
 
     # User.id is UUID, so this must also be UUID

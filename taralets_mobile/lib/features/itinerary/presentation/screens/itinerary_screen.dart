@@ -204,12 +204,12 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
     }
   }
 
-  Future<void> _reorderStops(int oldIndex, int newIndex) async {
+  Future<void> _reorderStops(int dayNumber, int oldIndex, int newIndex) async {
     final tripId = _tripId;
     final controller = _controller;
     if (tripId == null || controller == null || _savingOrder) return;
     setState(() => _savingOrder = true);
-    controller.reorderStops(oldIndex, newIndex);
+    controller.reorderStops(dayNumber, oldIndex, newIndex);
     try {
       final data = await ref
           .read(tripRepositoryProvider)
@@ -388,10 +388,11 @@ class _ItineraryScreenState extends ConsumerState<ItineraryScreen> {
                           else
                             _TimelineView(
                               stops: plan.stops,
+                              days: plan.days,
                               editable:
                                   plan.status != ItineraryStatus.finalized &&
                                   (_tripId?.isNotEmpty ?? false),
-                              onReorder: _reorderStops,
+                              onReorderDay: _reorderStops,
                             ),
                           const SizedBox(height: 18),
                           _GroupReviewCard(
@@ -609,10 +610,10 @@ class _Header extends StatelessWidget {
                       icon: Icons.directions_walk_rounded,
                       label: '${plan.totalTravelMinutes} min travel',
                     ),
-                    if (plan.desiredPlacesPerDay != null)
+                    if (plan.days.length > 1)
                       _SummaryChip(
-                        icon: Icons.place_outlined,
-                        label: 'Target ${plan.desiredPlacesPerDay} places/day',
+                        icon: Icons.calendar_month_rounded,
+                        label: '${plan.days.length} days',
                       ),
                   ],
                 ),
@@ -864,13 +865,15 @@ class _ViewTab extends StatelessWidget {
 class _TimelineView extends StatelessWidget {
   const _TimelineView({
     required this.stops,
+    required this.days,
     this.editable = false,
-    this.onReorder,
+    this.onReorderDay,
   });
 
   final List<ItineraryStop> stops;
+  final List<ItineraryDay> days;
   final bool editable;
-  final ReorderCallback? onReorder;
+  final void Function(int dayNumber, int oldIndex, int newIndex)? onReorderDay;
 
   @override
   Widget build(BuildContext context) {
@@ -901,108 +904,83 @@ class _TimelineView extends StatelessWidget {
         ],
         const SizedBox(height: 10),
         if (editable)
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
-            itemCount: stops.length,
-            onReorder: onReorder!,
-            itemBuilder: (context, index) {
-              final stop = stops[index];
-              return Row(
-                key: ValueKey(stop.id),
-                children: [
-                  Expanded(child: _TimelineStop(stop: stop)),
-                  ReorderableDelayedDragStartListener(
-                    index: index,
-                    child: const Padding(
-                      padding: EdgeInsets.only(left: 8, bottom: 18),
-                      child: Icon(
-                        Icons.drag_indicator_rounded,
-                        color: AppColors.muted,
-                        size: 22,
-                      ),
-                    ),
+          for (final entry in days.asMap().entries) ...[
+            if (days.length > 1) ...[
+              const SizedBox(height: 14),
+              Text(
+                entry.value.label,
+                style: AppText.ui(14, FontWeight.w800, color: AppColors.navy),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (entry.value.stops.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'No places planned for this day yet.',
+                  style: AppText.ui(
+                    12,
+                    FontWeight.w500,
+                    color: AppColors.muted,
                   ),
-                ],
-              );
-            },
-          )
+                ),
+              )
+            else
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                itemCount: entry.value.stops.length,
+                onReorder: (oldIndex, newIndex) =>
+                    onReorderDay?.call(entry.key + 1, oldIndex, newIndex),
+                itemBuilder: (context, index) {
+                  final stop = entry.value.stops[index];
+                  return Row(
+                    key: ValueKey(stop.id),
+                    children: [
+                      Expanded(child: _TimelineStop(stop: stop)),
+                      ReorderableDelayedDragStartListener(
+                        index: index,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 8, bottom: 18),
+                          child: Icon(
+                            Icons.drag_indicator_rounded,
+                            color: AppColors.muted,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+          ]
+        else if (days.length > 1)
+          for (final day in days) ...[
+            const SizedBox(height: 14),
+            Text(
+              day.label,
+              style: AppText.ui(14, FontWeight.w800, color: AppColors.navy),
+            ),
+            const SizedBox(height: 8),
+            if (day.stops.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'No places planned for this day yet.',
+                  style: AppText.ui(
+                    12,
+                    FontWeight.w500,
+                    color: AppColors.muted,
+                  ),
+                ),
+              )
+            else
+              for (final stop in day.stops) _TimelineStop(stop: stop),
+          ]
         else
           for (final stop in stops) _TimelineStop(stop: stop),
         _WrapUpCard(endLabel: stops.last.endLabel),
-      ],
-    );
-  }
-}
-
-class _PeriodData {
-  const _PeriodData({
-    required this.label,
-    required this.icon,
-    required this.stops,
-  });
-
-  final String label;
-  final String icon;
-  final List<ItineraryStop> stops;
-}
-
-List<_PeriodData> _buildPeriods(List<ItineraryStop> stops) {
-  final morning = <ItineraryStop>[];
-  final afternoon = <ItineraryStop>[];
-  final evening = <ItineraryStop>[];
-
-  for (final stop in stops) {
-    final hour = stop.startTime.hour;
-    if (hour < 12) {
-      morning.add(stop);
-    } else if (hour < 17) {
-      afternoon.add(stop);
-    } else {
-      evening.add(stop);
-    }
-  }
-
-  return [
-    if (morning.isNotEmpty)
-      _PeriodData(label: 'Morning', icon: '☀️', stops: morning),
-    if (afternoon.isNotEmpty)
-      _PeriodData(label: 'Afternoon', icon: '🌤', stops: afternoon),
-    if (evening.isNotEmpty)
-      _PeriodData(label: 'Evening', icon: '🌆', stops: evening),
-  ];
-}
-
-class _PeriodHeader extends StatelessWidget {
-  const _PeriodHeader({required this.period});
-
-  final _PeriodData period;
-
-  @override
-  Widget build(BuildContext context) {
-    final first = period.stops.first;
-    final last = period.stops.last;
-
-    return Row(
-      children: [
-        Text(period.icon, style: const TextStyle(fontSize: 16)),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              period.label,
-              style: AppText.ui(12, FontWeight.w800, color: AppColors.navy),
-            ),
-            Text(
-              '${first.startLabel} – ${last.endLabel}',
-              style: AppText.mono(9.5, FontWeight.w500, color: AppColors.muted),
-            ),
-          ],
-        ),
-        const SizedBox(width: 10),
-        Expanded(child: Container(height: 1, color: AppColors.border)),
       ],
     );
   }
@@ -1464,6 +1442,17 @@ class _NearbySpotsView extends ConsumerWidget {
                 'Nearby places could not be loaded.',
                 style: AppText.ui(11, FontWeight.w500, color: AppColors.muted),
               ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => ref.invalidate(discoverPlacesProvider),
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Retry nearby places'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.orange,
+                  ),
+                ),
+              ),
             ],
           ),
           data: (places) {
@@ -1688,6 +1677,10 @@ class _ItineraryNearbyMap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final route = stops.map((stop) => stop.point).toList();
+    final routesByDay = <int, List<LatLng>>{};
+    for (final stop in stops) {
+      routesByDay.putIfAbsent(stop.stop.dayNumber, () => []).add(stop.point);
+    }
     final groupedStops = <List<int>>[];
     for (var i = 0; i < stops.length; i++) {
       final group = groupedStops
@@ -1730,14 +1723,16 @@ class _ItineraryNearbyMap extends StatelessWidget {
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.taralets.app',
                 ),
-                if (route.length > 1)
+                if (routesByDay.values.any((points) => points.length > 1))
                   PolylineLayer(
                     polylines: [
-                      Polyline(
-                        points: route,
-                        color: AppColors.primary.withValues(alpha: 0.78),
-                        strokeWidth: 4,
-                      ),
+                      for (final points in routesByDay.values)
+                        if (points.length > 1)
+                          Polyline(
+                            points: points,
+                            color: AppColors.primary.withValues(alpha: 0.78),
+                            strokeWidth: 4,
+                          ),
                     ],
                   ),
                 MarkerLayer(

@@ -1,7 +1,9 @@
 import random
-from datetime import datetime
+import math
+from datetime import datetime, timedelta
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -11,7 +13,11 @@ from app.core.database import get_db
 from app.models.poi import Place
 from app.models.trip import Trip, TripMember
 from app.models.trip_member_preference import TripMemberPreference
+from app.models.preference_profile import PreferenceProfile
 from app.models.user import User
+from app.models.user_friend import UserFriend
+from app.models.trip_join_request import TripJoinRequest
+from app.models.notification import Notification
 from app.models.trip_place_selection import TripPlaceSelection
 from app.models.trip_place_vote import TripPlaceVote
 from app.models.itinerary import TripItinerary
@@ -28,6 +34,7 @@ from app.schemas.trip import (
     ItineraryReviewRequest,
     ItineraryReorderRequest,
     ItineraryAddPlaceRequest,
+    ItinerarySharingRequest,
 )
 from app.services.itinerary.trip_itinerary import (
     build_trip_itinerary,
@@ -52,6 +59,57 @@ async def _trip_member_for_user(db: AsyncSession, trip_id: str, user_id) -> Trip
     return member
 
 
+async def _are_friends(db: AsyncSession, first_user_id, second_user_id) -> bool:
+    friendship = await db.scalar(
+        select(UserFriend.id).where(
+            UserFriend.user_id == first_user_id,
+            UserFriend.friend_id == second_user_id,
+        )
+    )
+    return friendship is not None
+
+
+async def _is_trip_member(db: AsyncSession, trip_id: str, user_id) -> bool:
+    return await db.scalar(
+        select(TripMember.id).where(
+            TripMember.trip_id == trip_id,
+            TripMember.user_id == user_id,
+        )
+    ) is not None
+
+
+async def _seed_member_preferences(db: AsyncSession, member: TripMember, user: User):
+    profile = await db.scalar(
+        select(PreferenceProfile).where(PreferenceProfile.email == user.email)
+    )
+    if profile is None:
+        return
+    db.add(
+        TripMemberPreference(
+            trip_member_id=member.id,
+            activity_tags=list(profile.activity_tags or []),
+            dietary_preferences=list(profile.dietary_preferences or ["None"]),
+            max_budget=float(profile.max_budget or 2500),
+            desired_places_per_day=None,
+            accessibility_preferences=list(
+                profile.accessibility_preferences or []
+            ),
+        )
+    )
+
+
+def _distance_km(lat_a: float, lng_a: float, lat_b: float, lng_b: float) -> float:
+    radius_km = 6371.0
+    phi_a, phi_b = math.radians(lat_a), math.radians(lat_b)
+    delta_phi = math.radians(lat_b - lat_a)
+    delta_lambda = math.radians(lng_b - lng_a)
+    value = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi_a) * math.cos(phi_b) * math.sin(delta_lambda / 2) ** 2
+    )
+    return 2 * radius_km * math.asin(math.sqrt(value))
+
+
 async def _latest_itinerary(db: AsyncSession, trip_id: str):
     result = await db.execute(
         select(TripItinerary)
@@ -73,6 +131,7 @@ def _parse_optional_time(value):
 
 async def _itinerary_response(db: AsyncSession, itinerary: TripItinerary, current_user_id) -> dict:
     metadata = dict(itinerary.algorithm_metadata or {})
+    trip = await db.get(Trip, itinerary.trip_id)
     confirmations_result = await db.execute(
         select(TripConfirmation, TripMember, User)
         .join(TripMember, TripConfirmation.trip_member_id == TripMember.id)
@@ -105,6 +164,15 @@ async def _itinerary_response(db: AsyncSession, itinerary: TripItinerary, curren
         "status": itinerary.status,
         "members": members,
     })
+    if trip is not None:
+        metadata.update({
+            "title": trip.title,
+            "date": trip.date.isoformat() if trip.date else None,
+            "date_label": trip.date_label,
+            "duration_days": trip.duration_days,
+            "group_preferences": trip.group_preferences or {},
+            "source_itinerary_id": trip.source_itinerary_id,
+        })
     return metadata
 
 
@@ -114,7 +182,15 @@ async def get_trip_itinerary(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await _trip_member_for_user(db, trip_id, current_user.id)
+    is_member = await _is_trip_member(db, trip_id, current_user.id)
+    if not is_member:
+        trip = await db.get(Trip, trip_id)
+        if (
+            trip is None
+            or trip.itinerary_visibility != "friends"
+            or not await _are_friends(db, current_user.id, trip.leader_id)
+        ):
+            raise HTTPException(status_code=403, detail="This itinerary is private")
     itinerary = await _latest_itinerary(db, trip_id)
     if itinerary is None:
         raise HTTPException(status_code=404, detail="No itinerary has been generated for this trip")
@@ -290,7 +366,17 @@ async def add_itinerary_stop(
 
     metadata = dict(itinerary.algorithm_metadata or {})
     stops = list(metadata.get("stops") or [])
-    last_stop = stops[-1] if stops else {}
+    duration_days = max(1, min(int(metadata.get("duration_days", 1) or 1), 30))
+    last_day_number = max(
+        (int(stop.get("day_number", 1) or 1) for stop in stops),
+        default=1,
+    )
+    day_number = min(last_day_number, duration_days)
+    last_day_stops = [
+        stop for stop in stops
+        if int(stop.get("day_number", 1) or 1) == day_number
+    ]
+    last_stop = last_day_stops[-1] if last_day_stops else {}
     start_time = _parse_optional_time(last_stop.get("end_time")) or _parse_optional_time("09:00")
     duration = 60
     start_minutes = start_time.hour * 60 + start_time.minute
@@ -299,6 +385,12 @@ async def add_itinerary_stop(
     end_time = datetime_time(end_minutes // 60, end_minutes % 60)
     item = {
         "sequence": len(stops) + 1,
+        "day_number": day_number,
+        "date": (
+            (metadata.get("days") or [])[day_number - 1].get("date")
+            if len(metadata.get("days") or []) >= day_number
+            else None
+        ),
         "id": place.id,
         "place_id": place.id,
         "master_id": place.master_id,
@@ -335,7 +427,7 @@ async def add_itinerary_stop(
     db.add(TripItineraryStop(
         itinerary_id=itinerary.id,
         place_id=place.id,
-        day_number=1,
+        day_number=day_number,
         order_index=len(stops) - 1,
         start_time=start_time,
         end_time=end_time,
@@ -416,8 +508,6 @@ async def _serialize_trip(db: AsyncSession, trip: Trip) -> dict:
             preferences.extend(preference.activity_tags or [])
             preferences.extend(preference.dietary_preferences or [])
 
-            if preference.desired_places_per_day is not None:
-                preferences.append(f"{preference.desired_places_per_day} places/day")
 
             preferences.extend(
                 preference.accessibility_preferences or []
@@ -474,6 +564,7 @@ async def _serialize_trip(db: AsyncSession, trip: Trip) -> dict:
             if hasattr(trip.date, "isoformat")
             else str(trip.date)
         ),
+        "duration_days": int(getattr(trip, "duration_days", 1) or 1),
         "date_label": trip.date_label,
         "long_date": trip.long_date,
         "meetup": trip.meetup,
@@ -487,6 +578,8 @@ async def _serialize_trip(db: AsyncSession, trip: Trip) -> dict:
         "on_way_count": trip.on_way_count,
         "leader_id": str(trip.leader_id),
         "group_preferences": trip.group_preferences or {},
+        "itinerary_visibility": trip.itinerary_visibility or "private",
+        "source_itinerary_id": trip.source_itinerary_id,
         "members": members_data,
     }
 
@@ -518,6 +611,256 @@ async def get_my_trips(
         for trip in trips
     ]
 
+
+@router.get("/friends/available")
+async def get_friends_available_trips(
+    latitude: float,
+    longitude: float,
+    radius_km: float = Query(default=0.5, ge=0.1, le=5.0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    friend_ids = select(UserFriend.friend_id).where(
+        UserFriend.user_id == current_user.id
+    )
+    memberships = select(TripMember.trip_id).where(
+        TripMember.user_id == current_user.id
+    )
+    result = await db.execute(
+        select(Trip)
+        .where(
+            Trip.leader_id.in_(friend_ids),
+            Trip.status == "lobby",
+            Trip.itinerary_visibility == "friends",
+            ~Trip.id.in_(memberships),
+        )
+        .order_by(Trip.date.asc().nullslast(), Trip.created_at.desc())
+    )
+    today = datetime.now().date()
+    nearby_trips = []
+    for trip in result.scalars().all():
+        distance = _distance_km(
+            latitude,
+            longitude,
+            float(trip.latitude),
+            float(trip.longitude),
+        )
+        if distance > radius_km:
+            continue
+        if trip.date is not None:
+            final_day = trip.date.date() + timedelta(
+                days=max(int(trip.duration_days or 1), 1) - 1
+            )
+            if final_day < today:
+                continue
+        nearby_trips.append(await _serialize_trip(db, trip))
+    return nearby_trips
+
+
+@router.get("/friends/available-itineraries")
+async def get_friends_available_itineraries(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    friend_ids = select(UserFriend.friend_id).where(
+        UserFriend.user_id == current_user.id
+    )
+    result = await db.execute(
+        select(Trip, User)
+        .join(User, Trip.leader_id == User.id)
+        .where(
+            Trip.leader_id.in_(friend_ids),
+            Trip.itinerary_visibility == "friends",
+            Trip.status != "cancelled",
+        )
+        .order_by(Trip.created_at.desc())
+    )
+    available = []
+    for trip, owner in result.all():
+        itinerary = await _latest_itinerary(db, trip.id)
+        if itinerary is None:
+            continue
+        trip_date = trip.date.date() if isinstance(trip.date, datetime) else trip.date
+        final_day = (
+            trip_date + timedelta(days=max(int(trip.duration_days or 1), 1) - 1)
+            if trip_date is not None else None
+        )
+        accepting = trip.status == "lobby" and (
+            final_day is None or final_day >= datetime.now().date()
+        )
+        available.append({
+            "trip": await _serialize_trip(db, trip),
+            "itinerary": await _itinerary_response(db, itinerary, current_user.id),
+            "owner_name": owner.full_name or (owner.email.split("@")[0] if owner.email else "Friend"),
+            "can_join_existing": accepting,
+        })
+    return available
+
+
+@router.put("/{trip_id}/sharing")
+async def update_itinerary_sharing(
+    trip_id: str,
+    payload: ItinerarySharingRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    trip = await db.get(Trip, trip_id)
+    if trip is None:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    if str(trip.leader_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Only the trip leader can change itinerary sharing")
+    if await _latest_itinerary(db, trip_id) is None:
+        raise HTTPException(status_code=409, detail="Generate an itinerary before sharing it")
+    trip.itinerary_visibility = payload.visibility
+    await db.commit()
+    return {"status": "success", "visibility": trip.itinerary_visibility}
+
+
+async def _create_trip_join_request(db: AsyncSession, trip: Trip, requester: User):
+    if trip.status != "lobby":
+        raise HTTPException(status_code=410, detail="This trip is no longer accepting requests")
+    if not await _are_friends(db, requester.id, trip.leader_id):
+        raise HTTPException(status_code=403, detail="Only the trip leader's friends may request to join")
+    if await _is_trip_member(db, trip.id, requester.id):
+        raise HTTPException(status_code=409, detail="You are already a member of this trip")
+
+    existing = await db.scalar(select(TripJoinRequest).where(
+        TripJoinRequest.trip_id == trip.id,
+        TripJoinRequest.requester_id == requester.id,
+    ))
+    if existing is not None and existing.status == "pending":
+        return existing
+    if existing is not None:
+        existing.status = "pending"
+        existing.created_at = datetime.utcnow()
+        existing.resolved_at = None
+        join_request = existing
+    else:
+        join_request = TripJoinRequest(trip_id=trip.id, requester_id=requester.id)
+        db.add(join_request)
+        await db.flush()
+
+    db.add(Notification(
+        user_id=trip.leader_id,
+        actor_id=requester.id,
+        trip_join_request_id=join_request.id,
+        type="trip_join_request",
+        title="Trip join request",
+        message=f"{requester.full_name or requester.email} wants to join {trip.title}.",
+    ))
+    await db.commit()
+    return join_request
+
+
+@router.post("/{trip_id}/join-request")
+async def request_to_join_trip(
+    trip_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    trip = await db.get(Trip, trip_id)
+    if trip is None:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    request = await _create_trip_join_request(db, trip, current_user)
+    return {"status": request.status, "request_id": str(request.id)}
+
+
+@router.get("/{trip_id}/join-request-status")
+async def get_own_trip_join_request_status(
+    trip_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    request = await db.scalar(
+        select(TripJoinRequest).where(
+            TripJoinRequest.trip_id == trip_id,
+            TripJoinRequest.requester_id == current_user.id,
+        )
+    )
+    if request is None:
+        raise HTTPException(status_code=404, detail="Join request not found")
+    return {"trip_id": trip_id, "status": request.status}
+
+
+@router.get("/{trip_id}/join-requests")
+async def list_trip_join_requests(
+    trip_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    trip = await db.get(Trip, trip_id)
+    if trip is None:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    if str(trip.leader_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Only the trip leader can review join requests")
+    rows = await db.execute(
+        select(TripJoinRequest, User)
+        .join(User, TripJoinRequest.requester_id == User.id)
+        .where(TripJoinRequest.trip_id == trip_id, TripJoinRequest.status == "pending")
+        .order_by(TripJoinRequest.created_at.asc())
+    )
+    return [
+        {"id": str(request.id), "trip_id": trip_id,
+         "requester_id": str(request.requester_id),
+         "requester_name": user.full_name or (user.email.split("@")[0] if user.email else "Friend"),
+         "created_at": request.created_at.isoformat(), "status": request.status}
+        for request, user in rows.all()
+    ]
+
+
+@router.post("/{trip_id}/join-requests/{request_id}/{action}")
+async def resolve_trip_join_request(
+    trip_id: str,
+    request_id: str,
+    action: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if action not in {"approve", "reject"}:
+        raise HTTPException(status_code=422, detail="Action must be approve or reject")
+    trip = await db.get(Trip, trip_id)
+    if trip is None:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    if str(trip.leader_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Only the trip leader can review join requests")
+    try:
+        request_uuid = UUID(request_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Join request not found")
+    request = await db.scalar(select(TripJoinRequest).where(
+        TripJoinRequest.id == request_uuid,
+        TripJoinRequest.trip_id == trip_id,
+    ))
+    if request is None:
+        raise HTTPException(status_code=404, detail="Join request not found")
+    if request.status != "pending":
+        raise HTTPException(status_code=409, detail="This request was already reviewed")
+
+    request.status = "accepted" if action == "approve" else "rejected"
+    request.resolved_at = datetime.utcnow()
+    if action == "approve":
+        if not await _is_trip_member(db, trip_id, request.requester_id):
+            member = TripMember(
+                trip_id=trip_id, user_id=request.requester_id,
+                status="notReady", is_leader=False,
+            )
+            db.add(member)
+            await db.flush()
+            requester = await db.get(User, request.requester_id)
+            if requester is not None:
+                await _seed_member_preferences(db, member, requester)
+
+    db.add(Notification(
+        user_id=request.requester_id,
+        actor_id=current_user.id,
+        trip_join_request_id=request.id,
+        type="trip_join_request_resolved",
+        title="Trip join request update",
+        message=f"Your request to join {trip.title} was {request.status}.",
+    ))
+    await db.commit()
+    return {"status": request.status, "trip_id": trip_id}
+
 @router.get("/code/{code}")
 async def find_trip_by_code(
     code: str,
@@ -541,6 +884,14 @@ async def find_trip_by_code(
             detail="Room code expired",
         )
 
+    if not await _is_trip_member(db, trip.id, current_user.id) and not await _are_friends(
+        db, current_user.id, trip.leader_id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the trip leader's friends can view this trip.",
+        )
+
     return await _serialize_trip(db, trip)
 
 @router.post("/{code}/join")
@@ -555,30 +906,9 @@ async def join_trip(
     trip = result.scalars().first()
 
     if not trip:
-        raise HTTPException(
-            status_code=404,
-            detail="Invalid room code",
-        )
-
-    member_result = await db.execute(
-        select(TripMember).where(
-            TripMember.trip_id == trip.id,
-            TripMember.user_id == current_user.id,
-        )
-    )
-    existing_member = member_result.scalars().first()
-
-    if not existing_member:
-        new_member = TripMember(
-            trip_id=trip.id,
-            user_id=current_user.id,
-            status="notReady",
-            is_leader=False,
-        )
-        db.add(new_member)
-        await db.commit()
-
-    return await _serialize_trip(db, trip)
+        raise HTTPException(status_code=404, detail="Invalid room code")
+    request = await _create_trip_join_request(db, trip, current_user)
+    return {"status": request.status, "request_id": str(request.id)}
 
 @router.post("/{trip_id}/member-preferences")
 async def save_member_preferences(
@@ -635,6 +965,20 @@ async def create_trip(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    source_itinerary = None
+    source_trip = None
+    if payload.source_itinerary_id:
+        source_itinerary = await db.get(TripItinerary, payload.source_itinerary_id)
+        if source_itinerary is None:
+            raise HTTPException(status_code=404, detail="Shared itinerary not found")
+        source_trip = await db.get(Trip, source_itinerary.trip_id)
+        if (
+            source_trip is None
+            or source_trip.itinerary_visibility != "friends"
+            or not await _are_friends(db, current_user.id, source_trip.leader_id)
+        ):
+            raise HTTPException(status_code=403, detail="This itinerary is not shared with you")
+
     code = payload.code
 
     existing = await db.execute(
@@ -664,6 +1008,7 @@ async def create_trip(
         title=payload.title,
         description=payload.description,
         date=payload.date,
+        duration_days=payload.duration_days,
         meetup=payload.meetup_name.split(",")[0],
         meetup_full=payload.meetup_name,
         arrival_target=payload.meetup_time,
@@ -672,6 +1017,7 @@ async def create_trip(
         longitude=payload.longitude,
         status="lobby",
         leader_id=current_user.id,
+        source_itinerary_id=payload.source_itinerary_id,
         group_preferences={
             "categories": payload.preferences.categories,
             "budget": payload.preferences.budget,
@@ -691,6 +1037,54 @@ async def create_trip(
     )
 
     db.add(leader_member)
+    await db.flush()
+
+    if source_itinerary is not None:
+        cloned_metadata = dict(source_itinerary.algorithm_metadata or {})
+        cloned_metadata.update({
+            "trip_id": new_trip.id,
+            "title": new_trip.title,
+            "date": new_trip.date.isoformat() if new_trip.date else None,
+            "duration_days": new_trip.duration_days,
+            "status": "review",
+            "source_trip_id": source_trip.id if source_trip else None,
+            "source_trip_title": source_trip.title if source_trip else None,
+        })
+        cloned = TripItinerary(
+            trip_id=new_trip.id,
+            status="review",
+            version=1,
+            generated_by_member_id=leader_member.id,
+            preference_snapshot={"copied_from_itinerary_id": source_itinerary.id},
+            algorithm_metadata=cloned_metadata,
+        )
+        db.add(cloned)
+        await db.flush()
+        source_stops = (await db.execute(
+            select(TripItineraryStop)
+            .where(TripItineraryStop.itinerary_id == source_itinerary.id)
+            .order_by(TripItineraryStop.day_number, TripItineraryStop.order_index)
+        )).scalars().all()
+        for stop in source_stops:
+            db.add(TripItineraryStop(
+                itinerary_id=cloned.id,
+                place_id=stop.place_id,
+                day_number=stop.day_number,
+                order_index=stop.order_index,
+                start_time=stop.start_time,
+                end_time=stop.end_time,
+                duration_minutes=stop.duration_minutes,
+                travel_minutes_from_previous=stop.travel_minutes_from_previous,
+                group_score=stop.group_score,
+                constraint_check=dict(stop.constraint_check or {}),
+                notes=stop.notes,
+            ))
+        db.add(TripConfirmation(
+            itinerary_id=cloned.id,
+            trip_member_id=leader_member.id,
+            status="pending",
+        ))
+
     await db.commit()
 
     return await _serialize_trip(db, new_trip)
@@ -710,6 +1104,14 @@ async def get_trip(
         raise HTTPException(
             status_code=404,
             detail="Trip not found",
+        )
+
+    if not await _is_trip_member(db, trip.id, current_user.id) and not await _are_friends(
+        db, current_user.id, trip.leader_id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the trip leader's friends can view this trip.",
         )
 
     return await _serialize_trip(db, trip)
@@ -827,6 +1229,14 @@ async def invite_member(
             detail="User not found",
         )
 
+    if user_to_invite.id == current_user.id or not await _are_friends(
+        db, current_user.id, user_to_invite.id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You can invite friends only.",
+        )
+
     existing_result = await db.execute(
         select(TripMember).where(
             TripMember.trip_id == trip_id,
@@ -847,6 +1257,8 @@ async def invite_member(
         is_leader=False,
     )
     db.add(new_member)
+    await db.flush()
+    await _seed_member_preferences(db, new_member, user_to_invite)
     await db.commit()
 
     return await _serialize_trip(db, trip)
@@ -1492,6 +1904,7 @@ async def generate_trip_itinerary(
         start_location=start_location,
         origin_lat=trip.latitude,
         origin_lon=trip.longitude,
+        duration_days=getattr(trip, "duration_days", 1),
     )
 
     members = []
@@ -1528,15 +1941,12 @@ async def generate_trip_itinerary(
             }
         )
 
-    date_label = (
-        trip.long_date
-        or trip.date_label
-        or (
-            trip_date.strftime("%a, %b %d")
-            if trip_date is not None
-            else "Trip day"
-        )
-    )
+    duration_days = max(1, min(int(getattr(trip, "duration_days", 1) or 1), 30))
+    if trip_date is not None and duration_days > 1:
+        final_date = trip_date + timedelta(days=duration_days - 1)
+        date_label = f"{trip_date.strftime('%b %d')} – {final_date.strftime('%b %d, %Y')}"
+    else:
+        date_label = trip.long_date or trip.date_label or (trip_date.strftime("%a, %b %d") if trip_date else "Trip day")
 
     response_data = {
         "trip_id": str(trip.id),
@@ -1545,6 +1955,7 @@ async def generate_trip_itinerary(
         "date_label": date_label,
         "status": "review",
         "desired_places_per_day": desired_places_per_day,
+        "duration_days": duration_days,
         "fallback_stop_count": fallback_stop_count,
         "group_preferences": group_preferences,
         "members": members,
@@ -1573,7 +1984,7 @@ async def generate_trip_itinerary(
         db.add(TripItineraryStop(
             itinerary_id=saved.id,
             place_id=place_id,
-            day_number=1,
+            day_number=int(stop.get("day_number", 1) or 1),
             order_index=index,
             start_time=_parse_optional_time(stop.get("start_time")),
             end_time=_parse_optional_time(stop.get("end_time")),

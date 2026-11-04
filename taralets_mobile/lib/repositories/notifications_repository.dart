@@ -2,52 +2,103 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/network/api_endpoints.dart';
+import '../core/network/dio_client.dart';
 
-// Simpleng Model para sa Notification
 class AppNotification {
-  final String id;
-  final String title;
-  final String message;
-  final DateTime createdAt;
-
-  AppNotification({
+  const AppNotification({
     required this.id,
     required this.title,
     required this.message,
     required this.createdAt,
+    required this.type,
+    this.friendRequestId,
+    this.tripJoinRequestId,
+    this.tripId,
+    this.requestStatus,
+    this.actionable = false,
   });
 
-  factory AppNotification.fromJson(Map<String, dynamic> json) {
-    return AppNotification(
-      id: json['id'].toString(),
-      title: json['title'] ?? 'Notification',
-      message: json['message'] ?? '',
-      createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
-    );
-  }
+  final String id;
+  final String title;
+  final String message;
+  final DateTime createdAt;
+  final String type;
+  final String? friendRequestId;
+  final String? tripJoinRequestId;
+  final String? tripId;
+  final String? requestStatus;
+  final bool actionable;
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) =>
+      AppNotification(
+        id: json['id'].toString(),
+        title: json['title'] as String? ?? 'Notification',
+        message: json['message'] as String? ?? '',
+        createdAt:
+            DateTime.tryParse(json['created_at'] as String? ?? '') ??
+            DateTime.now(),
+        type: json['type'] as String? ?? 'general',
+        friendRequestId: json['friend_request_id']?.toString(),
+        tripJoinRequestId: json['trip_join_request_id']?.toString(),
+        tripId: json['trip_id']?.toString(),
+        requestStatus: json['request_status'] as String?,
+        actionable: json['actionable'] == true,
+      );
 }
 
-// Repository na kukuha sa Backend API
 class NotificationsRepository {
-  final Dio _dio;
   NotificationsRepository(this._dio);
 
+  final Dio _dio;
+  String get _path => '${ApiEndpoints.apiPrefix}/notifications';
+
   Future<List<AppNotification>> getNotifications() async {
-    try {
-      final res = await _dio.get('${ApiEndpoints.baseUrl}${ApiEndpoints.apiPrefix}/notifications');
-      final data = res.data as List;
-      return data.map((e) => AppNotification.fromJson(e)).toList();
-    } catch (e) {
-      // Return empty list kung walang API o may error para hindi mag-crash
-      return []; 
+    final response = await _dio.get(_path);
+    return (response.data as List)
+        .map(
+          (row) =>
+              AppNotification.fromJson(Map<String, dynamic>.from(row as Map)),
+        )
+        .toList();
+  }
+
+  Future<void> acceptFriendRequest(String requestId) async {
+    await _dio.post(
+      '${ApiEndpoints.apiPrefix}/friends/requests/$requestId/accept',
+    );
+  }
+
+  Future<void> declineFriendRequest(String requestId) async {
+    await _dio.post(
+      '${ApiEndpoints.apiPrefix}/friends/requests/$requestId/decline',
+    );
+  }
+
+  Future<void> resolveTripJoinRequest({
+    required String tripId,
+    required String requestId,
+    required bool approve,
+  }) async {
+    await _dio.post(
+      '${ApiEndpoints.apiPrefix}/trips/$tripId/join-requests/$requestId/${approve ? 'approve' : 'reject'}',
+    );
+  }
+
+  String errorMessage(Object error, String fallback) {
+    if (error is DioException) {
+      final detail = error.response?.data;
+      if (detail is Map && detail['detail'] is String) {
+        return detail['detail'] as String;
+      }
     }
+    return fallback;
   }
 }
 
-// Provider para magamit natin sa Screen
-final dioProvider = Provider((ref) => Dio()); // Basic Dio instance
-final notificationsRepoProvider = Provider((ref) => NotificationsRepository(ref.read(dioProvider)));
+final notificationsRepoProvider = Provider<NotificationsRepository>(
+  (ref) => NotificationsRepository(ref.watch(dioProvider)),
+);
 
-final notificationsProvider = FutureProvider<List<AppNotification>>((ref) async {
-  return ref.read(notificationsRepoProvider).getNotifications();
-});
+final notificationsProvider = FutureProvider<List<AppNotification>>(
+  (ref) => ref.watch(notificationsRepoProvider).getNotifications(),
+);

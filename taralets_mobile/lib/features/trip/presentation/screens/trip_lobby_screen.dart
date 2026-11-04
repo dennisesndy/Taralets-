@@ -79,6 +79,9 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   bool _hasItinerary = false;
   bool _itineraryFinalized = false;
   bool _cancellingOrLeaving = false;
+  bool _sharing = false;
+  bool _requestLoading = false;
+  List<Map<String, dynamic>> _joinRequests = [];
   String? _errorTitle;
   String? _errorMessage;
 
@@ -88,6 +91,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   void initState() {
     super.initState();
     Future.microtask(_refreshItineraryAvailability);
+    Future.microtask(_loadJoinRequests);
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 3),
       (_) => _refreshTrip(),
@@ -113,6 +117,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
         });
       }
     } on TripException {
+      // Keep the lobby usable if a background refresh is temporarily offline.
       if (mounted && _hasItinerary) {
         setState(() {
           _hasItinerary = false;
@@ -195,11 +200,7 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
   }
 
   Future<void> _refreshTrip() async {
-    if (!mounted ||
-        _refreshing ||
-        _toggling ||
-        _cancellingOrLeaving)
-      return;
+    if (!mounted || _refreshing || _toggling || _cancellingOrLeaving) return;
     _refreshing = true;
     try {
       final latestTrip = await _repo.getTrip(_trip.id);
@@ -209,12 +210,65 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
         ref.invalidate(myTripsProvider);
       }
       setState(() => _trip = latestTrip);
+      await _loadJoinRequests();
       if (!_itineraryFinalized) {
         await _refreshItineraryAvailability();
       }
     } on TripException {
+      // Ignore intermittent polling failures and let the next timer retry.
     } finally {
       _refreshing = false;
+    }
+  }
+
+  Future<void> _loadJoinRequests() async {
+    final me = ref
+        .read(currentUserProvider)
+        .maybeWhen(data: (user) => user, orElse: () => null);
+    if (me == null || !_trip.isLeader(me.id) || _requestLoading) return;
+    _requestLoading = true;
+    try {
+      final requests = await _repo.getTripJoinRequests(_trip.id);
+      if (mounted) setState(() => _joinRequests = requests);
+    } catch (_) {
+      // The request panel should not interrupt trip coordination if offline.
+    } finally {
+      _requestLoading = false;
+    }
+  }
+
+  Future<void> _resolveJoinRequest(
+    Map<String, dynamic> request,
+    bool approve,
+  ) async {
+    final requestId = request['id']?.toString();
+    if (requestId == null) return;
+    try {
+      await _repo.resolveTripJoinRequest(_trip.id, requestId, approve);
+      await _loadJoinRequests();
+      await _refreshTrip();
+      if (mounted) {
+        _snack(approve ? 'Request approved.' : 'Request declined.');
+      }
+    } catch (error) {
+      if (mounted) _snack('Could not review this join request.');
+    }
+  }
+
+  Future<void> _changeSharing(bool shareWithFriends) async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    try {
+      await _repo.setItinerarySharing(
+        _trip.id,
+        shareWithFriends ? 'friends' : 'private',
+      );
+      final latest = await _repo.getTrip(_trip.id);
+      if (mounted) setState(() => _trip = latest);
+    } catch (_) {
+      if (mounted) _snack('Could not update itinerary sharing.');
+    } finally {
+      if (mounted) setState(() => _sharing = false);
     }
   }
 
@@ -418,7 +472,54 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
                       const SizedBox(height: 12),
                     ],
 
-                    if (!_itineraryFinalized) ...[
+                    if (isLeader && _hasItinerary) ...[
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          value: _trip.itineraryVisibility == 'friends',
+                          onChanged: _sharing ? null : _changeSharing,
+                          activeTrackColor: AppColors.orange,
+                          title: Text(
+                            'Share itinerary with friends',
+                            style: AppText.ui(
+                              14,
+                              FontWeight.w700,
+                              color: AppColors.navy,
+                            ),
+                          ),
+                          subtitle: Text(
+                            _trip.itineraryVisibility == 'friends'
+                                ? 'Only your Taralets friends can view and reuse it.'
+                                : 'Private · only this group can view it.',
+                            style: AppText.ui(
+                              11,
+                              FontWeight.w400,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    if (isLeader && _joinRequests.isNotEmpty) ...[
+                      _JoinRequestsCard(
+                        requests: _joinRequests,
+                        onApprove: (request) =>
+                            _resolveJoinRequest(request, true),
+                        onReject: (request) =>
+                            _resolveJoinRequest(request, false),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    if (!_itineraryFinalized && _trip.sourceItineraryId == null) ...[
                       if (_trip.everyoneReady)
                         TaraletsButton.orange(
                           label: 'Find Places',
@@ -501,6 +602,62 @@ class _TripLobbyScreenState extends ConsumerState<TripLobbyScreen> {
 // ---------------------------------------------------------------------------
 // Header
 // ---------------------------------------------------------------------------
+class _JoinRequestsCard extends StatelessWidget {
+  const _JoinRequestsCard({
+    required this.requests,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final List<Map<String, dynamic>> requests;
+  final ValueChanged<Map<String, dynamic>> onApprove;
+  final ValueChanged<Map<String, dynamic>> onReject;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(15),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Join requests (${requests.length})',
+          style: AppText.ui(15, FontWeight.w800, color: AppColors.navy),
+        ),
+        const SizedBox(height: 8),
+        for (final request in requests) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  request['requester_name']?.toString() ?? 'Friend',
+                  style: AppText.ui(13, FontWeight.w600, color: AppColors.text),
+                ),
+              ),
+              TextButton(
+                onPressed: () => onReject(request),
+                child: const Text('Decline'),
+              ),
+              const SizedBox(width: 4),
+              FilledButton(
+                onPressed: () => onApprove(request),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.orange,
+                ),
+                child: const Text('Approve'),
+              ),
+            ],
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 class _Header extends StatelessWidget {
   const _Header({
     required this.trip,

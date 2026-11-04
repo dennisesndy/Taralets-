@@ -77,6 +77,8 @@ ItineraryPlan itineraryPlanFromApi(Map<String, dynamic> data) {
   }
 
   final stops = <ItineraryStop>[];
+  final stopsByDay = <int, List<ItineraryStop>>{};
+  final labelsByDay = <int, String>{};
   final rawStops = data['stops'];
 
   if (rawStops is List) {
@@ -93,6 +95,7 @@ ItineraryPlan itineraryPlanFromApi(Map<String, dynamic> data) {
       final start = _parseTime(stop['start_time']);
       final end = _parseTime(stop['end_time'], _addMinutes(start, duration));
       final placeId = _int(stop['id'], _int(stop['place_id']));
+      final dayNumber = _int(stop['day_number'], 1).clamp(1, 30);
       final warning = _text(stop['warning']);
 
       stops.add(
@@ -109,6 +112,7 @@ ItineraryPlan itineraryPlanFromApi(Map<String, dynamic> data) {
           travelMinutes: _int(stop['travel_minutes']),
           travelCost: _int(stop['travel_cost']),
           area: _text(stop['area'], _text(stop['district'])),
+          dayNumber: dayNumber,
           activityTags: _stringList(stop['activity_tags']),
           dietaryTags: _stringList(stop['dietary_tags']),
           accessibilityTags: _stringList(stop['accessibility_tags']),
@@ -118,8 +122,36 @@ ItineraryPlan itineraryPlanFromApi(Map<String, dynamic> data) {
           longitude: _nullableDouble(stop['longitude']),
         ),
       );
+      stopsByDay.putIfAbsent(dayNumber, () => []).add(stops.last);
     }
   }
+
+  final rawDays = data['days'];
+  if (rawDays is List) {
+    for (final value in rawDays) {
+      if (value is! Map) continue;
+      final day = Map<String, dynamic>.from(value);
+      final number = _int(day['day_number'], 1).clamp(1, 30);
+      labelsByDay[number] = _text(day['label'], 'Day $number');
+    }
+  }
+  final durationDays = _int(data['duration_days'], 1).clamp(1, 30);
+  final totalDays =
+      durationDays >
+          (stopsByDay.keys.isEmpty
+              ? 0
+              : stopsByDay.keys.reduce((a, b) => a > b ? a : b))
+      ? durationDays
+      : (stopsByDay.keys.isEmpty
+            ? 1
+            : stopsByDay.keys.reduce((a, b) => a > b ? a : b));
+  final itineraryDays = [
+    for (var day = 1; day <= totalDays; day++)
+      ItineraryDay(
+        label: labelsByDay[day] ?? 'Day $day',
+        stops: stopsByDay[day] ?? const [],
+      ),
+  ];
 
   return ItineraryPlan(
     title: _text(data['title'], 'Group Itinerary'),
@@ -129,10 +161,16 @@ ItineraryPlan itineraryPlanFromApi(Map<String, dynamic> data) {
       'draft' => ItineraryStatus.draft,
       _ => ItineraryStatus.review,
     },
-    days: [ItineraryDay(label: 'Day 1', stops: stops)],
+    days: itineraryDays,
     members: members,
     desiredPlacesPerDay: _nullableInt(data['desired_places_per_day']),
     groupPreferences: _stringList(data['group_preferences'])
+        .where(
+          (value) => !RegExp(
+            r'^desired[_ ]places[_ ]per[_ ]day\s*[:=]\s*(null|none)$',
+            caseSensitive: false,
+          ).hasMatch(value.trim()),
+        )
         .map(normalizeActivityCategory)
         .toList(),
     tripId: _text(data['trip_id']),

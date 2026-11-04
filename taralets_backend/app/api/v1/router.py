@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import login_view, registration_view, profile, trips
+from app.api.v1 import login_view, registration_view, profile, trips, friends, notifications
 from app.api.v1 import itinerary, discovery, groups
 
 api_router = APIRouter(prefix="/api/v1")
@@ -8,6 +8,8 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(registration_view.router)
 api_router.include_router(login_view.router)
 api_router.include_router(profile.router)
+api_router.include_router(friends.router)
+api_router.include_router(notifications.router)
 
 api_router.include_router(
     trips.router,

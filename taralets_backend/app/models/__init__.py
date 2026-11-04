@@ -1,4 +1,8 @@
 from app.models.user import User  # noqa: F401
+from app.models.user_friend import UserFriend  # noqa: F401
+from app.models.friend_request import FriendRequest  # noqa: F401
+from app.models.trip_join_request import TripJoinRequest  # noqa: F401
+from app.models.notification import Notification  # noqa: F401
 from app.models.otp import OTP    # noqa: F401
 from app.models.preference_profile import PreferenceProfile # noqa: F401
 from app.models.poi import Place  # noqa: F401

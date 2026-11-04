@@ -60,9 +60,8 @@ def _order_nearby_recommendations(
     activity_order: list[str],
     origin_lat: float | None,
     origin_lon: float | None,
-    places_per_day: int,
 ) -> list[dict]:
-    """Start each day-sized nearby group with the group's top activity."""
+    """Prioritize the group's top activity and keep nearby results clustered."""
     remaining = list(recommendations)
     ordered = []
     try:
@@ -70,38 +69,30 @@ def _order_nearby_recommendations(
     except (TypeError, ValueError):
         origin = None
     top_activity = activity_order[0] if activity_order else None
-    day_size = max(1, places_per_day)
+    # Put the best match for the group's top activity first, then cluster the
+    # remaining suggestions by distance without imposing a places-per-day cap.
+    if top_activity:
+        top_candidates = [
+            place for place in remaining
+            if top_activity in (place.get("matched_activity_categories") or [])
+        ]
+        if top_candidates:
+            top = max(top_candidates, key=lambda place: place.get("match_score", 0))
+            remaining.remove(top)
+            ordered.append(top)
+            origin = top
     while remaining:
-        current = origin
-        day_places = []
-        # Each group/day starts with the highest-ranked group activity when
-        # a matching candidate is available.
-        if top_activity:
-            top_candidates = [
-                place for place in remaining
-                if top_activity in (place.get("matched_activity_categories") or [])
-            ]
-            if top_candidates:
-                top = max(top_candidates, key=lambda place: place.get("match_score", 0))
-                remaining.remove(top)
-                day_places.append(top)
-                current = top
-        while remaining and len(day_places) < day_size:
-            if current is None:
-                next_place = remaining[0]
-            else:
-                def distance_key(place):
-                    distance = _distance_km(current, place)
-                    return distance if distance is not None else float("inf")
+        if origin is None:
+            next_place = remaining[0]
+        else:
+            def distance_key(place):
+                distance = _distance_km(origin, place)
+                return distance if distance is not None else float("inf")
 
-                next_place = min(
-                    remaining,
-                    key=distance_key,
-                )
-            remaining.remove(next_place)
-            day_places.append(next_place)
-            current = next_place
-        ordered.extend(day_places)
+            next_place = min(remaining, key=distance_key)
+        remaining.remove(next_place)
+        ordered.append(next_place)
+        origin = next_place
     return ordered
 
 
@@ -188,7 +179,14 @@ async def get_group_recommendations(
     # 4. Filter by selected group activities
     # ---------------------------------------------------------
 
-    candidates = filter_by_group_activities(candidates, group_profiles)
+    matching_candidates = filter_by_group_activities(candidates, group_profiles)
+
+    # A budget-only result can contain places, yet none may match the group's
+    # preferred activity. In that case preserve the activity preference and
+    # relax budget rather than returning an empty recommendation list.
+    if not matching_candidates:
+        matching_candidates = filter_by_group_activities(all_places, group_profiles)
+    candidates = matching_candidates
 
     if not candidates:
         return []
@@ -216,23 +214,12 @@ async def get_group_recommendations(
     )
 
     activity_order = rank_group_activities(group_profiles)
-    place_targets = [
-        member.get("desired_places_per_day")
-        for member in group_profiles
-        if isinstance(member.get("desired_places_per_day"), (int, float))
-        and member.get("desired_places_per_day") > 0
-    ]
-    average_places_per_day = (
-        int(sum(place_targets) / len(place_targets) + 0.5)
-        if place_targets else 3
-    )
     cluster_window = min(len(recommendations), 300)
     nearby_recommendations = _order_nearby_recommendations(
         recommendations[:cluster_window],
         activity_order,
         origin_lat,
         origin_lon,
-        average_places_per_day,
     )
     recommendations = nearby_recommendations + recommendations[cluster_window:]
 

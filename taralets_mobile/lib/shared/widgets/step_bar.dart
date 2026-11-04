@@ -7,12 +7,23 @@ import 'app_icons.dart';
 /// Figma StepBar: Details / Meetup / Invite / Prefs / Review.
 /// 22dp circles, 2dp connectors, 9sp labels, 20dp bottom margin.
 class StepBar extends StatelessWidget {
-  const StepBar({super.key, required this.current});
+  const StepBar({
+    super.key,
+    required this.current,
+    this.labels = _defaultLabels,
+  });
 
   /// 1-based current step.
   final int current;
 
-  static const _labels = ['Details', 'Meetup', 'Invite', 'Prefs', 'Review'];
+  static const _defaultLabels = [
+    'Details',
+    'Meetup',
+    'Invite',
+    'Prefs',
+    'Review',
+  ];
+  final List<String> labels;
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +31,7 @@ class StepBar extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 20),
       child: Row(
         children: [
-          for (var i = 0; i < _labels.length; i++)
+          for (var i = 0; i < labels.length; i++)
             Expanded(
               child: Column(
                 children: [
@@ -38,7 +49,7 @@ class StepBar extends StatelessWidget {
                       ),
                       _Dot(index: i + 1, current: current),
                       Expanded(
-                        child: i < _labels.length - 1
+                        child: i < labels.length - 1
                             ? Container(
                                 height: 2,
                                 color: i + 1 < current
@@ -51,7 +62,7 @@ class StepBar extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _labels[i],
+                    labels[i],
                     style: AppText.ui(
                       9,
                       FontWeight.w600,

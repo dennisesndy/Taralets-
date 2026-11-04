@@ -7,9 +7,12 @@ class AppRoutes {
   static const String itinerary = '/itinerary';
   static const String lobbyItinerary = '/trip-itinerary';
   static const String profile = '/profile';
+  static const String friends = '/friends';
 
   static const String joinTrip = '/join-trip';
   static const String createTrip = '/create-trip';
+  static const String tripStart = '/trip-start';
+  static const String friendsTrips = '/friends-trips';
   static const String tripCreated = '/trip-created';
   static const String groupPrefs = '/group-prefs';
   static const String tripLobby = '/trip-lobby';

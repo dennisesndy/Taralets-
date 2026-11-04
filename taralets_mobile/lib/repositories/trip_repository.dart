@@ -33,6 +33,26 @@ int _parseInt(dynamic val, [int def = 0]) {
 
 enum TripStatus { lobby, active, completed, cancelled }
 
+TripStatus displayTripStatus(Trip trip) {
+  if (trip.status == TripStatus.cancelled ||
+      trip.status == TripStatus.completed) {
+    return trip.status;
+  }
+
+  final date = trip.date?.toLocal();
+  final endDate = date?.add(Duration(days: trip.durationDays - 1));
+  final now = DateTime.now();
+  if (endDate != null &&
+      DateTime(
+        endDate.year,
+        endDate.month,
+        endDate.day,
+      ).isBefore(DateTime(now.year, now.month, now.day))) {
+    return TripStatus.completed;
+  }
+  return trip.status;
+}
+
 class Trip {
   const Trip({
     required this.id,
@@ -48,11 +68,14 @@ class Trip {
     required this.members,
     this.description = '',
     this.date,
+    this.durationDays = 1,
     this.wrapUp = '8:00 PM',
     this.latitude = 14.5896,
     this.longitude = 120.9753,
     this.spotsOpen = 0,
     this.onWayCount = 0,
+    this.itineraryVisibility = 'private',
+    this.sourceItineraryId,
   });
 
   final String id;
@@ -68,11 +91,14 @@ class Trip {
   final List<Member> members;
   final String description;
   final DateTime? date;
+  final int durationDays;
   final String wrapUp;
   final double latitude;
   final double longitude;
   final int spotsOpen;
   final int onWayCount;
+  final String itineraryVisibility;
+  final String? sourceItineraryId;
 
   int get memberCount => members.length;
   List<String> get memberNames => [for (final m in members) m.name];
@@ -101,6 +127,7 @@ class Trip {
     List<Member>? members,
     String? description,
     DateTime? date,
+    int? durationDays,
     String? wrapUp,
     double? latitude,
     double? longitude,
@@ -120,11 +147,14 @@ class Trip {
       members: members ?? this.members,
       description: description ?? this.description,
       date: date ?? this.date,
+      durationDays: durationDays ?? this.durationDays,
       wrapUp: wrapUp ?? this.wrapUp,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       spotsOpen: spotsOpen,
       onWayCount: onWayCount ?? this.onWayCount,
+      itineraryVisibility: itineraryVisibility,
+      sourceItineraryId: sourceItineraryId,
     );
   }
 
@@ -166,11 +196,15 @@ class Trip {
       ],
       description: json['description']?.toString() ?? '',
       date: parseDate(json['date']),
+      durationDays: _parseInt(json['duration_days'], 1).clamp(1, 30),
       wrapUp: json['wrap_up']?.toString() ?? '8:00 PM',
       latitude: _parseDouble(json['latitude'], 14.5896),
       longitude: _parseDouble(json['longitude'], 120.9753),
       spotsOpen: _parseInt(json['spots_open'], 0),
       onWayCount: _parseInt(json['on_way_count'], 0),
+      itineraryVisibility:
+          json['itinerary_visibility']?.toString() ?? 'private',
+      sourceItineraryId: json['source_itinerary_id']?.toString(),
     );
   }
 }
@@ -215,6 +249,20 @@ class LeaderOnlyException extends TripException {
 
 abstract class TripRepository {
   Future<Trip> findTripByCode(String code);
+  Future<List<Trip>> getFriendsTrips({
+    required double latitude,
+    required double longitude,
+  });
+  Future<List<Map<String, dynamic>>> getAvailableItineraries();
+  Future<void> requestToJoinTrip(String tripId);
+  Future<Map<String, dynamic>> getTripJoinRequestStatus(String tripId);
+  Future<List<Map<String, dynamic>>> getTripJoinRequests(String tripId);
+  Future<void> resolveTripJoinRequest(
+    String tripId,
+    String requestId,
+    bool approve,
+  );
+  Future<void> setItinerarySharing(String tripId, String visibility);
   Future<void> joinTrip(Trip trip);
   Future<List<Trip>> getMyTrips();
   Future<Trip> createTrip(CreateTripDto dto);
@@ -307,6 +355,28 @@ class ApiTripRepository implements TripRepository {
   }
 
   @override
+  Future<List<Trip>> getFriendsTrips({
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '${ApiEndpoints.apiPrefix}/trips/friends/available',
+        queryParameters: {'latitude': latitude, 'longitude': longitude},
+      );
+      final rows = response.data as List? ?? const [];
+      return rows
+          .map((row) => Trip.fromJson(Map<String, dynamic>.from(row as Map)))
+          .toList();
+    } on DioException catch (e) {
+      throw TripException(
+        'TRIPS UNAVAILABLE',
+        _handleError(e, 'Could not load trips from your friends.'),
+      );
+    }
+  }
+
+  @override
   Future<void> joinTrip(Trip trip) async {
     try {
       await _dio.post('${ApiEndpoints.apiPrefix}/trips/${trip.code}/join');
@@ -353,6 +423,7 @@ class ApiTripRepository implements TripRepository {
           'title': dto.title,
           'description': dto.description,
           'date': dto.date.toIso8601String(),
+          'duration_days': dto.durationDays,
           'meetup_time': '${dto.meetupTime.hour}:${dto.meetupTime.minute}',
           'wrap_up_time': '${dto.wrapUpTime.hour}:${dto.wrapUpTime.minute}',
           'meetup_name': dto.meetupName,
@@ -364,6 +435,8 @@ class ApiTripRepository implements TripRepository {
             'budget': dto.preferences.budget,
             'desired_places_per_day': dto.preferences.desiredPlacesPerDay,
           },
+          if (dto.sourceItineraryId != null)
+            'source_itinerary_id': dto.sourceItineraryId,
         },
       );
       return Trip.fromJson(res.data);
@@ -373,6 +446,58 @@ class ApiTripRepository implements TripRepository {
         _handleError(e, 'Could not create trip'),
       );
     }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getAvailableItineraries() async {
+    final response = await _dio.get(
+      '${ApiEndpoints.apiPrefix}/trips/friends/available-itineraries',
+    );
+    return (response.data as List? ?? const [])
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+  }
+
+  @override
+  Future<void> requestToJoinTrip(String tripId) async {
+    await _dio.post('${ApiEndpoints.apiPrefix}/trips/$tripId/join-request');
+  }
+
+  @override
+  Future<Map<String, dynamic>> getTripJoinRequestStatus(String tripId) async {
+    final response = await _dio.get(
+      '${ApiEndpoints.apiPrefix}/trips/$tripId/join-request-status',
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getTripJoinRequests(String tripId) async {
+    final response = await _dio.get(
+      '${ApiEndpoints.apiPrefix}/trips/$tripId/join-requests',
+    );
+    return (response.data as List? ?? const [])
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+  }
+
+  @override
+  Future<void> resolveTripJoinRequest(
+    String tripId,
+    String requestId,
+    bool approve,
+  ) async {
+    await _dio.post(
+      '${ApiEndpoints.apiPrefix}/trips/$tripId/join-requests/$requestId/${approve ? 'approve' : 'reject'}',
+    );
+  }
+
+  @override
+  Future<void> setItinerarySharing(String tripId, String visibility) async {
+    await _dio.put(
+      '${ApiEndpoints.apiPrefix}/trips/$tripId/sharing',
+      data: {'visibility': visibility},
+    );
   }
 
   @override
@@ -710,6 +835,7 @@ class ApiTripRepository implements TripRepository {
           'title': updatedTrip.title,
           'description': updatedTrip.description,
           'date': updatedTrip.date?.toIso8601String(),
+          'duration_days': updatedTrip.durationDays,
           'date_label': updatedTrip.dateLabel,
           'long_date': updatedTrip.longDate,
           'arrival_target': updatedTrip.arrivalTarget,
@@ -840,6 +966,36 @@ class MockTripRepository implements TripRepository {
   }
 
   @override
+  Future<List<Trip>> getFriendsTrips({
+    required double latitude,
+    required double longitude,
+  }) async => [];
+
+  @override
+  Future<List<Map<String, dynamic>>> getAvailableItineraries() async => [];
+
+  @override
+  Future<void> requestToJoinTrip(String tripId) async {}
+
+  @override
+  Future<Map<String, dynamic>> getTripJoinRequestStatus(String tripId) async =>
+      {'trip_id': tripId, 'status': 'pending'};
+
+  @override
+  Future<List<Map<String, dynamic>>> getTripJoinRequests(String tripId) async =>
+      [];
+
+  @override
+  Future<void> resolveTripJoinRequest(
+    String tripId,
+    String requestId,
+    bool approve,
+  ) async {}
+
+  @override
+  Future<void> setItinerarySharing(String tripId, String visibility) async {}
+
+  @override
   Future<void> joinTrip(Trip trip) async {
     if (!_trips.any((t) => t.id == trip.id)) _trips.add(trip);
   }
@@ -863,6 +1019,7 @@ class MockTripRepository implements TripRepository {
       members: const [],
       latitude: dto.latitude,
       longitude: dto.longitude,
+      sourceItineraryId: dto.sourceItineraryId,
     );
     _trips.add(trip);
     return trip;

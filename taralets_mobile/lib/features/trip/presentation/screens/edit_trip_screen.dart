@@ -40,6 +40,7 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
   final _mapController = MapController();
 
   DateTime? _date;
+  late int _durationDays = widget.trip.durationDays;
   late TimeOfDay _meetupTime = parseTimeOfDay(widget.trip.arrivalTarget);
   late TimeOfDay _wrapTime = parseTimeOfDay(
     widget.trip.wrapUp,
@@ -162,6 +163,7 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
       title: title,
       description: _desc.text.trim(),
       date: _date,
+      durationDays: _durationDays,
       dateLabel: _date != null ? formatShortDate(_date!) : base.dateLabel,
       longDate: _date != null ? formatLongDate(_date!) : base.longDate,
       arrivalTarget: formatTimeOfDay(_meetupTime),
@@ -367,6 +369,67 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
               ],
             ),
             const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.orangeSoft,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.orange.withValues(alpha: 0.22),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.date_range_rounded, color: AppColors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Tour duration',
+                          style: AppText.ui(
+                            13,
+                            FontWeight.w700,
+                            color: AppColors.navy,
+                          ),
+                        ),
+                        if (_date != null)
+                          Text(
+                            'Through ${formatInputDate(_date!.add(Duration(days: _durationDays - 1)))}',
+                            style: AppText.ui(
+                              11,
+                              FontWeight.w500,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _durationDays <= 1
+                        ? null
+                        : () => setState(() => _durationDays--),
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                  Text(
+                    '$_durationDays ${_durationDays == 1 ? 'day' : 'days'}',
+                    style: AppText.ui(
+                      12,
+                      FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _durationDays >= 30
+                        ? null
+                        : () => setState(() => _durationDays++),
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -476,8 +539,13 @@ class _EditTripScreenState extends ConsumerState<EditTripScreen> {
                           color: out ? AppColors.errorTitle : AppColors.orange,
                         ),
                         Container(
-                          constraints: BoxConstraints(maxWidth: c.maxWidth * .72),
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          constraints: BoxConstraints(
+                            maxWidth: c.maxWidth * .72,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: out ? AppColors.redSoft : Colors.white,
                             borderRadius: BorderRadius.circular(6),

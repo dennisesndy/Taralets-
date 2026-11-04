@@ -8,6 +8,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../repositories/auth_repository.dart';
 import '../../../../repositories/repository_providers.dart';
 import '../../../../shared/widgets/app_icons.dart';
+import '../../data/friends_repository.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -23,6 +24,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(currentUserProvider);
+    final friendsAsync = ref.watch(friendsProvider);
 
     return ColoredBox(
       color: AppColors.bg,
@@ -36,12 +38,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             style: AppText.ui(13, FontWeight.w400, color: AppColors.muted),
           ),
         ),
-        data: (u) => _content(context, u), // Note: Pass context explicitly here
+        data: (u) => _content(
+          context,
+          u,
+          friendsAsync.valueOrNull?.length ?? u.friendsCount,
+        ),
       ),
     );
   }
 
-  Widget _content(BuildContext context, AuthUser? u) {
+  Widget _content(BuildContext context, AuthUser? u, int friendsCount) {
     if (u == null) {
       return Center(
         child: Text(
@@ -52,7 +58,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     final rows = <_Row>[
-      const _Row(Icons.bookmark_border_rounded, 'Saved Places', '12 places saved'),
+      const _Row(
+        Icons.bookmark_border_rounded,
+        'Saved Places',
+        '12 places saved',
+      ),
+      _Row(
+        Icons.people_alt_outlined,
+        'Friends',
+        'View your friends and add new ones',
+        onTap: () => context.push(AppRoutes.friends),
+      ),
       _Row(
         Icons.tune_rounded,
         'Travel Preferences',
@@ -81,12 +97,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         value: _loc,
         onChanged: (v) => setState(() => _loc = v),
       ),
-      const _Row(Icons.help_outline_rounded, 'Help & Support', 'FAQs and contact'),
+      const _Row(
+        Icons.help_outline_rounded,
+        'Help & Support',
+        'FAQs and contact',
+      ),
     ];
 
     final stats = [
       (u.tripsCount, 'Trips'),
-      (u.friendsCount, 'Friends'),
+      (friendsCount, 'Friends'),
       (u.placesCount, 'Places'),
     ];
 
@@ -122,7 +142,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 alignment: Alignment.center,
                 child: Text(
                   u.initials,
-                  style: AppText.ui(28, FontWeight.w800, color: AppColors.orange),
+                  style: AppText.ui(
+                    28,
+                    FontWeight.w800,
+                    color: AppColors.orange,
+                  ),
                 ),
               ),
             ),
@@ -272,8 +296,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             if (rows[i].toggle)
                               _Switch(
                                 on: rows[i].value,
-                                onTap: () =>
-                                    rows[i].onChanged!(!rows[i].value),
+                                onTap: () => rows[i].onChanged!(!rows[i].value),
                               )
                             else
                               AppIcons.chevronRight(),
@@ -309,7 +332,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.logout_rounded, color: Colors.white, size: 18),
+                    const Icon(
+                      Icons.logout_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Log Out',

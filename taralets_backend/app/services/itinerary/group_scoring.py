@@ -371,13 +371,9 @@ GENERIC_ACTIVITY_TAGS = {
     "point of interest",
     "premise",
     "store",
-    "food",
-    "food store",
     "service",
     "association or organization",
     "establishment",
-    "food",
-    "food store",
     "manufacturer",
     "wholesaler",
     "supplier",
@@ -484,19 +480,17 @@ def _place_activity_values(place) -> set[str]:
             for value in _activity_values(get_value(field))
             if (canonical := _canonical_activity(value))
         )
-    place_activities = category_activities | subcategory_activities
-    if place_activities:
-        return place_activities
-
-    # Use activity tags only when category and subcategories
-    # do not identify a supported activity.
+    # Dataset rows can use a broad primary category (such as "Others") while
+    # activity tags identify the actual place type. Combine all fields so
+    # those rows still match specific member preferences.
     tag_values = _activity_values(get_value("activity_tags"))
 
-    return {
+    tag_activities = {
         canonical
         for value in tag_values
         if (canonical := _canonical_activity(value))
     }
+    return category_activities | subcategory_activities | tag_activities
 
 
 def matched_activity_categories(place, group_profiles: list[dict]) -> list[str]:
